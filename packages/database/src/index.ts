@@ -1,5 +1,5 @@
-export { prisma } from "./client";
-export type { PrismaClient } from "./client";
+export { prisma } from "./client.js";
+export type { PrismaClient } from "./client.js";
 
 export {
   Prisma,
@@ -66,7 +66,7 @@ export {
   IntegrationHealthStatus,
   IntegrationSyncStatus,
   IntegrationLogLevel,
-} from "./generated/client";
+} from "./generated/client/index.js";
 
 export type {
   User,
@@ -156,4 +156,4 @@ export type {
   MeetingParticipant,
   MeetingRecording,
   MeetingScreenShare,
-} from "./generated/client";
+} from "./generated/client/index.js";
