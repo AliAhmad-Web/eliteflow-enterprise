@@ -66,12 +66,18 @@ export function loadRecaptchaScript(): Promise<void> {
 /**
  * Execute reCAPTCHA v3 for the given action.
  * Returns undefined when site key is not configured (dev bypass).
+ * In production, missing site key throws a clear configuration error.
  */
 export async function executeRecaptcha(
   action: string,
 ): Promise<string | undefined> {
   const siteKey = getRecaptchaSiteKey();
   if (!siteKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "reCAPTCHA is not configured. Set NEXT_PUBLIC_RECAPTCHA_SITE_KEY.",
+      );
+    }
     return undefined;
   }
 
@@ -87,7 +93,13 @@ export async function executeRecaptcha(
       window.grecaptcha!
         .execute(siteKey, { action })
         .then(resolve)
-        .catch(reject);
+        .catch(() =>
+          reject(
+            new Error(
+              "reCAPTCHA verification failed. Check the site key configuration.",
+            ),
+          ),
+        );
     });
   });
 }
