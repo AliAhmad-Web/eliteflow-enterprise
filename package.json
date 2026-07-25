@@ -8,6 +8,9 @@
   ],
   "scripts": {
     "dev": "npm run api:dev & npm run web:dev",
+    "build": "npm run build --workspace=@enterprise/shared && npm run build --workspace=@enterprise/api && npm run build --workspace=web",
+    "lint": "npm run lint --workspace=web",
+    "type-check": "npm run type-check --workspace=@enterprise/shared && npm run type-check --workspace=@enterprise/api && npm run type-check --workspace=web && npm run type-check --workspace=@enterprise/mobile",
     "api:dev": "npm run dev --workspace=@enterprise/api",
     "web:dev": "npm run dev --workspace=web",
     "mobile:start": "npm run start --workspace=@enterprise/mobile",

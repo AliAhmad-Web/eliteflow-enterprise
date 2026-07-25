@@ -29,7 +29,16 @@ export class ApiClientError extends Error {
 }
 
 export function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configured) {
+    return configured;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL must be set to your production API origin (HTTPS).",
+    );
+  }
+  return "http://localhost:4000";
 }
 
 export async function parseApiResponse<T>(

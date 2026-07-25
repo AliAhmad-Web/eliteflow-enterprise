@@ -123,7 +123,7 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
 
     if (!hasOAuthCallbackParams()) {
       throw new Error(
-        "No OAuth credentials were returned. Confirm Supabase Redirect URLs include http://localhost:3000/auth/callback, then try signing in again from this same browser tab.",
+        "No OAuth credentials were returned. Confirm Supabase Redirect URLs include your app origin plus /auth/callback (for local development: http://localhost:3000/auth/callback), then try signing in again from this same browser tab.",
       );
     }
 

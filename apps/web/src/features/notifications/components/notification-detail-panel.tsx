@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
+  createElement,
   useCallback,
   useEffect,
   useId,
@@ -152,7 +153,7 @@ export function NotificationDetailPanel({
     [meta, priorityLabel],
   );
 
-  const CategoryIcon = notification
+  const categoryIcon = notification
     ? getCategoryIcon(notification.category)
     : FileText;
 
@@ -230,7 +231,10 @@ export function NotificationDetailPanel({
                   )}
                   aria-hidden
                 >
-                  <CategoryIcon className="h-7 w-7" strokeWidth={1.75} />
+                  {createElement(categoryIcon, {
+                    className: "h-7 w-7",
+                    strokeWidth: 1.75,
+                  })}
                 </div>
 
                 <div className="min-w-0 flex-1 space-y-2.5 pr-16">

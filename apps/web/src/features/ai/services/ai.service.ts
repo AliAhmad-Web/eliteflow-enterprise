@@ -77,11 +77,9 @@ async function chatStream(
   let buffer = "";
   let finalResult: AiChatResponseDto | null = null;
   let streamError: ApiClientError | null = null;
-  let currentEvent = "message";
-
   const processBlock = (block: string) => {
     const lines = block.split("\n");
-    let eventName = currentEvent;
+    let eventName = "message";
     const dataLines: string[] = [];
 
     for (const line of lines) {

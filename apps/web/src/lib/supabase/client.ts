@@ -50,10 +50,21 @@ export function toSupabaseProvider(
 }
 
 export function getOAuthCallbackUrl(_provider?: OAuthProviderType): string {
-  const origin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  let origin: string;
+  if (typeof window !== "undefined") {
+    origin = window.location.origin;
+  } else {
+    const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (configured) {
+      origin = configured;
+    } else if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "NEXT_PUBLIC_APP_URL must be set in production for OAuth callbacks.",
+      );
+    } else {
+      origin = "http://localhost:3000";
+    }
+  }
 
   // Keep the redirect URL stable (no query string). Provider/intent live in
   // sessionStorage so Supabase allow-list matching stays reliable.

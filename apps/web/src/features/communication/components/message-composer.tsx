@@ -566,6 +566,7 @@ export function MessageComposer({
         ];
 
         await sendMut.mutateAsync({
+          kind: "TEXT",
           body: storedBody,
           parentId: replyTo?.id ?? null,
           mentionUserIds: mentionUserIds.length ? mentionUserIds : undefined,

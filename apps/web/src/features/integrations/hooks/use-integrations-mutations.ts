@@ -16,6 +16,18 @@ import {
 } from "../services/integrations.service";
 import { integrationsKeys } from "./use-integrations";
 
+function resolveIntegrationId(
+  input: ConnectIntegrationInput | DisconnectIntegrationInput | TestIntegrationInput | IntegrationDto,
+): string | undefined {
+  if ("id" in input && typeof input.id === "string") {
+    return input.id;
+  }
+  if ("integrationId" in input && typeof input.integrationId === "string") {
+    return input.integrationId;
+  }
+  return undefined;
+}
+
 export function useConnectIntegration() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -36,12 +48,12 @@ export function useConnectIntegration() {
           });
         }
         // Generic connect — send only schema fields (never the full DTO).
-        const dto = input as IntegrationDto & ConnectIntegrationInput;
+        const body = input as ConnectIntegrationInput;
         return integrationsService.connect({
-          slug: dto.slug as ConnectIntegrationInput["slug"],
-          integrationId: "id" in dto ? dto.id : dto.integrationId,
-          secret: dto.secret,
-          label: dto.label,
+          slug: input.slug as ConnectIntegrationInput["slug"],
+          integrationId: resolveIntegrationId(input),
+          secret: body.secret,
+          label: body.label,
         });
       }
       const body = input as ConnectIntegrationInput;
@@ -70,10 +82,9 @@ export function useDisconnectIntegration() {
         if (apiKey) {
           return integrationsService.disconnectApiKeyProvider(apiKey);
         }
-        const dto = input as IntegrationDto & DisconnectIntegrationInput;
         return integrationsService.disconnect({
-          slug: dto.slug as DisconnectIntegrationInput["slug"],
-          integrationId: "id" in dto ? dto.id : dto.integrationId,
+          slug: input.slug as DisconnectIntegrationInput["slug"],
+          integrationId: resolveIntegrationId(input),
         });
       }
       return integrationsService.disconnect(input as DisconnectIntegrationInput);
@@ -97,10 +108,9 @@ export function useTestIntegration() {
         if (apiKey) {
           return integrationsService.testApiKeyProvider(apiKey);
         }
-        const dto = input as IntegrationDto & TestIntegrationInput;
         return integrationsService.test({
-          slug: dto.slug as TestIntegrationInput["slug"],
-          integrationId: "id" in dto ? dto.id : dto.integrationId,
+          slug: input.slug as TestIntegrationInput["slug"],
+          integrationId: resolveIntegrationId(input),
         });
       }
       return integrationsService.test(input as TestIntegrationInput);
