@@ -10,13 +10,32 @@ export function getRefreshTokenCookieName(): string {
     : AUTH_COOKIES.REFRESH_TOKEN_DEV;
 }
 
+/**
+ * Cross-origin web (Vercel) → API (Railway) requires SameSite=None; Secure
+ * so the browser stores and sends the refresh cookie on credentialed XHR.
+ * Local same-site / HTTP keeps Lax.
+ */
 function getRefreshTokenCookieOptions(): CookieOptions {
+  // Production web + API are cross-site; browsers require None+Secure.
+  const crossSite = authConfig.isProduction;
+
   return {
     httpOnly: true,
-    secure: authConfig.isProduction,
-    sameSite: "lax",
+    secure: crossSite,
+    sameSite: crossSite ? "none" : "lax",
     path: "/api/v1/auth",
     maxAge: TOKEN_EXPIRATION.REFRESH_TOKEN_SECONDS * 1000,
+  };
+}
+
+function getRefreshTokenClearCookieOptions(): CookieOptions {
+  const crossSite = authConfig.isProduction;
+
+  return {
+    httpOnly: true,
+    secure: crossSite,
+    sameSite: crossSite ? "none" : "lax",
+    path: "/api/v1/auth",
   };
 }
 
@@ -25,12 +44,10 @@ export function setRefreshTokenCookie(res: Response, token: string): void {
 }
 
 export function clearRefreshTokenCookie(res: Response): void {
-  res.clearCookie(getRefreshTokenCookieName(), {
-    httpOnly: true,
-    secure: authConfig.isProduction,
-    sameSite: "lax",
-    path: "/api/v1/auth",
-  });
+  res.clearCookie(
+    getRefreshTokenCookieName(),
+    getRefreshTokenClearCookieOptions(),
+  );
 }
 
 export function getRefreshTokenFromRequest(req: Request): string | undefined {
