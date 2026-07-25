@@ -2,4 +2,5 @@ node_modules/
 dist/
 .env
 .env.local
-storage/
+# Local file uploads directory (not source code under src/modules/files/storage)
+/storage/
