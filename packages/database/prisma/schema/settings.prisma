@@ -1,0 +1,174 @@
+// =============================================================================
+// Phase 18 — Enterprise Settings Models
+// =============================================================================
+// OrganizationSettings: company / org-wide config (singleton row).
+// UserPreference: per-user appearance, locale, AI, security prefs.
+// IntegrationCredential: encrypted integration API keys (never return secrets).
+// BackupRecord: backup history + restore architecture prepare-only.
+// OrganizationBilling: plan / usage / subscription snapshot.
+// AccountDeletionRequest: profile delete-account workflow.
+// =============================================================================
+
+/// Singleton-style organization / company settings.
+model OrganizationSettings {
+  id                 String   @id @default(uuid()) @db.Uuid
+  /// Logical key — typically "default" for single-tenant deployments.
+  key                String   @unique @db.VarChar(50)
+  companyName        String   @map("company_name") @db.VarChar(200)
+  logoUrl            String?  @map("logo_url") @db.VarChar(2048)
+  brandColor         String?  @map("brand_color") @db.VarChar(20)
+  website            String?  @db.VarChar(500)
+  addressLine1       String?  @map("address_line1") @db.VarChar(255)
+  addressLine2       String?  @map("address_line2") @db.VarChar(255)
+  city               String?  @db.VarChar(100)
+  state              String?  @db.VarChar(100)
+  postalCode         String?  @map("postal_code") @db.VarChar(30)
+  country            String?  @db.VarChar(100)
+  taxNumber          String?  @map("tax_number") @db.VarChar(100)
+  registrationNumber String?  @map("registration_number") @db.VarChar(100)
+  currency           String   @default("USD") @db.VarChar(10)
+  timezone           String   @default("UTC") @db.VarChar(100)
+  emailFromName      String?  @map("email_from_name") @db.VarChar(200)
+  emailFromAddress   String?  @map("email_from_address") @db.VarChar(320)
+  emailReplyTo       String?  @map("email_reply_to") @db.VarChar(320)
+  storageProvider    String?  @map("storage_provider") @db.VarChar(50)
+  storageQuotaBytes  BigInt?  @map("storage_quota_bytes")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("organization_settings")
+}
+
+/// Per-user preference bag for appearance, locale, AI, and security toggles.
+model UserPreference {
+  id                    String              @id @default(uuid()) @db.Uuid
+  userId                String              @unique @map("user_id") @db.Uuid
+  themeMode             ThemeModePreference @default(SYSTEM) @map("theme_mode")
+  sidebarStyle          SidebarStyle        @default(DEFAULT) @map("sidebar_style")
+  compactMode           Boolean             @default(false) @map("compact_mode")
+  fontSize              FontSizePreference  @default(MEDIUM) @map("font_size")
+  borderRadius          BorderRadiusPreference @default(DEFAULT) @map("border_radius")
+  accentColor           String?             @map("accent_color") @db.VarChar(20)
+  dashboardDensity      DashboardDensity    @default(COMFORTABLE) @map("dashboard_density")
+  language              AppLanguage         @default(EN)
+  timezone              String              @default("UTC") @db.VarChar(100)
+  currency              String              @default("USD") @db.VarChar(10)
+  dateFormat            String              @default("YYYY-MM-DD") @map("date_format") @db.VarChar(30)
+  timeFormat            String              @default("24h") @map("time_format") @db.VarChar(10)
+  emailNotifications    Boolean             @default(true) @map("email_notifications")
+  pushNotifications     Boolean             @default(true) @map("push_notifications")
+  desktopNotifications  Boolean             @default(true) @map("desktop_notifications")
+  smsNotifications      Boolean             @default(false) @map("sms_notifications")
+  whatsappNotifications Boolean             @default(false) @map("whatsapp_notifications")
+  aiProvider             String?             @map("ai_provider") @db.VarChar(50)
+  aiModel               String?             @map("ai_model") @db.VarChar(100)
+  aiTemperature         Float?              @map("ai_temperature")
+  aiMaxTokens           Int?                @map("ai_max_tokens")
+  aiHistoryEnabled      Boolean             @default(true) @map("ai_history_enabled")
+  aiPrivacyMode         Boolean             @default(false) @map("ai_privacy_mode")
+  twoFactorPreferred    Boolean             @default(false) @map("two_factor_preferred")
+  sessionTimeoutMinutes Int                 @default(480) @map("session_timeout_minutes")
+  loginAlertsEnabled    Boolean             @default(true) @map("login_alerts_enabled")
+  deviceTrustEnabled    Boolean             @default(false) @map("device_trust_enabled")
+  passwordPolicyStrict  Boolean             @default(false) @map("password_policy_strict")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+/// Encrypted integration credentials — plaintext never returned by API.
+model IntegrationCredential {
+  id               String                    @id @default(uuid()) @db.Uuid
+  provider         IntegrationProvider
+  label            String                    @db.VarChar(120)
+  /// AES-GCM ciphertext (base64) — never expose via API responses.
+  encryptedSecret  String                    @map("encrypted_secret") @db.Text
+  /// Initialization vector (base64).
+  iv               String                    @db.VarChar(64)
+  /// Auth tag (base64).
+  authTag          String                    @map("auth_tag") @db.VarChar(64)
+  /// Last 4 characters for display only.
+  secretLast4      String                    @map("secret_last4") @db.VarChar(8)
+  isActive         Boolean                   @default(true) @map("is_active")
+  createdById      String                    @map("created_by_id") @db.Uuid
+  updatedById      String?                   @map("updated_by_id") @db.Uuid
+  lastRotatedAt    DateTime?                 @map("last_rotated_at")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+  deletedAt        DateTime?                 @map("deleted_at")
+
+  createdBy User  @relation("IntegrationCredentialCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy User? @relation("IntegrationCredentialUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([provider, label])
+  @@index([provider, deletedAt])
+  @@index([createdById])
+  @@map("integration_credentials")
+}
+
+/// Backup job / history record (restore is architecture-ready, not fully automated).
+model BackupRecord {
+  id           String       @id @default(uuid()) @db.Uuid
+  type         BackupType
+  status       BackupStatus @default(PENDING)
+  triggeredBy  String?      @map("triggered_by") @db.Uuid
+  storageKey   String?      @map("storage_key") @db.VarChar(500)
+  sizeBytes    BigInt?      @map("size_bytes")
+  checksum     String?      @db.VarChar(128)
+  message      String?      @db.VarChar(500)
+  startedAt    DateTime?    @map("started_at")
+  completedAt  DateTime?    @map("completed_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  triggerUser User? @relation("BackupTriggeredBy", fields: [triggeredBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+  @@map("backup_records")
+}
+
+/// Organization billing / subscription snapshot (Stripe wiring is Phase 19).
+model OrganizationBilling {
+  id                 String             @id @default(uuid()) @db.Uuid
+  key                String             @unique @db.VarChar(50)
+  planCode           String             @default("starter") @map("plan_code") @db.VarChar(50)
+  planName           String             @default("Starter") @map("plan_name") @db.VarChar(100)
+  status             BillingPlanStatus  @default(ACTIVE)
+  seatsIncluded      Int                @default(10) @map("seats_included")
+  seatsUsed          Int                @default(0) @map("seats_used")
+  storageQuotaBytes  BigInt             @default(5368709120) @map("storage_quota_bytes")
+  storageUsedBytes   BigInt             @default(0) @map("storage_used_bytes")
+  aiCreditsIncluded  Int                @default(1000) @map("ai_credits_included")
+  aiCreditsUsed      Int                @default(0) @map("ai_credits_used")
+  billingEmail       String?            @map("billing_email") @db.VarChar(320)
+  currentPeriodStart DateTime?          @map("current_period_start")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  @@map("organization_billing")
+}
+
+/// Soft delete-account request workflow.
+model AccountDeletionRequest {
+  id          String                     @id @default(uuid()) @db.Uuid
+  userId      String                     @map("user_id") @db.Uuid
+  reason      String?                    @db.VarChar(500)
+  status      AccountDeletionStatus      @default(PENDING)
+  requestedAt DateTime                   @default(now()) @map("requested_at")
+  processedAt DateTime?                  @map("processed_at")
+  processedBy String?                    @map("processed_by") @db.Uuid
+  createdAt   DateTime                   @default(now()) @map("created_at")
+  updatedAt   DateTime                   @updatedAt @map("updated_at")
+
+  user      User  @relation("AccountDeletionUser", fields: [userId], references: [id], onDelete: Cascade)
+  processor User? @relation("AccountDeletionProcessor", fields: [processedBy], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([status, requestedAt])
+  @@map("account_deletion_requests")
+}

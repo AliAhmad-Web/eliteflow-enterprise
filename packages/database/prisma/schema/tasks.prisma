@@ -1,0 +1,97 @@
+// =============================================================================
+// Tasks — Assignment, progress, comments, attachments, activity
+// =============================================================================
+
+model Task {
+  id             String       @id @default(uuid()) @db.Uuid
+  title          String       @db.VarChar(200)
+  description    String?      @db.Text
+  projectId      String?      @map("project_id") @db.Uuid
+  assignedToId   String?      @map("assigned_to_id") @db.Uuid
+  status         TaskStatus   @default(TODO)
+  priority       TaskPriority @default(MEDIUM)
+  labels         String[]     @default([])
+  startDate      DateTime?    @map("start_date") @db.Date
+  dueDate        DateTime?    @map("due_date") @db.Date
+  progress       Int          @default(0)
+  estimatedHours Decimal?     @map("estimated_hours") @db.Decimal(8, 2)
+  createdById    String?      @map("created_by_id") @db.Uuid
+  updatedById    String?      @map("updated_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
+
+  project     Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignedTo  User?             @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdBy   User?             @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?             @relation("TaskUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  comments    TaskComment[]
+  attachments TaskAttachment[]
+  activityLogs TaskActivityLog[]
+  calendarEvents CalendarEvent[]
+
+  @@index([title])
+  @@index([status])
+  @@index([priority])
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([dueDate])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("tasks")
+}
+
+model TaskComment {
+  id        String    @id @default(uuid()) @db.Uuid
+  taskId    String    @map("task_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  body      String    @db.Text
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation("TaskCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @map("task_id") @db.Uuid
+  fileName     String   @map("file_name") @db.VarChar(255)
+  fileUrl      String   @map("file_url") @db.VarChar(2048)
+  mimeType     String?  @map("mime_type") @db.VarChar(120)
+  sizeBytes    Int?     @map("size_bytes")
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("TaskAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([uploadedById])
+  @@map("task_attachments")
+}
+
+model TaskActivityLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String   @db.VarChar(100)
+  message   String   @db.VarChar(500)
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User? @relation("TaskActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@index([actorId])
+  @@map("task_activity_logs")
+}

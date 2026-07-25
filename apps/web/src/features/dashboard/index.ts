@@ -1,0 +1,18 @@
+export { AiAssistantWidget } from "./components/ai-assistant-widget";
+export { AdminDashboard } from "./components/admin-dashboard";
+export { CalendarWidget } from "./components/calendar-widget";
+export { ClientPortalDashboard } from "./components/client-portal-dashboard";
+export { DashboardContent } from "./components/dashboard-content";
+export { DashboardRightPanelContent } from "./components/dashboard-right-panel-content";
+export { EmployeeDashboard } from "./components/employee-dashboard";
+export { FocusListCard } from "./components/focus-list-card";
+export { KpiStatCard, KpiStatsGrid } from "./components/kpi-stat-card";
+export { ProjectStatusChart } from "./components/project-status-chart";
+export { QuickActionButtons } from "./components/quick-action-buttons";
+export { RecentInvoicesCard } from "./components/recent-invoices-card";
+export { RecentProjectsCard } from "./components/recent-projects-card";
+export { RevenueChartCard } from "./components/revenue-chart-card";
+export { RoleDashboardHeader } from "./components/role-dashboard-header";
+export { SuperAdminDashboard } from "./components/super-admin-dashboard";
+export { TodaysTasksWidget } from "./components/todays-tasks-widget";
+export { WelcomeBanner } from "./components/welcome-banner";

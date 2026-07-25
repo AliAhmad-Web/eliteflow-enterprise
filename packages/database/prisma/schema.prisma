@@ -1,0 +1,16 @@
+// =============================================================================
+// Enterprise Business Management — Prisma Schema Entry Point
+// =============================================================================
+// Multi-file schema: generator + datasource live here.
+// Models are organized by domain in prisma/schema/
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

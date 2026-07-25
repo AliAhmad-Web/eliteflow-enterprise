@@ -1,0 +1,39 @@
+// =============================================================================
+// Clients — CRM company / contact records
+// =============================================================================
+
+/// Business client managed by Admins and viewable by Employees.
+model Client {
+  id           String       @id @default(uuid()) @db.Uuid
+  companyName  String       @map("company_name") @db.VarChar(200)
+  contactName  String       @map("contact_name") @db.VarChar(200)
+  email        String       @db.VarChar(320)
+  phone        String?      @db.VarChar(40)
+  website      String?      @db.VarChar(2048)
+  addressLine1 String?      @map("address_line1") @db.VarChar(255)
+  city         String?      @db.VarChar(100)
+  country      String?      @db.VarChar(100)
+  status       ClientStatus @default(LEAD)
+  notes        String?      @db.Text
+  createdById  String?      @map("created_by_id") @db.Uuid
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deletedAt    DateTime?    @map("deleted_at")
+
+  createdBy User? @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  portalUsers User[] @relation("UserCompany")
+  projects    Project[]
+  invoices    Invoice[]
+  folders     Folder[]
+  managedFiles ManagedFile[]
+  fileShares  FileShare[]
+  calendarEvents CalendarEvent[]
+
+  @@index([email])
+  @@index([companyName])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("clients")
+}

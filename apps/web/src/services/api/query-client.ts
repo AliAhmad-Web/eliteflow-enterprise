@@ -1,0 +1,159 @@
+"use client";
+
+import { keepPreviousData, QueryClient } from "@tanstack/react-query";
+
+const PERSIST_KEY = "eliteflow-rq-cache-v1";
+const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** Queries safe to restore across F5 (list/overview shells — not realtime-only). */
+const PERSIST_KEY_PREFIXES = [
+  "auth",
+  "settings",
+  "clients",
+  "projects",
+  "tasks",
+  "invoices",
+  "communication",
+  "dashboard",
+  "reports",
+  "calendar",
+  "team",
+  "notifications",
+  "integrations",
+  "files",
+] as const;
+
+function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
+  const root = queryKey[0];
+  if (typeof root !== "string") return false;
+  return PERSIST_KEY_PREFIXES.some(
+    (prefix) => root === prefix || root.startsWith(`${prefix}`),
+  );
+}
+
+function dehydrateForPersist(client: QueryClient): string {
+  const cache = client.getQueryCache().getAll();
+  const entries = cache
+    .filter((q) => {
+      if (q.state.status !== "success") return false;
+      if (!shouldPersistQuery(q.queryKey)) return false;
+      return true;
+    })
+    .map((q) => ({
+      queryKey: q.queryKey,
+      state: {
+        data: q.state.data,
+        dataUpdatedAt: q.state.dataUpdatedAt,
+        status: "success" as const,
+      },
+    }));
+
+  return JSON.stringify({
+    timestamp: Date.now(),
+    entries,
+  });
+}
+
+function hydrateFromPersist(client: QueryClient): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(PERSIST_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as {
+      timestamp?: number;
+      entries?: Array<{
+        queryKey: unknown[];
+        state: { data: unknown; dataUpdatedAt: number };
+      }>;
+    };
+    if (
+      !parsed.timestamp ||
+      Date.now() - parsed.timestamp > PERSIST_MAX_AGE_MS ||
+      !Array.isArray(parsed.entries)
+    ) {
+      window.localStorage.removeItem(PERSIST_KEY);
+      return;
+    }
+
+    for (const entry of parsed.entries) {
+      if (!entry?.queryKey || !shouldPersistQuery(entry.queryKey)) continue;
+      client.setQueryData(entry.queryKey, entry.state.data, {
+        updatedAt: entry.state.dataUpdatedAt,
+      });
+    }
+  } catch {
+    try {
+      window.localStorage.removeItem(PERSIST_KEY);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersist(client: QueryClient): void {
+  if (typeof window === "undefined") return;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      window.localStorage.setItem(PERSIST_KEY, dehydrateForPersist(client));
+    } catch {
+      // Quota / private mode — ignore
+    }
+  }, 1_000);
+}
+
+/** Shared TanStack Query defaults for enterprise production caching. */
+export function createQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 5 * 60 * 1000,
+        gcTime: 60 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+        /**
+         * Soft nav + keep-alive remount: reuse cache (RC#6).
+         * Realtime/poll queries opt into refetchInterval or explicit refetchOnMount.
+         */
+        refetchOnMount: false,
+        placeholderData: keepPreviousData,
+        structuralSharing: true,
+        networkMode: "online",
+      },
+      mutations: {
+        retry: 0,
+        networkMode: "online",
+      },
+    },
+  });
+}
+
+let browserQueryClient: QueryClient | undefined;
+
+export function getQueryClient(): QueryClient {
+  if (typeof window === "undefined") {
+    return createQueryClient();
+  }
+
+  if (!browserQueryClient) {
+    browserQueryClient = createQueryClient();
+    hydrateFromPersist(browserQueryClient);
+    browserQueryClient.getQueryCache().subscribe(() => {
+      schedulePersist(browserQueryClient!);
+    });
+  }
+
+  return browserQueryClient;
+}
+
+export function clearPersistedQueryCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PERSIST_KEY);
+  } catch {
+    // ignore
+  }
+}

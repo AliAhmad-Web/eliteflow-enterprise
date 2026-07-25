@@ -1,0 +1,44 @@
+// =============================================================================
+// Phase 17 — Enterprise Security Models
+// =============================================================================
+// Reuses AuditLog (security audit trail) and LoginAttempt (login history).
+// Session remains the active-session / device-tracking model.
+// PasswordHistory is the only new credential-security table.
+// =============================================================================
+
+/// Hashed previous passwords — prevents reuse of the last N passwords.
+model PasswordHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_history")
+}
+
+/// Dedicated security event stream for high-signal alerts (lockouts, reuse, captcha failures).
+/// Complements AuditLog; does not replace it.
+model SecurityEvent {
+  id         String              @id @default(uuid()) @db.Uuid
+  userId     String?             @map("user_id") @db.Uuid
+  severity   SecuritySeverity    @default(INFO)
+  category   SecurityEventCategory
+  eventType  String              @map("event_type") @db.VarChar(100)
+  message    String              @db.VarChar(500)
+  metadata   Json?
+  ipAddress  String?             @map("ip_address") @db.VarChar(45)
+  userAgent  String?             @map("user_agent") @db.VarChar(1024)
+  resolvedAt DateTime?           @map("resolved_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([severity, createdAt])
+  @@index([category, createdAt])
+  @@index([userId, createdAt])
+  @@index([resolvedAt, createdAt])
+  @@map("security_events")
+}

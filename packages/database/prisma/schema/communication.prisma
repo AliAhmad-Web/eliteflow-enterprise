@@ -1,0 +1,535 @@
+// =============================================================================
+// Communication — Conversations, messages, comments, activity feed (Phase 16)
+// =============================================================================
+
+model Conversation {
+  id             String           @id @default(uuid()) @db.Uuid
+  type           ConversationType
+  name           String?          @db.VarChar(200)
+  description    String?          @db.VarChar(1000)
+  avatarUrl      String?          @map("avatar_url") @db.VarChar(2048)
+  departmentId   String?          @map("department_id") @db.Uuid
+  teamId         String?          @map("team_id") @db.Uuid
+  projectId      String?          @map("project_id") @db.Uuid
+  clientId       String?          @map("client_id") @db.Uuid
+  lastMessageAt  DateTime?        @map("last_message_at")
+  lastMessagePreview String?      @map("last_message_preview") @db.VarChar(500)
+  /// Soft-archive for channels (distinct from hard soft-delete via deletedAt).
+  archivedAt     DateTime?        @map("archived_at")
+  createdById    String?          @map("created_by_id") @db.Uuid
+  updatedById    String?          @map("updated_by_id") @db.Uuid
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  deletedAt      DateTime?        @map("deleted_at")
+
+  createdBy User? @relation("ConversationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("ConversationUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@index([type])
+  @@index([departmentId])
+  @@index([teamId])
+  @@index([projectId])
+  @@index([clientId])
+  @@index([lastMessageAt])
+  @@index([archivedAt])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id             String                 @id @default(uuid()) @db.Uuid
+  conversationId String                 @map("conversation_id") @db.Uuid
+  userId         String                 @map("user_id") @db.Uuid
+  role           ConversationMemberRole @default(MEMBER)
+  lastReadAt     DateTime?              @map("last_read_at")
+  mutedUntil     DateTime?              @map("muted_until")
+  joinedAt       DateTime               @default(now()) @map("joined_at")
+  leftAt         DateTime?              @map("left_at")
+  createdById    String?                @map("created_by_id") @db.Uuid
+  updatedById    String?                @map("updated_by_id") @db.Uuid
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  deletedAt      DateTime?              @map("deleted_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ConversationMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("ConversationMemberCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?        @relation("ConversationMemberUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+  @@index([deletedAt])
+  @@map("conversation_members")
+}
+
+model Message {
+  id              String      @id @default(uuid()) @db.Uuid
+  conversationId  String      @map("conversation_id") @db.Uuid
+  senderId        String      @map("sender_id") @db.Uuid
+  body            String      @db.Text
+  kind            MessageKind @default(TEXT)
+  parentId        String?     @map("parent_id") @db.Uuid
+  forwardedFromId String?     @map("forwarded_from_id") @db.Uuid
+  isPinned        Boolean     @default(false) @map("is_pinned")
+  isEdited        Boolean     @default(false) @map("is_edited")
+  editedAt        DateTime?   @map("edited_at")
+  createdById     String?     @map("created_by_id") @db.Uuid
+  updatedById     String?     @map("updated_by_id") @db.Uuid
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  deletedAt       DateTime?   @map("deleted_at")
+
+  conversation  Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender        User                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  parent        Message?            @relation("MessageReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies       Message[]           @relation("MessageReplies")
+  forwardedFrom Message?            @relation("MessageForwards", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  forwards      Message[]           @relation("MessageForwards")
+  createdBy     User?               @relation("MessageCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?               @relation("MessageUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  attachments   MessageAttachment[]
+  reactions     MessageReaction[]
+  reads         MessageRead[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([parentId])
+  @@index([isPinned])
+  @@index([deletedAt])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id              String    @id @default(uuid()) @db.Uuid
+  messageId       String    @map("message_id") @db.Uuid
+  fileName        String    @map("file_name") @db.VarChar(255)
+  fileUrl         String    @map("file_url") @db.VarChar(2048)
+  mimeType        String?   @map("mime_type") @db.VarChar(120)
+  sizeBytes       Int?      @map("size_bytes")
+  managedFileId   String?   @map("managed_file_id") @db.Uuid
+  /// Voice-note duration in seconds (architecture; playback is client-side).
+  durationSeconds Int?      @map("duration_seconds")
+  /// Optional waveform peaks JSON for voice-note UI.
+  waveformJson    String?   @map("waveform_json") @db.Text
+  createdById     String?   @map("created_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("MessageAttachmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([managedFileId])
+  @@index([deletedAt])
+  @@map("message_attachments")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emoji     String   @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation("MessageReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
+  @@map("message_reactions")
+}
+
+model MessageRead {
+  id          String            @id @default(uuid()) @db.Uuid
+  messageId   String            @map("message_id") @db.Uuid
+  userId      String            @map("user_id") @db.Uuid
+  status      MessageReadStatus @default(SENT)
+  deliveredAt DateTime?         @map("delivered_at")
+  seenAt      DateTime?         @map("seen_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation("MessageReadUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, status])
+  @@index([messageId])
+  @@map("message_reads")
+}
+
+model Comment {
+  id          String            @id @default(uuid()) @db.Uuid
+  entityType  CommentEntityType @map("entity_type")
+  entityId    String            @map("entity_id") @db.Uuid
+  authorId    String            @map("author_id") @db.Uuid
+  body        String            @db.Text
+  parentId    String?           @map("parent_id") @db.Uuid
+  createdById String?           @map("created_by_id") @db.Uuid
+  updatedById String?           @map("updated_by_id") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  deletedAt   DateTime?         @map("deleted_at")
+
+  author      User                @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent      Comment?            @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies     Comment[]           @relation("CommentReplies")
+  createdBy   User?               @relation("CommentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?               @relation("CommentUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  attachments CommentAttachment[]
+
+  @@index([entityType, entityId, createdAt])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([deletedAt])
+  @@map("comments")
+}
+
+model CommentAttachment {
+  id            String    @id @default(uuid()) @db.Uuid
+  commentId     String    @map("comment_id") @db.Uuid
+  fileName      String    @map("file_name") @db.VarChar(255)
+  fileUrl       String    @map("file_url") @db.VarChar(2048)
+  mimeType      String?   @map("mime_type") @db.VarChar(120)
+  sizeBytes     Int?      @map("size_bytes")
+  managedFileId String?   @map("managed_file_id") @db.Uuid
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("CommentAttachmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([commentId])
+  @@index([managedFileId])
+  @@index([deletedAt])
+  @@map("comment_attachments")
+}
+
+model Activity {
+  id          String             @id @default(uuid()) @db.Uuid
+  actorId     String?            @map("actor_id") @db.Uuid
+  action      String             @db.VarChar(100)
+  title       String             @db.VarChar(300)
+  body        String?            @db.VarChar(2000)
+  entityType  ActivityEntityType @map("entity_type")
+  entityId    String?            @map("entity_id") @db.Uuid
+  linkUrl     String?            @map("link_url") @db.VarChar(500)
+  metadata    Json?
+  createdById String?            @map("created_by_id") @db.Uuid
+  updatedById String?            @map("updated_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+
+  actor       User?                 @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdBy   User?                 @relation("ActivityCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?                 @relation("ActivityUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  attachments ActivityAttachment[]
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("activities")
+}
+
+model ActivityAttachment {
+  id            String    @id @default(uuid()) @db.Uuid
+  activityId    String    @map("activity_id") @db.Uuid
+  fileName      String    @map("file_name") @db.VarChar(255)
+  fileUrl       String    @map("file_url") @db.VarChar(2048)
+  mimeType      String?   @map("mime_type") @db.VarChar(120)
+  sizeBytes     Int?      @map("size_bytes")
+  managedFileId String?   @map("managed_file_id") @db.Uuid
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  activity  Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("ActivityAttachmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([activityId])
+  @@index([managedFileId])
+  @@index([deletedAt])
+  @@map("activity_attachments")
+}
+
+/// Online / offline / typing presence for chat participants.
+model UserPresence {
+  userId                 String    @id @map("user_id") @db.Uuid
+  isOnline               Boolean   @default(false) @map("is_online")
+  lastSeenAt             DateTime? @map("last_seen_at")
+  typingConversationId   String?   @map("typing_conversation_id") @db.Uuid
+  typingUpdatedAt        DateTime? @map("typing_updated_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  user User @relation("UserPresenceUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isOnline])
+  @@index([typingConversationId])
+  @@map("user_presence")
+}
+
+// =============================================================================
+// Phase 20 — Enterprise Communication Hub (announcements, threads, meetings)
+// =============================================================================
+
+/// Organization / department announcements with read tracking.
+model Announcement {
+  id           String               @id @default(uuid()) @db.Uuid
+  title        String               @db.VarChar(300)
+  body         String               @db.Text
+  priority     AnnouncementPriority @default(NORMAL)
+  departmentId String?              @map("department_id") @db.Uuid
+  expiresAt    DateTime?            @map("expires_at")
+  isPinned     Boolean              @default(false) @map("is_pinned")
+  publishedAt  DateTime?            @map("published_at")
+  createdById  String?              @map("created_by_id") @db.Uuid
+  updatedById  String?              @map("updated_by_id") @db.Uuid
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  deletedAt    DateTime?            @map("deleted_at")
+
+  createdBy   User?                     @relation("AnnouncementCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?                     @relation("AnnouncementUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  attachments AnnouncementAttachment[]
+  reads       AnnouncementRead[]
+
+  @@index([priority])
+  @@index([departmentId])
+  @@index([expiresAt])
+  @@index([isPinned])
+  @@index([publishedAt])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@map("announcements")
+}
+
+model AnnouncementAttachment {
+  id            String    @id @default(uuid()) @db.Uuid
+  announcementId String   @map("announcement_id") @db.Uuid
+  fileName      String    @map("file_name") @db.VarChar(255)
+  fileUrl       String    @map("file_url") @db.VarChar(2048)
+  mimeType      String?   @map("mime_type") @db.VarChar(120)
+  sizeBytes     Int?      @map("size_bytes")
+  managedFileId String?   @map("managed_file_id") @db.Uuid
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("AnnouncementAttachmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([announcementId])
+  @@index([managedFileId])
+  @@index([deletedAt])
+  @@map("announcement_attachments")
+}
+
+model AnnouncementRead {
+  id             String   @id @default(uuid()) @db.Uuid
+  announcementId String   @map("announcement_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  readAt         DateTime @default(now()) @map("read_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation("AnnouncementReadUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@index([announcementId])
+  @@map("announcement_reads")
+}
+
+/// Standalone discussion threads (nested replies, resolve, pin, tags).
+model DiscussionThread {
+  id           String                 @id @default(uuid()) @db.Uuid
+  title        String                 @db.VarChar(300)
+  body         String                 @db.Text
+  category     String?                @db.VarChar(100)
+  status       DiscussionThreadStatus @default(OPEN)
+  isPinned     Boolean                @default(false) @map("is_pinned")
+  departmentId String?                @map("department_id") @db.Uuid
+  teamId       String?                @map("team_id") @db.Uuid
+  projectId    String?                @map("project_id") @db.Uuid
+  resolvedAt   DateTime?              @map("resolved_at")
+  resolvedById String?                @map("resolved_by_id") @db.Uuid
+  createdById  String?                @map("created_by_id") @db.Uuid
+  updatedById  String?                @map("updated_by_id") @db.Uuid
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  deletedAt    DateTime?              @map("deleted_at")
+
+  createdBy  User?               @relation("DiscussionThreadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  User?               @relation("DiscussionThreadUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  resolvedBy User?               @relation("DiscussionThreadResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  replies    DiscussionReply[]
+  tags       DiscussionThreadTag[]
+
+  @@index([status])
+  @@index([category])
+  @@index([isPinned])
+  @@index([departmentId])
+  @@index([teamId])
+  @@index([projectId])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@map("discussion_threads")
+}
+
+model DiscussionReply {
+  id         String    @id @default(uuid()) @db.Uuid
+  threadId   String    @map("thread_id") @db.Uuid
+  authorId   String    @map("author_id") @db.Uuid
+  body       String    @db.Text
+  parentId   String?   @map("parent_id") @db.Uuid
+  createdById String?  @map("created_by_id") @db.Uuid
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  thread    DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author    User             @relation("DiscussionReplyAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent    DiscussionReply? @relation("DiscussionReplyNesting", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   DiscussionReply[] @relation("DiscussionReplyNesting")
+  createdBy User?            @relation("DiscussionReplyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?            @relation("DiscussionReplyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([deletedAt])
+  @@map("discussion_replies")
+}
+
+model DiscussionThreadTag {
+  id        String   @id @default(uuid()) @db.Uuid
+  threadId  String   @map("thread_id") @db.Uuid
+  tag       String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, tag])
+  @@index([tag])
+  @@index([threadId])
+  @@map("discussion_thread_tags")
+}
+
+/// Meeting room architecture only — no WebRTC media plane yet (Phase 20).
+model MeetingRoom {
+  id              String        @id @default(uuid()) @db.Uuid
+  title           String        @db.VarChar(300)
+  description     String?       @db.VarChar(2000)
+  status          MeetingStatus @default(SCHEDULED)
+  scheduledStart  DateTime      @map("scheduled_start")
+  scheduledEnd    DateTime?     @map("scheduled_end")
+  startedAt       DateTime?     @map("started_at")
+  endedAt         DateTime?     @map("ended_at")
+  waitingRoomEnabled Boolean    @default(true) @map("waiting_room_enabled")
+  /// Future WebRTC room token / provider room id (opaque; unused until media phase).
+  webrtcRoomId    String?       @map("webrtc_room_id") @db.VarChar(200)
+  conversationId  String?       @map("conversation_id") @db.Uuid
+  hostId          String        @map("host_id") @db.Uuid
+  createdById     String?       @map("created_by_id") @db.Uuid
+  updatedById     String?       @map("updated_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+
+  host         User                  @relation("MeetingRoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  createdBy    User?                 @relation("MeetingRoomCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?                 @relation("MeetingRoomUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  participants MeetingParticipant[]
+  recordings   MeetingRecording[]
+  screenShares MeetingScreenShare[]
+
+  @@index([status])
+  @@index([scheduledStart])
+  @@index([hostId])
+  @@index([conversationId])
+  @@index([deletedAt])
+  @@map("meeting_rooms")
+}
+
+model MeetingParticipant {
+  id            String                   @id @default(uuid()) @db.Uuid
+  meetingId     String                   @map("meeting_id") @db.Uuid
+  userId        String                   @map("user_id") @db.Uuid
+  status        MeetingParticipantStatus @default(INVITED)
+  invitedAt     DateTime                 @default(now()) @map("invited_at")
+  joinedAt      DateTime?                @map("joined_at")
+  leftAt        DateTime?                @map("left_at")
+  admittedAt    DateTime?                @map("admitted_at")
+  createdById   String?                  @map("created_by_id") @db.Uuid
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+
+  meeting   MeetingRoom @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User        @relation("MeetingParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("MeetingParticipantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+  @@index([meetingId])
+  @@index([status])
+  @@map("meeting_participants")
+}
+
+/// Recording metadata only — no media bytes stored here.
+model MeetingRecording {
+  id            String    @id @default(uuid()) @db.Uuid
+  meetingId     String    @map("meeting_id") @db.Uuid
+  fileName      String    @map("file_name") @db.VarChar(255)
+  storageUrl    String?   @map("storage_url") @db.VarChar(2048)
+  mimeType      String?   @map("mime_type") @db.VarChar(120)
+  sizeBytes     Int?      @map("size_bytes")
+  durationSeconds Int?    @map("duration_seconds")
+  managedFileId String?   @map("managed_file_id") @db.Uuid
+  startedAt     DateTime? @map("started_at")
+  endedAt       DateTime? @map("ended_at")
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  meeting   MeetingRoom @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("MeetingRecordingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([meetingId])
+  @@index([managedFileId])
+  @@index([deletedAt])
+  @@map("meeting_recordings")
+}
+
+/// Screen-share session metadata only — no media plane.
+model MeetingScreenShare {
+  id          String    @id @default(uuid()) @db.Uuid
+  meetingId   String    @map("meeting_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  startedAt   DateTime  @default(now()) @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  meeting MeetingRoom @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User        @relation("MeetingScreenShareUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([userId])
+  @@map("meeting_screen_shares")
+}

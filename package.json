@@ -1,0 +1,43 @@
+{
+  "name": "enterprise-business-management",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run api:dev & npm run web:dev",
+    "api:dev": "npm run dev --workspace=@enterprise/api",
+    "web:dev": "npm run dev --workspace=web",
+    "mobile:start": "npm run start --workspace=@enterprise/mobile",
+    "mobile:android": "npm run android --workspace=@enterprise/mobile",
+    "mobile:ios": "npm run ios --workspace=@enterprise/mobile",
+    "mobile:type-check": "npm run type-check --workspace=@enterprise/mobile",
+    "db:generate": "npm run generate --workspace=@enterprise/database",
+    "db:migrate": "npm run migrate:dev --workspace=@enterprise/database",
+    "db:migrate:deploy": "npm run migrate:deploy --workspace=@enterprise/database",
+    "db:seed": "npm run seed --workspace=@enterprise/database",
+    "db:studio": "npm run studio --workspace=@enterprise/database",
+    "db:validate": "npm run validate --workspace=@enterprise/database",
+    "api:type-check": "npm run type-check --workspace=@enterprise/api"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "overrides": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "dependencies": {
+    "expo-router": "~57.0.8",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "allowScripts": {
+    "@prisma/engines@6.19.3": true,
+    "argon2@0.43.1": true,
+    "esbuild@0.28.1": true,
+    "prisma@6.19.3": true
+  }
+}

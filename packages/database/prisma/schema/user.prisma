@@ -1,0 +1,218 @@
+// =============================================================================
+// User & RBAC Models — Identity, Roles, Permissions
+// =============================================================================
+
+/// Core application user identity and credentials.
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  email             String     @unique @db.VarChar(320)
+  username          String?    @unique @db.VarChar(50)
+  passwordHash      String?    @map("password_hash") @db.VarChar(255)
+  firstName         String     @map("first_name") @db.VarChar(100)
+  lastName          String     @map("last_name") @db.VarChar(100)
+  avatarUrl         String?    @map("avatar_url") @db.VarChar(2048)
+  phone             String?    @db.VarChar(30)
+  bio               String?    @db.VarChar(1000)
+  designation       String?    @db.VarChar(120)
+  roleId            String     @map("role_id") @db.Uuid
+  status            UserStatus @default(PENDING_VERIFICATION)
+  emailVerified     Boolean    @default(false) @map("email_verified")
+  emailVerifiedAt   DateTime?  @map("email_verified_at")
+  lastLoginAt       DateTime?  @map("last_login_at")
+  passwordChangedAt DateTime?  @map("password_changed_at")
+  failedLoginCount  Int        @default(0) @map("failed_login_count")
+  lockedUntil       DateTime?  @map("locked_until")
+  twoFactorEnabled  Boolean    @default(false) @map("two_factor_enabled")
+  companyId         String?    @map("company_id") @db.Uuid
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+  deletedAt         DateTime?  @map("deleted_at")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  company Client? @relation("UserCompany", fields: [companyId], references: [id], onDelete: SetNull)
+
+  sessions                Session[]
+  refreshTokens           RefreshToken[]
+  oauthAccounts           OAuthAccount[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  otpVerifications        OtpVerification[]
+  auditLogs               AuditLog[]
+  loginAttempts           LoginAttempt[]
+  passwordHistory         PasswordHistory[]
+  securityEvents          SecurityEvent[]
+  clientsCreated          Client[]          @relation("ClientCreatedBy")
+  projectsCreated         Project[]         @relation("ProjectCreatedBy")
+  projectMemberships      ProjectMember[]
+  attachmentsUploaded     ProjectAttachment[] @relation("AttachmentUploadedBy")
+  tasksAssigned           Task[]            @relation("TaskAssignedTo")
+  tasksCreated            Task[]            @relation("TaskCreatedBy")
+  tasksUpdated            Task[]            @relation("TaskUpdatedBy")
+  taskCommentsAuthored    TaskComment[]     @relation("TaskCommentAuthor")
+  taskAttachmentsUploaded TaskAttachment[]  @relation("TaskAttachmentUploadedBy")
+  taskActivityLogs        TaskActivityLog[] @relation("TaskActivityActor")
+  invoicesCreated         Invoice[]         @relation("InvoiceCreatedBy")
+  invoicesUpdated         Invoice[]         @relation("InvoiceUpdatedBy")
+  invoicePaymentEvents    InvoicePaymentHistory[] @relation("InvoicePaymentActor")
+  aiConversations         AiConversation[]  @relation("AiConversationOwner")
+  aiDocuments             AiDocument[]      @relation("AiDocumentOwner")
+  aiDocumentsCreated      AiDocument[]      @relation("AiDocumentCreatedBy")
+  foldersCreated          Folder[]          @relation("FolderCreatedBy")
+  foldersUpdated          Folder[]          @relation("FolderUpdatedBy")
+  managedFilesCreated     ManagedFile[]     @relation("ManagedFileCreatedBy")
+  managedFilesUpdated     ManagedFile[]     @relation("ManagedFileUpdatedBy")
+  fileVersionsCreated     FileVersion[]     @relation("FileVersionCreatedBy")
+  fileSharesReceived      FileShare[]       @relation("FileShareUser")
+  fileSharesCreated       FileShare[]       @relation("FileShareCreatedBy")
+  fileActivities          FileActivity[]    @relation("FileActivityActor")
+  calendarEventsCreated   CalendarEvent[]   @relation("CalendarEventCreatedBy")
+  calendarEventsUpdated   CalendarEvent[]   @relation("CalendarEventUpdatedBy")
+  eventAttendances        EventAttendee[]
+  eventRemindersCreated   EventReminder[]   @relation("EventReminderCreatedBy")
+  holidaysCreated         Holiday[]         @relation("HolidayCreatedBy")
+  departmentHeads         Department[]      @relation("DepartmentHead")
+  departmentsCreated      Department[]      @relation("DepartmentCreatedBy")
+  departmentsUpdated      Department[]      @relation("DepartmentUpdatedBy")
+  employeeProfile         EmployeeProfile?  @relation("EmployeeProfileUser")
+  managedEmployees        EmployeeProfile[] @relation("EmployeeManager")
+  employeeProfilesCreated EmployeeProfile[] @relation("EmployeeProfileCreatedBy")
+  employeeProfilesUpdated EmployeeProfile[] @relation("EmployeeProfileUpdatedBy")
+  teamsLed                Team[]            @relation("TeamLeader")
+  teamsCreated            Team[]            @relation("TeamCreatedBy")
+  teamsUpdated            Team[]            @relation("TeamUpdatedBy")
+  hrTeamMemberships       TeamMember[]
+  attendanceCreated       Attendance[]      @relation("AttendanceCreatedBy")
+  attendanceUpdated       Attendance[]      @relation("AttendanceUpdatedBy")
+  leavesReviewed          LeaveRequest[]    @relation("LeaveReviewedBy")
+  leavesCreated           LeaveRequest[]    @relation("LeaveCreatedBy")
+  leavesUpdated           LeaveRequest[]    @relation("LeaveUpdatedBy")
+  performanceReviewsGiven PerformanceReview[] @relation("PerformanceReviewer")
+  performanceCreated      PerformanceReview[] @relation("PerformanceCreatedBy")
+  performanceUpdated      PerformanceReview[] @relation("PerformanceUpdatedBy")
+  goalsCreated            EmployeeGoal[]    @relation("GoalCreatedBy")
+  goalsUpdated            EmployeeGoal[]    @relation("GoalUpdatedBy")
+  savedReportsOwned       SavedReport[]     @relation("SavedReportOwner")
+  savedReportsCreated     SavedReport[]     @relation("SavedReportCreatedBy")
+  savedReportsUpdated     SavedReport[]     @relation("SavedReportUpdatedBy")
+  reportTemplatesCreated  ReportTemplate[]  @relation("ReportTemplateCreatedBy")
+  reportSchedulesOwned    ReportSchedule[]  @relation("ReportScheduleOwner")
+  reportSchedulesCreated  ReportSchedule[]  @relation("ReportScheduleCreatedBy")
+  reportAudits            ReportAudit[]     @relation("ReportAuditUser")
+  notificationsReceived   Notification[]    @relation("NotificationRecipient")
+  notificationsCreated    Notification[]    @relation("NotificationCreatedBy")
+  notificationPreferences NotificationPreference[]
+  notificationTemplatesCreated NotificationTemplate[] @relation("NotificationTemplateCreatedBy")
+  notificationQueueItems  NotificationQueue[]
+  notificationAudits      NotificationAudit[] @relation("NotificationAuditUser")
+  notificationReplies     NotificationReply[]
+
+  // Phase 16 — Communication
+  conversationsCreated         Conversation[]        @relation("ConversationCreatedBy")
+  conversationsUpdated         Conversation[]        @relation("ConversationUpdatedBy")
+  conversationMemberships      ConversationMember[]  @relation("ConversationMemberUser")
+  conversationMembersCreated   ConversationMember[]  @relation("ConversationMemberCreatedBy")
+  conversationMembersUpdated   ConversationMember[]  @relation("ConversationMemberUpdatedBy")
+  messagesSent                 Message[]             @relation("MessageSender")
+  messagesCreated              Message[]             @relation("MessageCreatedBy")
+  messagesUpdated              Message[]             @relation("MessageUpdatedBy")
+  messageAttachmentsCreated    MessageAttachment[]   @relation("MessageAttachmentCreatedBy")
+  messageReactions             MessageReaction[]     @relation("MessageReactionUser")
+  messageReads                 MessageRead[]         @relation("MessageReadUser")
+  commentsAuthored             Comment[]             @relation("CommentAuthor")
+  commentsCreated              Comment[]             @relation("CommentCreatedBy")
+  commentsUpdated              Comment[]             @relation("CommentUpdatedBy")
+  commentAttachmentsCreated    CommentAttachment[]   @relation("CommentAttachmentCreatedBy")
+  activitiesActed              Activity[]            @relation("ActivityActor")
+  activitiesCreated            Activity[]            @relation("ActivityCreatedBy")
+  activitiesUpdated            Activity[]            @relation("ActivityUpdatedBy")
+  activityAttachmentsCreated   ActivityAttachment[]  @relation("ActivityAttachmentCreatedBy")
+  presence                     UserPresence?         @relation("UserPresenceUser")
+
+  // Phase 20 — Communication Hub
+  announcementsCreated         Announcement[]            @relation("AnnouncementCreatedBy")
+  announcementsUpdated         Announcement[]            @relation("AnnouncementUpdatedBy")
+  announcementAttachmentsCreated AnnouncementAttachment[] @relation("AnnouncementAttachmentCreatedBy")
+  announcementReads            AnnouncementRead[]        @relation("AnnouncementReadUser")
+  discussionThreadsCreated     DiscussionThread[]        @relation("DiscussionThreadCreatedBy")
+  discussionThreadsUpdated     DiscussionThread[]        @relation("DiscussionThreadUpdatedBy")
+  discussionThreadsResolved    DiscussionThread[]        @relation("DiscussionThreadResolvedBy")
+  discussionRepliesAuthored    DiscussionReply[]         @relation("DiscussionReplyAuthor")
+  discussionRepliesCreated     DiscussionReply[]         @relation("DiscussionReplyCreatedBy")
+  discussionRepliesUpdated     DiscussionReply[]         @relation("DiscussionReplyUpdatedBy")
+  meetingRoomsHosted           MeetingRoom[]             @relation("MeetingRoomHost")
+  meetingRoomsCreated          MeetingRoom[]             @relation("MeetingRoomCreatedBy")
+  meetingRoomsUpdated          MeetingRoom[]             @relation("MeetingRoomUpdatedBy")
+  meetingParticipations        MeetingParticipant[]      @relation("MeetingParticipantUser")
+  meetingParticipantsCreated   MeetingParticipant[]      @relation("MeetingParticipantCreatedBy")
+  meetingRecordingsCreated     MeetingRecording[]        @relation("MeetingRecordingCreatedBy")
+  meetingScreenShares          MeetingScreenShare[]      @relation("MeetingScreenShareUser")
+
+  // Phase 18 — Settings
+  preferences                  UserPreference?
+  integrationCredentialsCreated IntegrationCredential[] @relation("IntegrationCredentialCreatedBy")
+  integrationCredentialsUpdated IntegrationCredential[] @relation("IntegrationCredentialUpdatedBy")
+  backupsTriggered             BackupRecord[]        @relation("BackupTriggeredBy")
+  accountDeletionRequests      AccountDeletionRequest[] @relation("AccountDeletionUser")
+  accountDeletionsProcessed    AccountDeletionRequest[] @relation("AccountDeletionProcessor")
+
+  // Phase 19.1 — Integrations
+  integrationsConnected        Integration[]         @relation("IntegrationConnectedBy")
+  integrationCredentialsConnCreated Credential[]     @relation("CredentialCreatedBy")
+  integrationCredentialsConnUpdated Credential[]     @relation("CredentialUpdatedBy")
+  integrationLogs              IntegrationLog[]      @relation("IntegrationLogUser")
+  webhookEndpointsCreated      WebhookEndpoint[]     @relation("WebhookEndpointCreatedBy")
+  syncHistoryTriggered         SyncHistory[]         @relation("SyncHistoryTriggeredBy")
+
+  @@index([roleId])
+  @@index([status])
+  @@index([email, deletedAt])
+  @@index([lockedUntil])
+  @@index([companyId])
+  @@map("users")
+}
+
+/// System role definition (Super Admin, Admin, Employee, Client).
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  description String   @db.VarChar(500)
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+/// Atomic permission key following [resource]:[action] convention.
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(100)
+  resource    String   @db.VarChar(50)
+  action      String   @db.VarChar(50)
+  description String   @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  rolePermissions RolePermission[]
+
+  @@index([resource, action])
+  @@map("permissions")
+}
+
+/// Many-to-many join between roles and permissions.
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}

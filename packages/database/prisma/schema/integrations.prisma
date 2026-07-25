@@ -1,0 +1,159 @@
+// =============================================================================
+// Phase 19.1 — Integration Architecture & Connection Manager
+// =============================================================================
+// Integration: catalog + connection state for third-party providers.
+// Credential: encrypted connection secrets (OAuth tokens / keys) — separate from
+//             Settings IntegrationCredential (API keys in Settings Center).
+// IntegrationLog: append-only connection / health / sync activity.
+// WebhookEndpoint: inbound webhook registration (architecture only).
+// SyncHistory: sync run history for the Connection Manager dashboard.
+// =============================================================================
+
+/// Available / connected third-party integration.
+model Integration {
+  id                String                       @id @default(uuid()) @db.Uuid
+  /// Stable machine key: gmail, google_calendar, github, openai, …
+  slug              String                       @unique @db.VarChar(80)
+  name              String                       @db.VarChar(120)
+  description       String                       @db.VarChar(500)
+  provider          IntegrationProvider
+  category          String                       @db.VarChar(60)
+  /// Frontend logo / brand key (gmail, github, stripe, …).
+  logoKey           String                       @map("logo_key") @db.VarChar(60)
+  status            IntegrationConnectionStatus  @default(AVAILABLE)
+  healthStatus      IntegrationHealthStatus      @default(UNKNOWN) @map("health_status")
+  healthMessage     String?                      @map("health_message") @db.VarChar(500)
+  isConnected       Boolean                      @default(false) @map("is_connected")
+  connectedAt       DateTime?                    @map("connected_at")
+  disconnectedAt    DateTime?                    @map("disconnected_at")
+  connectedById     String?                      @map("connected_by_id") @db.Uuid
+  lastSyncAt        DateTime?                    @map("last_sync_at")
+  lastHealthCheckAt DateTime?                    @map("last_health_check_at")
+  /// Non-secret connection metadata (scopes, account labels, etc.).
+  config            Json?
+  /// Employees may view this integration in the Integration Center.
+  visibleToEmployee Boolean                      @default(true) @map("visible_to_employee")
+  /// Clients may view this integration in the Integration Center.
+  visibleToClient   Boolean                      @default(false) @map("visible_to_client")
+  sortOrder         Int                          @default(0) @map("sort_order")
+  createdAt         DateTime                     @default(now()) @map("created_at")
+  updatedAt         DateTime                     @updatedAt @map("updated_at")
+  deletedAt         DateTime?                    @map("deleted_at")
+
+  connectedBy User?                @relation("IntegrationConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+  credentials Credential[]
+  logs        IntegrationLog[]
+  webhooks    WebhookEndpoint[]
+  syncHistory SyncHistory[]
+
+  @@index([status, deletedAt])
+  @@index([healthStatus, deletedAt])
+  @@index([isConnected, deletedAt])
+  @@index([provider, deletedAt])
+  @@index([sortOrder])
+  @@map("integrations")
+}
+
+/// Encrypted connection credentials for an integration (OAuth tokens / API secrets).
+/// Distinct from Settings `IntegrationCredential` (org API keys).
+model Credential {
+  id              String   @id @default(uuid()) @db.Uuid
+  integrationId   String   @map("integration_id") @db.Uuid
+  /// Logical key within the integration (e.g. access_token, refresh_token, api_key).
+  keyName         String   @map("key_name") @db.VarChar(120)
+  /// AES-GCM ciphertext (base64) — never expose via API responses.
+  encryptedSecret String   @map("encrypted_secret") @db.Text
+  iv              String   @db.VarChar(64)
+  authTag         String   @map("auth_tag") @db.VarChar(64)
+  secretLast4     String   @map("secret_last4") @db.VarChar(8)
+  expiresAt       DateTime? @map("expires_at")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdById     String   @map("created_by_id") @db.Uuid
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation("CredentialCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy   User?       @relation("CredentialUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([integrationId, keyName])
+  @@index([integrationId, deletedAt])
+  @@index([createdById])
+  @@map("integration_connection_credentials")
+}
+
+/// Append-only integration activity log.
+model IntegrationLog {
+  id            String              @id @default(uuid()) @db.Uuid
+  integrationId String              @map("integration_id") @db.Uuid
+  level         IntegrationLogLevel @default(INFO)
+  action        String              @db.VarChar(120)
+  message       String              @db.VarChar(1000)
+  metadata      Json?
+  userId        String?             @map("user_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  user        User?       @relation("IntegrationLogUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([integrationId, createdAt])
+  @@index([level, createdAt])
+  @@index([userId, createdAt])
+  @@map("integration_logs")
+}
+
+/// Registered inbound webhook endpoint for an integration (architecture only).
+model WebhookEndpoint {
+  id                     String    @id @default(uuid()) @db.Uuid
+  integrationId          String    @map("integration_id") @db.Uuid
+  url                    String    @db.VarChar(2048)
+  /// Encrypted signing secret (AES-GCM).
+  encryptedSecret        String?   @map("encrypted_secret") @db.Text
+  iv                     String?   @db.VarChar(64)
+  authTag                String?   @map("auth_tag") @db.VarChar(64)
+  events                 String[]  @default([])
+  isActive               Boolean   @default(true) @map("is_active")
+  lastReceivedAt         DateTime? @map("last_received_at")
+  lastDeliveryStatus     String?   @map("last_delivery_status") @db.VarChar(40)
+  createdById            String    @map("created_by_id") @db.Uuid
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  deletedAt              DateTime? @map("deleted_at")
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation("WebhookEndpointCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([integrationId, deletedAt])
+  @@index([isActive, deletedAt])
+  @@map("webhook_endpoints")
+}
+
+/// Sync run history for dashboard + observability.
+model SyncHistory {
+  id               String                @id @default(uuid()) @db.Uuid
+  integrationId    String                @map("integration_id") @db.Uuid
+  status           IntegrationSyncStatus @default(PENDING)
+  direction        String                @default("inbound") @db.VarChar(40)
+  recordsProcessed Int                   @default(0) @map("records_processed")
+  recordsFailed    Int                   @default(0) @map("records_failed")
+  message          String?               @db.VarChar(500)
+  metadata         Json?
+  /// Phase 19.2 — retry architecture
+  retryCount       Int                   @default(0) @map("retry_count")
+  failureReason    String?               @map("failure_reason") @db.VarChar(500)
+  lastRetryAt      DateTime?             @map("last_retry_at")
+  triggeredById    String?               @map("triggered_by_id") @db.Uuid
+  startedAt        DateTime              @default(now()) @map("started_at")
+  completedAt      DateTime?             @map("completed_at")
+  createdAt        DateTime              @default(now()) @map("created_at")
+
+  integration Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  triggeredBy User?       @relation("SyncHistoryTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  @@index([integrationId, startedAt])
+  @@index([status, startedAt])
+  @@index([triggeredById, startedAt])
+  @@map("sync_history")
+}

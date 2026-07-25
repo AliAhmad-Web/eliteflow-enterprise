@@ -1,0 +1,103 @@
+// =============================================================================
+// Calendar — Events, attendees, reminders, holidays
+// =============================================================================
+
+model CalendarEvent {
+  id          String                @id @default(uuid()) @db.Uuid
+  title       String                @db.VarChar(200)
+  description String?               @db.Text
+  notes       String?               @db.Text
+  location    String?               @db.VarChar(255)
+  type        CalendarEventType     @default(EVENT)
+  status      CalendarEventStatus   @default(SCHEDULED)
+  category    CalendarEventCategory @default(WORK)
+  color       String                @default("#2563eb") @db.VarChar(20)
+  startsAt    DateTime              @map("starts_at")
+  endsAt      DateTime              @map("ends_at")
+  allDay      Boolean               @default(false) @map("all_day")
+  isPrivate   Boolean               @default(false) @map("is_private")
+  recurrenceFrequency RecurrenceFrequency @default(NONE) @map("recurrence_frequency")
+  recurrenceInterval  Int           @default(1) @map("recurrence_interval")
+  recurrenceUntil     DateTime?     @map("recurrence_until")
+  recurrenceCount     Int?          @map("recurrence_count")
+  attachmentUrls String[]           @default([]) @map("attachment_urls")
+  projectId   String?               @map("project_id") @db.Uuid
+  taskId      String?               @map("task_id") @db.Uuid
+  clientId    String?               @map("client_id") @db.Uuid
+  createdById String?               @map("created_by_id") @db.Uuid
+  updatedById String?               @map("updated_by_id") @db.Uuid
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+  deletedAt   DateTime?             @map("deleted_at")
+
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation("CalendarEventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?    @relation("CalendarEventUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  attendees EventAttendee[]
+  reminders EventReminder[]
+
+  @@index([startsAt, endsAt])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([clientId])
+  @@index([type])
+  @@index([status])
+  @@index([category])
+  @@map("calendar_events")
+}
+
+model EventAttendee {
+  id        String              @id @default(uuid()) @db.Uuid
+  eventId   String              @map("event_id") @db.Uuid
+  userId    String              @map("user_id") @db.Uuid
+  status    EventAttendeeStatus @default(PENDING)
+  isOptional Boolean            @default(false) @map("is_optional")
+  respondedAt DateTime?         @map("responded_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId, status])
+  @@map("event_attendees")
+}
+
+model EventReminder {
+  id             String          @id @default(uuid()) @db.Uuid
+  eventId        String          @map("event_id") @db.Uuid
+  channel        ReminderChannel @default(IN_APP)
+  minutesBefore  Int             @map("minutes_before")
+  createdById    String?         @map("created_by_id") @db.Uuid
+  sentAt         DateTime?       @map("sent_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("EventReminderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([sentAt])
+  @@map("event_reminders")
+}
+
+model Holiday {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(200)
+  date        DateTime @db.Date
+  description String?  @db.VarChar(500)
+  isCompanyWide Boolean @default(true) @map("is_company_wide")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  createdBy User? @relation("HolidayCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([deletedAt])
+  @@map("holidays")
+}

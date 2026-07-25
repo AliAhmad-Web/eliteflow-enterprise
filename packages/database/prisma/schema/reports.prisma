@@ -1,0 +1,90 @@
+// =============================================================================
+// Reports — Saved reports, templates, schedules, audit (aggregates use ERP data)
+// =============================================================================
+
+model SavedReport {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @db.VarChar(160)
+  description String?          @db.VarChar(500)
+  category    ReportCategory   @default(OVERVIEW)
+  visibility  ReportVisibility @default(PRIVATE)
+  filters     Json             @default("{}")
+  isFavorite  Boolean          @default(false) @map("is_favorite")
+  ownerId     String           @map("owner_id") @db.Uuid
+  createdById String?          @map("created_by_id") @db.Uuid
+  updatedById String?          @map("updated_by_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
+
+  owner     User @relation("SavedReportOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("SavedReportCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("SavedReportUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  audits    ReportAudit[]
+
+  @@index([ownerId, deletedAt])
+  @@index([category])
+  @@index([isFavorite])
+  @@map("saved_reports")
+}
+
+model ReportTemplate {
+  id          String         @id @default(uuid()) @db.Uuid
+  name        String         @db.VarChar(160)
+  description String?        @db.VarChar(500)
+  category    ReportCategory
+  defaultFilters Json        @default("{}") @map("default_filters")
+  isSystem    Boolean        @default(true) @map("is_system")
+  createdById String?        @map("created_by_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  deletedAt   DateTime?      @map("deleted_at")
+
+  createdBy User? @relation("ReportTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  schedules ReportSchedule[]
+
+  @@index([category])
+  @@index([deletedAt])
+  @@map("report_templates")
+}
+
+model ReportSchedule {
+  id          String             @id @default(uuid()) @db.Uuid
+  templateId  String             @map("template_id") @db.Uuid
+  name        String             @db.VarChar(160)
+  cronExpr    String             @map("cron_expr") @db.VarChar(80)
+  format      ReportExportFormat @default(PDF)
+  isActive    Boolean            @default(true) @map("is_active")
+  ownerId     String             @map("owner_id") @db.Uuid
+  lastRunAt   DateTime?          @map("last_run_at")
+  createdById String?            @map("created_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+
+  template  ReportTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  owner     User           @relation("ReportScheduleOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation("ReportScheduleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, isActive])
+  @@index([deletedAt])
+  @@map("report_schedules")
+}
+
+model ReportAudit {
+  id          String              @id @default(uuid()) @db.Uuid
+  action      String              @db.VarChar(80)
+  category    ReportCategory?
+  format      ReportExportFormat?
+  savedReportId String?           @map("saved_report_id") @db.Uuid
+  userId      String?             @map("user_id") @db.Uuid
+  metadata    Json?
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  savedReport SavedReport? @relation(fields: [savedReportId], references: [id], onDelete: SetNull)
+  user        User?        @relation("ReportAuditUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([category])
+  @@map("report_audits")
+}

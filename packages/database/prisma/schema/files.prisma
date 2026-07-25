@@ -1,0 +1,130 @@
+// =============================================================================
+// File Manager — Folders, files, versions, shares, activity
+// =============================================================================
+
+model Folder {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @db.VarChar(200)
+  parentId    String?   @map("parent_id") @db.Uuid
+  projectId   String?   @map("project_id") @db.Uuid
+  clientId    String?   @map("client_id") @db.Uuid
+  createdById String?   @map("created_by_id") @db.Uuid
+  updatedById String?   @map("updated_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  parent    Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderTree")
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation("FolderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?    @relation("FolderUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  files     ManagedFile[]
+
+  @@index([parentId, deletedAt])
+  @@index([projectId])
+  @@index([clientId])
+  @@index([createdById])
+  @@index([name])
+  @@map("folders")
+}
+
+model ManagedFile {
+  id             String       @id @default(uuid()) @db.Uuid
+  folderId       String?      @map("folder_id") @db.Uuid
+  name           String       @db.VarChar(255)
+  originalName   String       @map("original_name") @db.VarChar(255)
+  mimeType       String       @map("mime_type") @db.VarChar(150)
+  extension      String       @db.VarChar(20)
+  sizeBytes      BigInt       @map("size_bytes")
+  category       FileCategory
+  storageKey     String       @map("storage_key") @db.VarChar(1024)
+  storageProvider String      @map("storage_provider") @db.VarChar(40)
+  checksum       String?      @db.VarChar(128)
+  tags           String[]     @default([])
+  isFavorite     Boolean      @default(false) @map("is_favorite")
+  version        Int          @default(1)
+  projectId      String?      @map("project_id") @db.Uuid
+  clientId       String?      @map("client_id") @db.Uuid
+  createdById    String?      @map("created_by_id") @db.Uuid
+  updatedById    String?      @map("updated_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
+
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation("ManagedFileCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?    @relation("ManagedFileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions  FileVersion[]
+  shares    FileShare[]
+  activities FileActivity[]
+
+  @@index([folderId, deletedAt])
+  @@index([projectId])
+  @@index([clientId])
+  @@index([createdById])
+  @@index([category])
+  @@index([isFavorite])
+  @@index([name])
+  @@index([updatedAt])
+  @@map("managed_files")
+}
+
+model FileVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  fileId      String   @map("file_id") @db.Uuid
+  version     Int
+  storageKey  String   @map("storage_key") @db.VarChar(1024)
+  sizeBytes   BigInt   @map("size_bytes")
+  mimeType    String   @map("mime_type") @db.VarChar(150)
+  note        String?  @db.VarChar(500)
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  file      ManagedFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("FileVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([fileId, version])
+  @@index([fileId, createdAt])
+  @@map("file_versions")
+}
+
+model FileShare {
+  id                String          @id @default(uuid()) @db.Uuid
+  fileId            String          @map("file_id") @db.Uuid
+  sharedWithUserId  String?         @map("shared_with_user_id") @db.Uuid
+  sharedWithClientId String?        @map("shared_with_client_id") @db.Uuid
+  access            FileShareAccess @default(DOWNLOAD)
+  createdById       String?         @map("created_by_id") @db.Uuid
+  expiresAt         DateTime?       @map("expires_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  file             ManagedFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  sharedWithUser   User?       @relation("FileShareUser", fields: [sharedWithUserId], references: [id], onDelete: Cascade)
+  sharedWithClient Client?     @relation(fields: [sharedWithClientId], references: [id], onDelete: Cascade)
+  createdBy        User?       @relation("FileShareCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([fileId])
+  @@index([sharedWithUserId])
+  @@index([sharedWithClientId])
+  @@map("file_shares")
+}
+
+model FileActivity {
+  id        String             @id @default(uuid()) @db.Uuid
+  fileId    String             @map("file_id") @db.Uuid
+  actorId   String?            @map("actor_id") @db.Uuid
+  action    FileActivityAction
+  metadata  Json?
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  file  ManagedFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  actor User?       @relation("FileActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([fileId, createdAt])
+  @@index([actorId])
+  @@map("file_activities")
+}

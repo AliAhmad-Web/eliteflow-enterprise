@@ -1,0 +1,139 @@
+// =============================================================================
+// Notifications — In-app center, preferences, templates, email queue
+// =============================================================================
+
+model Notification {
+  id          String               @id @default(uuid()) @db.Uuid
+  userId      String               @map("user_id") @db.Uuid
+  title       String               @db.VarChar(200)
+  body        String               @db.VarChar(2000)
+  category    NotificationCategory @default(SYSTEM)
+  priority    NotificationPriority @default(NORMAL)
+  channel     NotificationChannel  @default(IN_APP)
+  linkUrl     String?              @map("link_url") @db.VarChar(500)
+  entityType  String?              @map("entity_type") @db.VarChar(80)
+  entityId    String?              @map("entity_id") @db.Uuid
+  metadata    Json?
+  isRead      Boolean              @default(false) @map("is_read")
+  readAt      DateTime?            @map("read_at")
+  isArchived  Boolean              @default(false) @map("is_archived")
+  archivedAt  DateTime?            @map("archived_at")
+  createdById String?              @map("created_by_id") @db.Uuid
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  deletedAt   DateTime?            @map("deleted_at")
+
+  user      User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("NotificationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  queueItems NotificationQueue[]
+  audits    NotificationAudit[]
+  replies   NotificationReply[]
+
+  @@index([userId, isRead, deletedAt])
+  @@index([userId, isArchived, deletedAt])
+  @@index([category])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationReply {
+  id             String    @id @default(uuid()) @db.Uuid
+  notificationId String    @map("notification_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  message        String    @db.VarChar(2000)
+  /// When mirrored into an entity discussion (e.g. task comment), store that id.
+  syncedEntityType String? @map("synced_entity_type") @db.VarChar(80)
+  syncedEntityId   String? @map("synced_entity_id") @db.Uuid
+  syncedCommentId  String? @map("synced_comment_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId, deletedAt, createdAt])
+  @@index([userId])
+  @@map("notification_replies")
+}
+
+model NotificationPreference {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @map("user_id") @db.Uuid
+  category         NotificationCategory
+  inAppEnabled     Boolean              @default(true) @map("in_app_enabled")
+  emailEnabled     Boolean              @default(true) @map("email_enabled")
+  pushEnabled      Boolean              @default(false) @map("push_enabled")
+  smsEnabled       Boolean              @default(false) @map("sms_enabled")
+  whatsappEnabled  Boolean              @default(false) @map("whatsapp_enabled")
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+model NotificationTemplate {
+  id          String               @id @default(uuid()) @db.Uuid
+  code        String               @unique @db.VarChar(80)
+  name        String               @db.VarChar(160)
+  category    NotificationCategory
+  subject     String               @db.VarChar(200)
+  bodyTemplate String              @map("body_template") @db.Text
+  emailTemplate String?            @map("email_template") @db.Text
+  channels    NotificationChannel[] @default([IN_APP, EMAIL])
+  isSystem    Boolean              @default(true) @map("is_system")
+  createdById String?              @map("created_by_id") @db.Uuid
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  deletedAt   DateTime?            @map("deleted_at")
+
+  createdBy User? @relation("NotificationTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([deletedAt])
+  @@map("notification_templates")
+}
+
+model NotificationQueue {
+  id             String                  @id @default(uuid()) @db.Uuid
+  notificationId String?                 @map("notification_id") @db.Uuid
+  userId         String                  @map("user_id") @db.Uuid
+  channel        NotificationChannel
+  status         NotificationQueueStatus @default(PENDING)
+  toAddress      String?                 @map("to_address") @db.VarChar(320)
+  subject        String?                 @db.VarChar(200)
+  payload        Json
+  attempts       Int                     @default(0)
+  lastError      String?                 @map("last_error") @db.VarChar(1000)
+  scheduledFor   DateTime                @default(now()) @map("scheduled_for")
+  processedAt    DateTime?               @map("processed_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+
+  notification Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+  @@index([userId])
+  @@map("notification_queue")
+}
+
+model NotificationAudit {
+  id             String   @id @default(uuid()) @db.Uuid
+  notificationId String?  @map("notification_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  action         String   @db.VarChar(80)
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  notification Notification? @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  user         User?         @relation("NotificationAuditUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([notificationId])
+  @@map("notification_audits")
+}

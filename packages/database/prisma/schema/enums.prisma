@@ -1,0 +1,694 @@
+// =============================================================================
+// Domain Enums — Authentication & Authorization
+// =============================================================================
+
+/// Account lifecycle status for application users.
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  LOCKED
+  DEACTIVATED
+
+  @@map("user_status")
+}
+
+/// Supported OAuth identity providers.
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
+
+  @@map("oauth_provider")
+}
+
+/// Purpose of a one-time password verification request.
+enum OtpPurpose {
+  LOGIN_2FA
+  PASSWORD_RESET
+  SENSITIVE_ACTION
+
+  @@map("otp_purpose")
+}
+
+/// Reason a device session was revoked.
+enum SessionRevokedReason {
+  LOGOUT
+  PASSWORD_CHANGE
+  ADMIN_REVOKE
+  REUSE_DETECTED
+  SESSION_LIMIT
+  IDLE_TIMEOUT
+
+  @@map("session_revoked_reason")
+}
+
+/// CRM client lifecycle status.
+enum ClientStatus {
+  LEAD
+  ACTIVE
+  INACTIVE
+
+  @@map("client_status")
+}
+
+/// Project delivery lifecycle status.
+enum ProjectStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+
+  @@map("project_status")
+}
+
+/// Project priority level.
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("project_priority")
+}
+
+/// Milestone completion state.
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("milestone_status")
+}
+
+/// Task lifecycle status.
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  BLOCKED
+
+  @@map("task_status")
+}
+
+/// Task priority level.
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("task_priority")
+}
+
+/// Invoice payment / lifecycle status.
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+
+  @@map("invoice_status")
+}
+
+/// Role of a message in an AI conversation.
+enum AiMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+
+  @@map("ai_message_role")
+}
+
+/// AI assistant interaction mode / intent.
+enum AiAssistMode {
+  ASK
+  EMAIL
+  PROPOSAL
+  SUMMARIZE
+  ANALYZE
+  IMPROVE
+  MEETING_NOTES
+  PROJECT_SUMMARY
+  TECHNICAL_DOCS
+
+  @@map("ai_assist_mode")
+}
+
+/// Generated AI document category.
+enum AiDocumentType {
+  PROPOSAL
+  EMAIL
+  MEETING_NOTES
+  PROJECT_SUMMARY
+  TECHNICAL_DOCS
+  GENERAL
+
+  @@map("ai_document_type")
+}
+
+/// File Manager category derived from MIME / extension.
+enum FileCategory {
+  IMAGE
+  PDF
+  DOCUMENT
+  SPREADSHEET
+  PRESENTATION
+  ARCHIVE
+  TEXT
+  VIDEO
+  AUDIO
+  OTHER
+
+  @@map("file_category")
+}
+
+/// File Manager activity actions.
+enum FileActivityAction {
+  UPLOADED
+  DOWNLOADED
+  RENAMED
+  MOVED
+  UPDATED
+  FAVORITED
+  UNFAVORITED
+  SHARED
+  UNSHARED
+  DELETED
+  RESTORED
+  PERMANENTLY_DELETED
+  VERSION_CREATED
+
+  @@map("file_activity_action")
+}
+
+/// Share access level for a file.
+enum FileShareAccess {
+  VIEW
+  DOWNLOAD
+
+  @@map("file_share_access")
+}
+
+/// Calendar event type / source.
+enum CalendarEventType {
+  MEETING
+  EVENT
+  PROJECT_DEADLINE
+  TASK_DUE
+  REMINDER
+  HOLIDAY
+
+  @@map("calendar_event_type")
+}
+
+/// Calendar event lifecycle status.
+enum CalendarEventStatus {
+  SCHEDULED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+
+  @@map("calendar_event_status")
+}
+
+/// Calendar event category for color coding.
+enum CalendarEventCategory {
+  WORK
+  PERSONAL
+  CLIENT
+  PROJECT
+  TEAM
+  HOLIDAY
+  OTHER
+
+  @@map("calendar_event_category")
+}
+
+/// Invitation response for an attendee.
+enum EventAttendeeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  TENTATIVE
+
+  @@map("event_attendee_status")
+}
+
+/// Reminder delivery channel (sending prepared for later phases).
+enum ReminderChannel {
+  EMAIL
+  IN_APP
+
+  @@map("reminder_channel")
+}
+
+/// Recurrence frequency for calendar events.
+enum RecurrenceFrequency {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+
+  @@map("recurrence_frequency")
+}
+
+/// HR employee employment status.
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+
+  @@map("employee_status")
+}
+
+/// Daily attendance classification.
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  REMOTE
+  HOLIDAY
+
+  @@map("attendance_status")
+}
+
+/// Leave category.
+enum LeaveType {
+  ANNUAL
+  SICK
+  PERSONAL
+  UNPAID
+  MATERNITY
+  PATERNITY
+  OTHER
+
+  @@map("leave_type")
+}
+
+/// Leave request workflow status.
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+
+  @@map("leave_request_status")
+}
+
+/// Performance review rating.
+enum PerformanceRating {
+  POOR
+  BELOW_AVERAGE
+  AVERAGE
+  GOOD
+  EXCELLENT
+
+  @@map("performance_rating")
+}
+
+/// Employee goal progress.
+enum GoalStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("goal_status")
+}
+
+/// Saved report visibility.
+enum ReportVisibility {
+  PRIVATE
+  TEAM
+  COMPANY
+
+  @@map("report_visibility")
+}
+
+/// Report export / generation format.
+enum ReportExportFormat {
+  PDF
+  EXCEL
+  CSV
+  PRINT
+
+  @@map("report_export_format")
+}
+
+/// Report category for templates and saved reports.
+enum ReportCategory {
+  OVERVIEW
+  REVENUE
+  CLIENTS
+  PROJECTS
+  TASKS
+  EMPLOYEES
+  ATTENDANCE
+  LEAVES
+  INVOICES
+  TEAM_PERFORMANCE
+  AI_INSIGHTS
+
+  @@map("report_category")
+}
+
+/// Notification category / domain.
+enum NotificationCategory {
+  SYSTEM
+  SECURITY
+  TASK
+  PROJECT
+  INVOICE
+  CALENDAR
+  FILE
+  TEAM
+  AI
+  AUTH
+
+  @@map("notification_category")
+}
+
+/// Notification priority.
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@map("notification_priority")
+}
+
+/// Delivery channel (PUSH/SMS/WHATSAPP prepared for later).
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+  SMS
+  WHATSAPP
+
+  @@map("notification_channel")
+}
+
+/// Queue processing status.
+enum NotificationQueueStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+
+  @@map("notification_queue_status")
+}
+
+/// Conversation channel type (Phase 16 — Communication; Phase 20 — org channels).
+enum ConversationType {
+  DIRECT
+  GROUP
+  DEPARTMENT
+  TEAM
+  PROJECT
+  CLIENT
+  ORGANIZATION
+
+  @@map("conversation_type")
+}
+
+/// Conversation member role.
+enum ConversationMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+
+  @@map("conversation_member_role")
+}
+
+/// Message content kind (Phase 20 adds VOICE for voice-note architecture).
+enum MessageKind {
+  TEXT
+  SYSTEM
+  VOICE
+
+  @@map("message_kind")
+}
+
+/// Message delivery / read receipt status.
+enum MessageReadStatus {
+  SENT
+  DELIVERED
+  SEEN
+
+  @@map("message_read_status")
+}
+
+/// Polymorphic comment target entity.
+enum CommentEntityType {
+  PROJECT
+  TASK
+  INVOICE
+  CLIENT
+  CALENDAR
+  FILE
+  REPORT
+  TEAM
+  AI_DOCUMENT
+
+  @@map("comment_entity_type")
+}
+
+/// Activity feed entity / domain (Phase 20 — hub entities).
+enum ActivityEntityType {
+  CLIENT
+  PROJECT
+  TASK
+  INVOICE
+  CALENDAR
+  FILE
+  AI
+  NOTIFICATION
+  TEAM
+  MESSAGE
+  COMMENT
+  CONVERSATION
+  USER
+  SYSTEM
+  ANNOUNCEMENT
+  MEETING
+  THREAD
+
+  @@map("activity_entity_type")
+}
+
+/// Announcement priority (Phase 20 — Announcement Center).
+enum AnnouncementPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@map("announcement_priority")
+}
+
+/// Meeting room lifecycle (Phase 20 — Video Meeting Architecture; no WebRTC yet).
+enum MeetingStatus {
+  SCHEDULED
+  WAITING
+  LIVE
+  ENDED
+  CANCELLED
+
+  @@map("meeting_status")
+}
+
+/// Meeting participant role / waiting-room state.
+enum MeetingParticipantStatus {
+  INVITED
+  WAITING
+  ADMITTED
+  JOINED
+  LEFT
+  DECLINED
+
+  @@map("meeting_participant_status")
+}
+
+/// Discussion thread resolution state (Phase 20).
+enum DiscussionThreadStatus {
+  OPEN
+  RESOLVED
+  ARCHIVED
+
+  @@map("discussion_thread_status")
+}
+
+/// Severity of a security monitoring event.
+enum SecuritySeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@map("security_severity")
+}
+
+/// Category bucket for security monitoring events.
+enum SecurityEventCategory {
+  AUTH
+  ACCOUNT
+  SESSION
+  ACCESS
+  FILE
+  API
+  CAPTCHA
+  RATE_LIMIT
+  POLICY
+
+  @@map("security_event_category")
+}
+
+/// User-selected theme preference (persisted; client also uses next-themes).
+enum ThemeModePreference {
+  LIGHT
+  DARK
+  SYSTEM
+
+  @@map("theme_mode_preference")
+}
+
+enum SidebarStyle {
+  DEFAULT
+  COMPACT
+  EXPANDED
+
+  @@map("sidebar_style")
+}
+
+enum FontSizePreference {
+  SMALL
+  MEDIUM
+  LARGE
+
+  @@map("font_size_preference")
+}
+
+enum BorderRadiusPreference {
+  NONE
+  DEFAULT
+  ROUNDED
+
+  @@map("border_radius_preference")
+}
+
+enum DashboardDensity {
+  COMPACT
+  COMFORTABLE
+  SPACIOUS
+
+  @@map("dashboard_density")
+}
+
+enum AppLanguage {
+  EN
+  UR
+  AR
+
+  @@map("app_language")
+}
+
+enum IntegrationProvider {
+  OPENAI
+  RESEND
+  STRIPE
+  SUPABASE
+  CLOUDINARY
+  GOOGLE
+  GITHUB
+  GEMINI
+  OTHER
+
+  @@map("integration_provider")
+}
+
+enum BackupType {
+  MANUAL
+  AUTO
+
+  @@map("backup_type")
+}
+
+enum BackupStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+
+  @@map("backup_status")
+}
+
+enum BillingPlanStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+
+  @@map("billing_plan_status")
+}
+
+enum AccountDeletionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+
+  @@map("account_deletion_status")
+}
+
+// =============================================================================
+// Phase 19.1 — Integration Architecture Enums
+// =============================================================================
+
+enum IntegrationConnectionStatus {
+  AVAILABLE
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  DISABLED
+
+  @@map("integration_connection_status")
+}
+
+enum IntegrationHealthStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  UNKNOWN
+
+  @@map("integration_health_status")
+}
+
+enum IntegrationSyncStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+  CANCELLED
+
+  @@map("integration_sync_status")
+}
+
+enum IntegrationLogLevel {
+  INFO
+  WARNING
+  ERROR
+  DEBUG
+
+  @@map("integration_log_level")
+}
