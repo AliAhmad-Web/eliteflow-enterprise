@@ -27,7 +27,7 @@
     "api:type-check": "npm run type-check --workspace=@enterprise/api"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "overrides": {
     "react": "19.2.3",
