@@ -28,6 +28,8 @@ interface DownloadsPageContentProps {
 export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
   const desktopVersion = catalog.desktop.version ?? "—";
   const extensionVersion = catalog.extension.version ?? "—";
+  const androidApk = catalog.android.apk;
+  const androidAvailable = catalog.android.available && androidApk != null;
   const androidVersion = catalog.android.version ?? "—";
   const androidVersionCode =
     catalog.android.versionCode != null
@@ -35,7 +37,6 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
       : "—";
   const desktopReleaseDate =
     catalog.desktop.setup?.releasedAt ?? catalog.desktop.portable?.releasedAt;
-  const androidAvailable = catalog.android.available && catalog.android.apk;
 
   const desktopActions = [
     catalog.desktop.setup
@@ -64,13 +65,13 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
       ]
     : [];
 
-  const androidActions = androidAvailable
+  const androidActions = androidApk
     ? [
         {
           label: "Download Android APK",
-          href: catalog.android.apk.href,
+          href: androidApk.href,
           variant: "default" as const,
-          external: catalog.android.apk.href.startsWith("http"),
+          external: androidApk.href.startsWith("http"),
         },
       ]
     : [];
@@ -255,15 +256,11 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
                       { label: "Version Code", value: androidVersionCode },
                       {
                         label: "Build Date",
-                        value: formatReleaseDate(
-                          catalog.android.apk?.releasedAt,
-                        ),
+                        value: formatReleaseDate(androidApk.releasedAt),
                       },
                       {
                         label: "APK Size",
-                        value: catalog.android.apk
-                          ? formatFileSize(catalog.android.apk.sizeBytes)
-                          : "—",
+                        value: formatFileSize(androidApk.sizeBytes),
                       },
                     ]
                   : [
