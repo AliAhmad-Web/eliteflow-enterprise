@@ -49,12 +49,24 @@ export function toSupabaseProvider(
   return PROVIDER_TO_SUPABASE[provider];
 }
 
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/$/, "");
+}
+
+/**
+ * OAuth `redirectTo` must be allow-listed in Supabase Auth → URL Configuration.
+ * Uses the live browser origin so production never sends users to localhost
+ * after Google/GitHub sign-in (Site URL must also be the production host).
+ */
 export function getOAuthCallbackUrl(_provider?: OAuthProviderType): string {
   let origin: string;
+
   if (typeof window !== "undefined") {
-    origin = window.location.origin;
+    origin = normalizeOrigin(window.location.origin);
   } else {
-    const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    const configured = process.env.NEXT_PUBLIC_APP_URL
+      ? normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL)
+      : "";
     if (configured) {
       origin = configured;
     } else if (process.env.NODE_ENV === "production") {
