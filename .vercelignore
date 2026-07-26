@@ -1,0 +1,14 @@
+.git
+**/node_modules
+apps/desktop
+apps/extension
+apps/mobile
+apps/api/dist
+apps/web/.next
+docs
+tools
+packages/database/src/generated
+packages/database/dist
+**/*.apk
+**/.tmp-apk
+D:

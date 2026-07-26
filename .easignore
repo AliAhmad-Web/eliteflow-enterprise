@@ -1,0 +1,60 @@
+# EAS monorepo upload ignore (repo root)
+.git/
+**/.git/
+
+# Dependencies (reinstalled on EAS)
+**/node_modules/
+
+# Sibling apps not needed for mobile native builds
+apps/desktop/
+apps/extension/
+apps/web/.next/
+apps/web/.vercel/
+apps/web/public/releases/
+apps/api/dist/
+
+# Local env / secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# IDE / OS / caches
+**/.DS_Store
+**/Thumbs.db
+**/.idea/
+**/.vscode/
+**/.expo/
+**/.turbo/
+**/.cache/
+**/*.tsbuildinfo
+**/coverage/
+
+# Compiled outputs (rebuilt on EAS where needed)
+packages/shared/dist/
+packages/database/dist/
+
+# Prisma generated query engines (regenerated on install/build)
+packages/database/src/generated/
+packages/database/**/generated/
+**/*.node
+**/query-engine*
+**/schema-engine*
+**/libquery_engine*
+
+# Docs / misc noise
+docs/
+tools/
+apps/mobile/expo-qr.png
+apps/mobile/*.bin
+apps/mobile/logurl.txt
+apps/mobile/.tmp-apk/
+**/.tmp-apk/
+apps/mobile/eas-builds-list.json
+**/*.apk
+**/*.aab
+**/*.ipa
+**/*.exe
+**/*.dmg
+**/release/
+**/BUILD-REPORT.md
+**/TEST-REPORT.md

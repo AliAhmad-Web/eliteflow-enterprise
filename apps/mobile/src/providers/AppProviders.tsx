@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -18,7 +18,6 @@ import {
   useBiometricStore,
 } from "@/auth/biometric.store";
 import { BiometricGate } from "@/components/auth/BiometricGate";
-import { LaunchAnimation } from "@/components/experience/LaunchAnimation";
 import { OfflineBanner } from "@/components/offline/OfflineBanner";
 import { startMutationQueueSync } from "@/offline/mutation-queue";
 import { pushNotifications } from "@/notifications/push";
@@ -33,37 +32,53 @@ function AuthNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const themeHydrated = useThemeStore((s) => s.isHydrated);
   const theme = useTheme();
-  const [showLaunch, setShowLaunch] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    let stopQueue: (() => void) | undefined;
+    let stopPush: (() => void) | undefined;
+    let stopLock: (() => void) | undefined;
+
     void (async () => {
-      await useThemeStore.getState().hydrate();
-      await useBiometricStore.getState().hydrate();
-      await bootstrapSession();
-      await SplashScreen.hideAsync();
+      try {
+        await useThemeStore.getState().hydrate();
+        await useBiometricStore.getState().hydrate();
+        await bootstrapSession();
+      } catch {
+        useAuthStore.getState().setInitialized(true);
+      } finally {
+        if (!cancelled) {
+          await SplashScreen.hideAsync().catch(() => undefined);
+        }
+      }
+
+      // Non-critical services only after first paint / splash hide.
+      if (cancelled) return;
+      try {
+        stopQueue = startMutationQueueSync();
+        stopPush = pushNotifications.attachListeners();
+        stopLock = startAppLockLifecycle();
+        if (useAuthStore.getState().isAuthenticated) {
+          void pushNotifications.registerForPush().catch(() => undefined);
+        }
+      } catch {
+        // Non-fatal — login shell must still render.
+      }
     })();
 
-    const stopQueue = startMutationQueueSync();
-    const stopPush = pushNotifications.attachListeners();
-    const stopLock = startAppLockLifecycle();
-
-    if (useAuthStore.getState().isAuthenticated) {
-      void pushNotifications.registerForPush();
-    }
-
     return () => {
-      stopQueue();
-      stopPush();
-      stopLock();
+      cancelled = true;
+      stopQueue?.();
+      stopPush?.();
+      stopLock?.();
     };
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      void pushNotifications.registerForPush();
-      useBiometricStore.getState().lock();
-      useBiometricStore.getState().touch();
-    }
+    if (!isAuthenticated) return;
+    void pushNotifications.registerForPush().catch(() => undefined);
+    useBiometricStore.getState().lock();
+    useBiometricStore.getState().touch();
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -97,9 +112,6 @@ function AuthNavigator() {
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
         </Stack>
-        {showLaunch ? (
-          <LaunchAnimation onDone={() => setShowLaunch(false)} />
-        ) : null}
       </View>
     </BiometricGate>
   );

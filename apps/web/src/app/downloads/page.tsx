@@ -7,14 +7,14 @@ import { discoverReleases } from "@/features/downloads/lib/discover-releases";
 export const metadata: Metadata = {
   title: "EliteFlow Downloads",
   description:
-    "Download the official EliteFlow desktop applications and browser extensions. Windows installer, portable build, and Chrome extension.",
+    "Download the official EliteFlow desktop, Chrome extension, and Android APK. Windows installer, portable build, extension ZIP, and mobile APK.",
   alternates: {
     canonical: "/downloads",
   },
   openGraph: {
     title: "EliteFlow Downloads",
     description:
-      "Download the official EliteFlow desktop applications and browser extensions.",
+      "Download EliteFlow for Windows, Chrome, and Android — same workspace as the web app.",
     url: `${siteConfig.url}/downloads`,
     siteName: siteConfig.name,
     type: "website",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "EliteFlow Downloads",
     description:
-      "Download the official EliteFlow desktop applications and browser extensions.",
+      "Download EliteFlow for Windows, Chrome, and Android — same workspace as the web app.",
   },
 };
 

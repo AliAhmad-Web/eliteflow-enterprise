@@ -7,9 +7,12 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { Image } from "expo-image";
-import { Audio, Video, ResizeMode } from "expo-av";
+import { setAudioModeAsync } from "expo-audio";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
@@ -46,6 +49,27 @@ function detectKind(mimeType?: string, name?: string): PreviewKind {
   }
   if (mime.includes("pdf") || ext === "pdf") return "pdf";
   return "other";
+}
+
+function InlineVideoPreview({
+  uri,
+  style,
+}: {
+  uri: string;
+  style: StyleProp<ViewStyle>;
+}) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      nativeControls
+      contentFit="contain"
+    />
+  );
 }
 
 export default function FilePreviewScreen() {
@@ -87,7 +111,7 @@ export default function FilePreviewScreen() {
   }, [id, meta.data?.id]);
 
   useEffect(() => {
-    void Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    void setAudioModeAsync({ playsInSilentMode: true });
   }, []);
 
   async function openExternally() {
@@ -156,17 +180,14 @@ export default function FilePreviewScreen() {
           ) : null}
 
           {kind === "video" && localUri ? (
-            <Video
-              source={{ uri: localUri }}
+            <InlineVideoPreview
+              uri={localUri}
               style={{
                 width: "100%",
                 height: 260,
                 backgroundColor: "#000",
                 borderRadius: radius,
               }}
-              useNativeControls
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
             />
           ) : null}
 

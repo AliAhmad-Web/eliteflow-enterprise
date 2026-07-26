@@ -117,7 +117,7 @@ function AppSidebarComponent({ className }: AppSidebarProps) {
           )}
           aria-label={`${siteConfig.name} home`}
         >
-          <div className="icon-box icon-box-sm rounded-xl bg-gradient-to-br from-brand-gold/20 to-brand-gold/5 ring-1 ring-brand-gold/20">
+          <div className="icon-box icon-box-sm rounded-xl bg-linear-to-br from-brand-gold/20 to-brand-gold/5 ring-1 ring-brand-gold/20">
             <Crown className="text-brand-gold" strokeWidth={1.75} aria-hidden="true" />
           </div>
           {!sidebarCollapsed ? (
@@ -142,45 +142,6 @@ function AppSidebarComponent({ className }: AppSidebarProps) {
         <div className="scrollbar-thin flex-1 overflow-y-auto">
           <SidebarNav sections={sections} collapsed={sidebarCollapsed} />
         </div>
-
-        {!sidebarCollapsed ? (
-          <div className="mt-4 space-y-4">
-            <div className="rounded-xl border border-primary/12 bg-gradient-to-br from-primary/10 via-primary/4 to-transparent p-4 shadow-[var(--shadow-xs)]">
-              <div className="mb-2 flex items-center gap-2">
-                <span className="icon-box icon-box-sm rounded-md bg-brand-gold/10">
-                  <Crown className="text-brand-gold" strokeWidth={1.75} aria-hidden="true" />
-                </span>
-                <p className="text-sm font-semibold tracking-tight text-foreground">
-                  Upgrade to Pro
-                </p>
-              </div>
-              <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-                Unlock advanced analytics, AI features, and priority support.
-              </p>
-              <Button size="sm" className="w-full" type="button" disabled>
-                Upgrade Now
-              </Button>
-            </div>
-
-            <div className="rounded-xl border border-sidebar-border/70 bg-card/50 p-4">
-              <div className="mb-2 flex items-center justify-between text-xs leading-4">
-                <span className="text-muted-foreground">Storage</span>
-                <span className="font-medium tabular-nums text-foreground">2.45 / 10 GB</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted/80">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70"
-                  style={{ width: "24.5%" }}
-                  role="progressbar"
-                  aria-valuenow={24.5}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="Storage usage"
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
     </aside>
   );

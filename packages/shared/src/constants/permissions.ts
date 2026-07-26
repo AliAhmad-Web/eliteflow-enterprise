@@ -109,7 +109,8 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/invoices": PERMISSIONS.INVOICES_READ,
   "/reports": PERMISSIONS.REPORTS_READ,
   "/calendar": PERMISSIONS.CALENDAR_READ,
-  "/whiteboard": PERMISSIONS.WHITEBOARDS_READ,
+  // /whiteboard — all signed-in users may open the workspace UI;
+  // API enforces whiteboards:read|write|delete on data operations.
   "/file-manager": PERMISSIONS.FILES_READ,
   "/ai-assistant": PERMISSIONS.AI_USE,
   "/ai-documents": PERMISSIONS.AI_USE,

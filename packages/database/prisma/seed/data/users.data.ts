@@ -26,7 +26,9 @@ export const DEMO_USERS: UserSeedDefinition[] = [
     roleCode: ROLE_CODES.ADMIN,
     status: "ACTIVE",
     emailVerified: true,
-    twoFactorEnabled: true,
+    // Keep false until Resend has a verified sending domain — production
+    // LOGIN_2FA currently hard-fails when Resend is in testing mode.
+    twoFactorEnabled: false,
   },
   {
     email: "employee@eliteflow.dev",

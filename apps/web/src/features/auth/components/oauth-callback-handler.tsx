@@ -316,7 +316,7 @@ export function OAuthCallbackHandler() {
       <AuthCard title="Completing sign-in" description="Verifying your OAuth identity">
         <LoadingState
           label="Signing you in securely"
-          className="min-h-[200px] border-0 bg-transparent"
+          className="min-h-50 border-0 bg-transparent"
         />
       </AuthCard>
     </AuthPageShell>

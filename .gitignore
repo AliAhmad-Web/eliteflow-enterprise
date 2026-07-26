@@ -5,11 +5,16 @@ build/
 .next/
 apps/desktop/release/
 apps/desktop/dist/
+apps/mobile/release/*
+!apps/mobile/release/build-info.json
+!apps/mobile/release/.gitkeep
 apps/web/public/releases/*
 !apps/web/public/releases/.gitkeep
 !apps/web/public/releases/manifest.json
 !apps/web/public/releases/EliteFlow-*.exe
 !apps/web/public/releases/EliteFlow-*.zip
+# APKs over ~100MB cannot ship via git/Vercel — host on GitHub Releases.
+# !apps/web/public/releases/EliteFlow-*.apk
 .env
 .env.*
 !.env.example

@@ -419,19 +419,19 @@
   }
 
   .enterprise-panel {
-    @apply rounded-xl border border-border/60 bg-card shadow-[var(--shadow-sm)];
+    @apply rounded-xl border border-border/60 bg-card shadow-(--shadow-sm);
   }
 
   .enterprise-toolbar {
-    @apply sticky top-0 z-[2] flex flex-col gap-3 rounded-xl border border-border/50 bg-card/95 p-3 shadow-[var(--shadow-xs)] backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:p-4;
+    @apply sticky top-0 z-2 flex flex-col gap-3 rounded-xl border border-border/50 bg-card/95 p-3 shadow-(--shadow-xs) backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:p-4;
   }
 
   .enterprise-table-shell {
-    @apply overflow-hidden rounded-xl border border-border/55 bg-card shadow-[var(--shadow-xs)];
+    @apply overflow-hidden rounded-xl border border-border/55 bg-card shadow-(--shadow-xs);
   }
 
   .form-control {
-    @apply flex h-9 w-full rounded-lg border border-input/90 bg-card px-3 text-sm text-foreground shadow-[var(--shadow-xs)];
+    @apply flex h-9 w-full rounded-lg border border-input/90 bg-card px-3 text-sm text-foreground shadow-(--shadow-xs);
     transition:
       border-color var(--motion-fast) var(--ease-enterprise),
       box-shadow var(--motion-fast) var(--ease-enterprise),
@@ -653,4 +653,13 @@
     height: 1rem;
     max-width: none;
   }
+}
+
+/*
+  reCAPTCHA v3 is invisible. Hide the floating badge and show Google's
+  required attribution text on auth forms instead.
+  https://developers.google.com/recaptcha/docs/faq#id-like-to-hide-the-recaptcha-badge.-what-is-allowed
+*/
+.grecaptcha-badge {
+  visibility: hidden !important;
 }

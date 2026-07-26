@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 const CONTENT_TYPES: Record<string, string> = {
   ".exe": "application/octet-stream",
   ".zip": "application/zip",
+  ".apk": "application/vnd.android.package-archive",
 };
 
 function resolveMonorepoRoot(): string {
@@ -32,7 +33,7 @@ function resolveMonorepoRoot(): string {
 
 function isSafeFilename(filename: string): boolean {
   return (
-    /^EliteFlow-(Setup|Portable|Extension)-[\w.-]+\.(exe|zip)$/i.test(filename) &&
+    /^EliteFlow-[\w.-]+\.(exe|zip|apk)$/i.test(filename) &&
     !filename.includes("..") &&
     !filename.includes("/") &&
     !filename.includes("\\")
@@ -55,11 +56,17 @@ export async function GET(
     catalog.desktop.setup,
     catalog.desktop.portable,
     catalog.extension.zip,
+    catalog.android.apk,
   ].filter(Boolean);
 
   const artifact = allowed.find((item) => item?.filename === filename);
   if (!artifact) {
     return NextResponse.json({ error: "Release artifact not found." }, { status: 404 });
+  }
+
+  // External CDN / GitHub Releases — redirect instead of streaming locally.
+  if (artifact.href.startsWith("http")) {
+    return NextResponse.redirect(artifact.href, 302);
   }
 
   const monorepoRoot = resolveMonorepoRoot();
@@ -71,6 +78,7 @@ export async function GET(
     sourcePath,
     path.join(monorepoRoot, "apps", "desktop", "release", filename),
     path.join(monorepoRoot, "apps", "extension", "release", filename),
+    path.join(monorepoRoot, "apps", "mobile", "release", filename),
     path.join(process.cwd(), "public", "releases", filename),
   ].filter((entry): entry is string => Boolean(entry));
 

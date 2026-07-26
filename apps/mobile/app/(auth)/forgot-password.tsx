@@ -2,11 +2,14 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Link } from "expo-router";
 
+import { RECAPTCHA } from "@enterprise/shared";
+
 import { authService } from "@/api/auth.service";
 import { ApiClientError } from "@/api/api-error";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { TextField } from "@/components/ui/TextField";
+import { getCaptchaToken } from "@/features/security/recaptcha";
 import { useTheme } from "@/theme/theme.store";
 
 export default function ForgotPasswordScreen() {
@@ -23,8 +26,12 @@ export default function ForgotPasswordScreen() {
     setSuccess(null);
     setLoading(true);
     try {
+      const captchaToken = await getCaptchaToken(
+        RECAPTCHA.ACTIONS.FORGOT_PASSWORD,
+      );
       const result = await authService.forgotPassword({
         email: email.trim().toLowerCase(),
+        captchaToken,
       });
       setSuccess(
         result.message ||

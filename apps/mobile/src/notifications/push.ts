@@ -10,14 +10,18 @@ import { pushDeviceRegistration } from "@/notifications/device-registration";
 
 const TOKEN_KEY = "eliteflow-expo-push-token";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch {
+  // Native notifications module can throw during cold start on some devices.
+}
 
 function platformLabel(): "ios" | "android" | "web" | "unknown" {
   if (Platform.OS === "ios") return "ios";
@@ -137,23 +141,27 @@ export const pushNotifications = {
   },
 
   attachListeners() {
-    const received = Notifications.addNotificationReceivedListener(() => {
-      // Foreground — handler already shows banner
-    });
+    try {
+      const received = Notifications.addNotificationReceivedListener(() => {
+        // Foreground — handler already shows banner
+      });
 
-    const response = Notifications.addNotificationResponseReceivedListener(
-      (res) => {
-        const data = res.notification.request.content.data as
-          | Record<string, unknown>
-          | undefined;
-        this.handleDeepLink(data);
-      },
-    );
+      const response = Notifications.addNotificationResponseReceivedListener(
+        (res) => {
+          const data = res.notification.request.content.data as
+            | Record<string, unknown>
+            | undefined;
+          this.handleDeepLink(data);
+        },
+      );
 
-    return () => {
-      received.remove();
-      response.remove();
-    };
+      return () => {
+        received.remove();
+        response.remove();
+      };
+    } catch {
+      return () => undefined;
+    }
   },
 
   createDeepLink(path: string) {

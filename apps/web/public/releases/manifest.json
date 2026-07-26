@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-26T09:14:48.306Z",
+  "generatedAt": "2026-07-26T16:16:47.342Z",
   "artifacts": [
     {
       "id": "desktop-setup",
@@ -30,6 +30,17 @@
       "href": "/releases/EliteFlow-Extension-1.0.0.zip",
       "sourcePath": "apps/extension/release/EliteFlow-Extension-1.0.0.zip",
       "sync": "linked"
+    },
+    {
+      "id": "android-apk",
+      "filename": "EliteFlow-1.0.0-android-vc12.apk",
+      "version": "1.0.0",
+      "versionCode": 12,
+      "sizeBytes": 111664019,
+      "releasedAt": "2026-07-26T06:11:58.417Z",
+      "href": "https://expo.dev/artifacts/eas/Ywd0atgAPTajAX29_2KtgbYhOFxUvnbxDTCIb5kczyI.apk",
+      "sourcePath": "apps/mobile/release/EliteFlow-1.0.0-android-vc12.apk",
+      "sync": "metadata"
     }
   ]
 }

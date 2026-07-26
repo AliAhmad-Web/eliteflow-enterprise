@@ -786,7 +786,7 @@ export function MessageComposer({
                   </div>
                 )}
                 <div className="min-w-0">
-                  <p className="max-w-[140px] truncate text-xs font-medium">
+                  <p className="max-w-35 truncate text-xs font-medium">
                     {att.fileName}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
@@ -1018,7 +1018,7 @@ export function MessageComposer({
                   ? "Edit your message… Markdown supported"
                   : "Message…  / for commands · @ to mention · Enter to send"
               }
-              className="min-h-[28px] max-h-[180px] flex-1 resize-none bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+              className="min-h-7 max-h-45 flex-1 resize-none bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
             />
             <Button
               size="icon"

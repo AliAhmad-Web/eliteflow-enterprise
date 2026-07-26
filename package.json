@@ -18,6 +18,14 @@
     "mobile:android": "npm run android --workspace=@enterprise/mobile",
     "mobile:ios": "npm run ios --workspace=@enterprise/mobile",
     "mobile:type-check": "npm run type-check --workspace=@enterprise/mobile",
+    "desktop:dev": "npm run dev --workspace=@enterprise/desktop",
+    "desktop:build": "npm run build --workspace=@enterprise/desktop",
+    "desktop:dist": "npm run dist --workspace=@enterprise/desktop",
+    "desktop:type-check": "npm run type-check --workspace=@enterprise/desktop",
+    "extension:dev": "npm run dev --workspace=@enterprise/extension",
+    "extension:build": "npm run build --workspace=@enterprise/extension",
+    "extension:type-check": "npm run type-check --workspace=@enterprise/extension",
+    "extension:verify": "npm run verify:smoke --workspace=@enterprise/extension",
     "db:generate": "npm run generate --workspace=@enterprise/database",
     "db:migrate": "npm run migrate:dev --workspace=@enterprise/database",
     "db:migrate:deploy": "npm run migrate:deploy --workspace=@enterprise/database",
@@ -42,6 +50,7 @@
     "@prisma/engines@6.19.3": true,
     "argon2@0.43.1": true,
     "esbuild@0.28.1": true,
-    "prisma@6.19.3": true
+    "prisma@6.19.3": true,
+    "electron@37.10.3": true
   }
 }

@@ -1,0 +1,100 @@
+{
+  "name": "@enterprise/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EliteFlow Desktop - Electron client for the EliteFlow enterprise platform",
+  "author": "EliteFlow",
+  "license": "UNLICENSED",
+  "main": "dist/main/index.js",
+  "homepage": "./",
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run clean && npm run build:ts",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "pack": "npm run build && electron-builder --dir --win --x64",
+    "dist": "npm run build && electron-builder --win --x64",
+    "dist:nsis": "npm run build && electron-builder --win nsis --x64",
+    "dist:portable": "npm run build && electron-builder --win portable --x64",
+    "verify:smoke": "node scripts/smoke-verify.mjs"
+  },
+  "dependencies": {
+    "electron-log": "5.4.3",
+    "electron-store": "8.2.0",
+    "electron-updater": "6.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "electron": "37.10.3",
+    "electron-builder": "26.15.3",
+    "typescript": "5.9.3"
+  },
+  "build": {
+    "appId": "com.eliteflow.desktop",
+    "productName": "EliteFlow",
+    "copyright": "Copyright (c) EliteFlow",
+    "electronVersion": "37.10.3",
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!**/*.{md,map,ts}",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/.bin",
+      "!**/node_modules/*/{test,tests,__tests__,example,examples}",
+      "!release/**/*"
+    ],
+    "extraMetadata": {
+      "main": "dist/main/index.js"
+    },
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "signAndEditExecutable": true,
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EliteFlow",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "${productName}-Setup-${version}-${os}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}-${os}-${arch}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://releases.eliteflow.app/desktop/",
+        "channel": "latest"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "EliteFlow",
+        "schemes": ["eliteflow"]
+      }
+    ]
+  }
+}

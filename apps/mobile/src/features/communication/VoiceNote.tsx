@@ -6,7 +6,15 @@ import {
   Text,
   View,
 } from "react-native";
-import { Audio } from "expo-av";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 
 import { FILES_API_PREFIX } from "@enterprise/shared";
@@ -31,6 +39,11 @@ interface VoiceRecorderProps {
   disabled?: boolean;
 }
 
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+};
+
 /** Sample metering into a compact waveform JSON array (0–1). */
 function buildWaveform(samples: number[]): string {
   const max = Math.max(...samples, 0.01);
@@ -45,69 +58,52 @@ export function VoiceRecorder({
 }: VoiceRecorderProps) {
   const theme = useTheme();
   const { colors, spacing, radius } = theme;
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [seconds, setSeconds] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [levels, setLevels] = useState<number[]>(Array(24).fill(0.15));
   const samplesRef = useRef<number[]>([]);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const recorder = useAudioRecorder(RECORDING_OPTIONS);
+  const recorderState = useAudioRecorderState(recorder, 100);
+  const isRecording = recorderState.isRecording;
+  const seconds = Math.floor(recorderState.durationMillis / 1000);
 
   useEffect(() => {
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-      void recording?.stopAndUnloadAsync();
-    };
-  }, [recording]);
+    if (!isRecording) return;
+    const meter =
+      typeof recorderState.metering === "number"
+        ? Math.max(0, (recorderState.metering + 60) / 60)
+        : 0.3 + Math.random() * 0.4;
+    samplesRef.current.push(meter);
+    setLevels((prev) => [...prev.slice(1), meter]);
+  }, [isRecording, recorderState.metering, recorderState.durationMillis]);
 
   const start = useCallback(async () => {
-    const permission = await Audio.requestPermissionsAsync();
+    const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) return;
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
     });
 
-    const rec = new Audio.Recording();
-    await rec.prepareToRecordAsync({
-      ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      isMeteringEnabled: true,
-    });
-    rec.setOnRecordingStatusUpdate((status) => {
-      if (!status.isRecording) return;
-      const meter =
-        typeof status.metering === "number"
-          ? Math.max(0, (status.metering + 60) / 60)
-          : 0.3 + Math.random() * 0.4;
-      samplesRef.current.push(meter);
-      setLevels((prev) => [...prev.slice(1), meter]);
-    });
-    await rec.startAsync();
-    setRecording(rec);
-    setSeconds(0);
     samplesRef.current = [];
-    tickRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-  }, []);
+    setLevels(Array(24).fill(0.15));
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+  }, [recorder]);
 
   const stopAndUpload = useCallback(async () => {
-    if (!recording) return;
-    if (tickRef.current) clearInterval(tickRef.current);
+    if (!isRecording) return;
 
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      const status = await recording.getStatusAsync();
-      setRecording(null);
+      await recorder.stop();
+      const uri = recorder.uri;
       if (!uri) return;
 
       const durationSeconds = Math.max(
         1,
-        Math.round(
-          ("durationMillis" in status && status.durationMillis
-            ? status.durationMillis
-            : seconds * 1000) / 1000,
-        ),
+        Math.round(recorderState.durationMillis / 1000) || seconds || 1,
       );
       const waveformJson = buildWaveform(samplesRef.current);
 
@@ -140,9 +136,17 @@ export function VoiceRecorder({
     } finally {
       setUploading(false);
       setProgress(0);
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+      await setAudioModeAsync({ allowsRecording: false });
     }
-  }, [recording, seconds, onReady]);
+  }, [isRecording, recorder, recorderState.durationMillis, seconds, onReady]);
+
+  const cancel = useCallback(async () => {
+    if (isRecording) {
+      await recorder.stop();
+    }
+    await setAudioModeAsync({ allowsRecording: false });
+    onCancel?.();
+  }, [isRecording, recorder, onCancel]);
 
   return (
     <View
@@ -165,7 +169,7 @@ export function VoiceRecorder({
               width: 3,
               height: 8 + level * 28,
               borderRadius: 2,
-              backgroundColor: recording ? colors.destructive : colors.primary,
+              backgroundColor: isRecording ? colors.destructive : colors.primary,
               opacity: 0.35 + level * 0.65,
             }}
           />
@@ -173,7 +177,7 @@ export function VoiceRecorder({
       </View>
 
       <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
-        {recording
+        {isRecording
           ? `Recording ${seconds}s`
           : uploading
             ? `Uploading ${Math.round(progress * 100)}%`
@@ -184,16 +188,9 @@ export function VoiceRecorder({
         <ActivityIndicator color={colors.primary} />
       ) : (
         <View style={styles.actions}>
-          {recording ? (
+          {isRecording ? (
             <>
-              <Pressable
-                onPress={() => {
-                  void recording.stopAndUnloadAsync();
-                  setRecording(null);
-                  if (tickRef.current) clearInterval(tickRef.current);
-                  onCancel?.();
-                }}
-              >
+              <Pressable onPress={() => void cancel()}>
                 <Text style={{ color: colors.mutedForeground, fontWeight: "600" }}>
                   Cancel
                 </Text>
@@ -243,9 +240,8 @@ export function VoicePlayer({
 }: VoicePlayerProps) {
   const theme = useTheme();
   const { colors, radius, spacing } = theme;
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [position, setPosition] = useState(0);
+  const player = useAudioPlayer({ uri });
+  const status = useAudioPlayerStatus(player);
 
   const bars = (() => {
     try {
@@ -258,37 +254,20 @@ export function VoicePlayer({
   })();
 
   useEffect(() => {
-    return () => {
-      void soundRef.current?.unloadAsync();
-    };
+    void setAudioModeAsync({ playsInSilentMode: true });
   }, []);
 
   async function toggle() {
-    if (playing && soundRef.current) {
-      await soundRef.current.pauseAsync();
-      setPlaying(false);
+    if (status.playing) {
+      player.pause();
       return;
     }
 
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-    if (!soundRef.current) {
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        (status) => {
-          if (!status.isLoaded) return;
-          setPosition(status.positionMillis / 1000);
-          if (status.didJustFinish) {
-            setPlaying(false);
-            setPosition(0);
-          }
-        },
-      );
-      soundRef.current = sound;
-    } else {
-      await soundRef.current.playAsync();
+    await setAudioModeAsync({ playsInSilentMode: true });
+    if (status.didJustFinish) {
+      await player.seekTo(0);
     }
-    setPlaying(true);
+    player.play();
   }
 
   return (
@@ -304,7 +283,7 @@ export function VoicePlayer({
     >
       <Pressable onPress={() => void toggle()} hitSlop={8}>
         <Ionicons
-          name={playing ? "pause" : "play"}
+          name={status.playing ? "pause" : "play"}
           size={22}
           color={colors.primary}
         />
@@ -324,7 +303,7 @@ export function VoicePlayer({
         ))}
       </View>
       <Text style={{ color: colors.mutedForeground, fontSize: 11, minWidth: 36 }}>
-        {Math.round(position)}s
+        {Math.round(status.currentTime)}s
         {durationSeconds ? ` / ${durationSeconds}s` : ""}
       </Text>
     </View>

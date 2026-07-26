@@ -207,7 +207,8 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         title: "Whiteboard",
         href: ROUTES.WHITEBOARD,
         icon: PenTool,
-        permission: PERMISSIONS.WHITEBOARDS_READ,
+        // Visible to every signed-in user (same pattern as Security / Downloads).
+        // API still enforces whiteboards:read|write|delete.
       },
       {
         title: "File Manager",

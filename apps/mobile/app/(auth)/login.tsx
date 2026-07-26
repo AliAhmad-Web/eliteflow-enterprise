@@ -8,11 +8,14 @@ import {
 } from "react-native";
 import { Link, useRouter } from "expo-router";
 
+import { RECAPTCHA } from "@enterprise/shared";
+
 import { authService } from "@/api/auth.service";
 import { ApiClientError } from "@/api/api-error";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { TextField } from "@/components/ui/TextField";
+import { getCaptchaToken } from "@/features/security/recaptcha";
 import { useTheme } from "@/theme/theme.store";
 
 export default function LoginScreen() {
@@ -37,9 +40,11 @@ export default function LoginScreen() {
         return;
       }
 
+      const captchaToken = await getCaptchaToken(RECAPTCHA.ACTIONS.LOGIN);
       const result = await authService.login({
         email: email.trim().toLowerCase(),
         password,
+        captchaToken,
       });
 
       if (result.requiresOtp && result.otpSessionId) {

@@ -1,0 +1,11 @@
+{
+  "id": "android-apk",
+  "filename": "EliteFlow-1.0.0-android-vc12.apk",
+  "version": "1.0.0",
+  "versionCode": 12,
+  "releasedAt": "2026-07-26T06:11:58.417Z",
+  "easBuildId": "9fc0a7ec-09c1-4cea-9b8c-d8207f50b279",
+  "buildProfile": "production-apk",
+  "packageName": "com.eliteflow.mobile",
+  "downloadUrl": "https://expo.dev/artifacts/eas/Ywd0atgAPTajAX29_2KtgbYhOFxUvnbxDTCIb5kczyI.apk"
+}

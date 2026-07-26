@@ -1,51 +1,59 @@
-import { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from "react-native-reanimated";
+import { useEffect, useRef } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/theme/theme.store";
 
 /**
  * Brief branded launch pulse after native splash hides.
- * Kept lightweight — does not redesign product chrome.
+ * Uses RN Animated (not Reanimated) so cold-start never depends on
+ * worklets native init — a known silent-crash vector with expo-updates
+ * error recovery on Android release builds.
  */
 export function LaunchAnimation({ onDone }: { onDone?: () => void }) {
   const theme = useTheme();
   const { colors } = theme;
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.92);
-  const exit = useSharedValue(1);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.92)).current;
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: 420 });
-    scale.value = withTiming(1, { duration: 520 });
-    exit.value = withDelay(
-      900,
-      withTiming(0, { duration: 320 }, (finished) => {
-        if (finished && onDone) {
-          // runOnJS not required — caller typically unmounts via state after timeout
-        }
+    const enter = Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 420,
+        useNativeDriver: true,
       }),
-    );
-    const t = setTimeout(() => onDone?.(), 1300);
-    return () => clearTimeout(t);
-  }, [opacity, scale, exit, onDone]);
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 520,
+        useNativeDriver: true,
+      }),
+    ]);
 
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value * exit.value,
-    transform: [{ scale: scale.value }],
-  }));
+    const exit = Animated.timing(opacity, {
+      toValue: 0,
+      duration: 320,
+      delay: 900,
+      useNativeDriver: true,
+    });
+
+    const sequence = Animated.sequence([enter, exit]);
+    sequence.start(({ finished }) => {
+      if (finished) onDone?.();
+    });
+
+    const fallback = setTimeout(() => onDone?.(), 1400);
+    return () => {
+      sequence.stop();
+      clearTimeout(fallback);
+    };
+  }, [opacity, scale, onDone]);
 
   return (
     <View
       pointerEvents="none"
       style={[styles.overlay, { backgroundColor: colors.background }]}
     >
-      <Animated.View style={style}>
+      <Animated.View style={{ opacity, transform: [{ scale }] }}>
         <Text style={[styles.brand, { color: colors.primary }]}>EliteFlow</Text>
         <Text style={[styles.sub, { color: colors.mutedForeground }]}>
           Enterprise workspace

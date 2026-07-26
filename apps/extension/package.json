@@ -1,0 +1,32 @@
+{
+  "name": "@enterprise/extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EliteFlow Chrome Extension - Manifest V3 client for the EliteFlow enterprise platform",
+  "author": "EliteFlow",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true}); require('fs').rmSync('release',{recursive:true,force:true}); require('fs').mkdirSync('release',{recursive:true})\"",
+    "icons": "node scripts/generate-icons.mjs",
+    "dev": "vite build --watch --mode development",
+    "build": "npm run clean && npm run icons && tsc -p tsconfig.json --noEmit && vite build --mode production && node scripts/package-zip.mjs",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "verify:smoke": "node scripts/smoke-verify.mjs"
+  },
+  "dependencies": {
+    "@enterprise/shared": "*",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.1.1",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "@vitejs/plugin-react": "4.7.0",
+    "sharp": "0.34.3",
+    "typescript": "5.9.3",
+    "vite": "7.0.6",
+    "vite-plugin-static-copy": "3.1.1"
+  }
+}

@@ -49,6 +49,7 @@ export function LoginForm() {
   const resendVerificationMutation = useResendVerification();
 
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [rememberMe, setRememberMe] = useState(Boolean(getRememberedEmail()));
   const [otpSessionId, setOtpSessionId] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
@@ -159,6 +160,7 @@ export function LoginForm() {
   };
 
   const onSubmit = handleSubmit(async (values) => {
+    setIsSigningIn(true);
     setApiError(null);
     setOtpInfo(null);
 
@@ -192,7 +194,13 @@ export function LoginForm() {
         return;
       }
 
-      setApiError("Unable to sign in. Please try again.");
+      setApiError(
+        error instanceof Error
+          ? error.message
+          : "Unable to sign in. Please try again.",
+      );
+    } finally {
+      setIsSigningIn(false);
     }
   });
 
@@ -424,7 +432,7 @@ export function LoginForm() {
       <Button
         className="w-full"
         type="submit"
-        isLoading={isSubmitting || loginMutation.isPending}
+        isLoading={isSigningIn || isSubmitting || loginMutation.isPending}
       >
         Sign in
       </Button>
@@ -436,6 +444,28 @@ export function LoginForm() {
         <Link href={ROUTES.SIGNUP} className="text-primary hover:underline">
           Create account
         </Link>
+      </p>
+
+      <p className="text-center text-[11px] leading-relaxed text-muted-foreground/80">
+        This site is protected by reCAPTCHA and the Google{" "}
+        <a
+          href="https://policies.google.com/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Privacy Policy
+        </a>{" "}
+        and{" "}
+        <a
+          href="https://policies.google.com/terms"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Terms of Service
+        </a>{" "}
+        apply.
       </p>
     </form>
   );

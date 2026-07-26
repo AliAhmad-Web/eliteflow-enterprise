@@ -64,6 +64,13 @@
         }
       ],
       [
+        "expo-audio",
+        {
+          "microphonePermission": "Record voice notes for conversations."
+        }
+      ],
+      "expo-video",
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
@@ -81,12 +88,6 @@
       "eas": {
         "projectId": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/4c37822c-bb9e-4b21-98d9-7a68ca38f68e"
     },
     "owner": "aliahmadwebs-team"
   }

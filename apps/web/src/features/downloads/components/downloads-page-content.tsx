@@ -28,8 +28,14 @@ interface DownloadsPageContentProps {
 export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
   const desktopVersion = catalog.desktop.version ?? "—";
   const extensionVersion = catalog.extension.version ?? "—";
+  const androidVersion = catalog.android.version ?? "—";
+  const androidVersionCode =
+    catalog.android.versionCode != null
+      ? String(catalog.android.versionCode)
+      : "—";
   const desktopReleaseDate =
     catalog.desktop.setup?.releasedAt ?? catalog.desktop.portable?.releasedAt;
+  const androidAvailable = catalog.android.available && catalog.android.apk;
 
   const desktopActions = [
     catalog.desktop.setup
@@ -54,6 +60,17 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
           label: "Download Chrome Extension",
           href: catalog.extension.zip.href,
           variant: "default" as const,
+        },
+      ]
+    : [];
+
+  const androidActions = androidAvailable
+    ? [
+        {
+          label: "Download Android APK",
+          href: catalog.android.apk.href,
+          variant: "default" as const,
+          external: catalog.android.apk.href.startsWith("http"),
         },
       ]
     : [];
@@ -105,8 +122,8 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
               EliteFlow Downloads
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Download the official EliteFlow desktop applications and browser
-              extensions.
+              Download the official EliteFlow desktop, browser extension, and
+              Android clients — same workspace as the web app.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
@@ -228,16 +245,36 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
             <DownloadProductCard
               icon={<AndroidIcon />}
               title="Android Application"
-              description="Mobile client for EliteFlow on Android. APK distribution is preparing for release."
-              badge="Coming Soon"
-              badgeVariant="secondary"
-              meta={[
-                { label: "Platform", value: "Android" },
-                { label: "Status", value: "Coming Soon" },
-                { label: "Package", value: "APK (not published)" },
-                { label: "Availability", value: "—" },
-              ]}
-              comingSoon
+              description="Native Android client for EliteFlow — install the APK for phones and tablets."
+              badge={androidAvailable ? "Android" : "Coming Soon"}
+              badgeVariant={androidAvailable ? "info" : "secondary"}
+              meta={
+                androidAvailable
+                  ? [
+                      { label: "Version", value: androidVersion },
+                      { label: "Version Code", value: androidVersionCode },
+                      {
+                        label: "Build Date",
+                        value: formatReleaseDate(
+                          catalog.android.apk?.releasedAt,
+                        ),
+                      },
+                      {
+                        label: "APK Size",
+                        value: catalog.android.apk
+                          ? formatFileSize(catalog.android.apk.sizeBytes)
+                          : "—",
+                      },
+                    ]
+                  : [
+                      { label: "Platform", value: "Android" },
+                      { label: "Status", value: "Coming Soon" },
+                      { label: "Package", value: "APK (not published)" },
+                      { label: "Availability", value: "—" },
+                    ]
+              }
+              actions={androidActions}
+              comingSoon={!androidAvailable}
             />
           </div>
         </section>
@@ -293,10 +330,14 @@ export function DownloadsPageContent({ catalog }: DownloadsPageContentProps) {
               Release artifacts are detected automatically from{" "}
               <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground">
                 apps/desktop/release
-              </code>{" "}
-              and{" "}
+              </code>
+              ,{" "}
               <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground">
                 apps/extension/release
+              </code>
+              , and{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground">
+                apps/mobile/release
               </code>
               . No manual file selection required.
             </p>

@@ -209,7 +209,7 @@ export function NotificationDetailPanel({
         aria-labelledby={titleId}
         className={cn(
           "flex w-full flex-col gap-0 border-l border-border/80 bg-background p-0",
-          "shadow-2xl sm:max-w-[560px]",
+          "shadow-2xl sm:max-w-140",
           "data-[state=open]:duration-300 data-[state=closed]:duration-200",
           "[&>button]:hidden",
         )}
@@ -221,7 +221,7 @@ export function NotificationDetailPanel({
             </SheetTitle>
 
             {/* Header */}
-            <header className="relative shrink-0 border-b border-border/70 bg-gradient-to-b from-muted/40 to-background px-5 pb-5 pt-5 sm:px-6">
+            <header className="relative shrink-0 border-b border-border/70 bg-linear-to-b from-muted/40 to-background px-5 pb-5 pt-5 sm:px-6">
               <div className="flex items-start gap-4">
                 <div
                   className={cn(
@@ -538,7 +538,7 @@ export function NotificationDetailPanel({
                         >
                           <span
                             className={cn(
-                              "absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background",
+                              "absolute -left-1.25 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background",
                               index === timeline.length - 1
                                 ? "bg-primary"
                                 : "bg-muted-foreground/40",
@@ -741,7 +741,7 @@ export function NotificationDetailPanel({
                       value={reply}
                       onChange={(event) => setReply(event.target.value)}
                       placeholder="Write a reply…"
-                      className="min-h-[88px] resize-none border-border/50 bg-background"
+                      className="min-h-22 resize-none border-border/50 bg-background"
                       disabled={createReply.isPending}
                       onKeyDown={(event) => {
                         if (
@@ -782,7 +782,7 @@ export function NotificationDetailPanel({
 
             {/* Sticky action bar */}
             <footer
-              className="shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4"
+              className="shrink-0 border-t border-border/80 bg-background/95 px-3 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 sm:px-4"
               aria-label="Notification actions"
             >
               <div className="flex flex-wrap items-center gap-2">

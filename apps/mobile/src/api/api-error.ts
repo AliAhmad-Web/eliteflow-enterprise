@@ -31,12 +31,12 @@ export class ApiClientError extends Error {
 export function getApiBaseUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (configured) {
-    return configured;
+    return configured.replace(/\/$/, "");
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "EXPO_PUBLIC_API_URL must be set to your production API origin (HTTPS).",
-    );
+  // Release APKs must never throw during module init / first paint.
+  // Prefer the known Railway production origin when env was not inlined.
+  if (process.env.NODE_ENV === "production" || process.env.APP_ENV === "production") {
+    return "https://api-production-a778.up.railway.app";
   }
   return "http://localhost:4000";
 }

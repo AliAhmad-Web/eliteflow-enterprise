@@ -1473,23 +1473,30 @@ export class AuthService {
     } catch (error) {
       console.error("[auth] OTP email failed:", error);
 
-      // Never issue a session when 2FA/OTP is required. In non-production,
-      // still return the OTP challenge and log the code so local DNS/email
-      // outages cannot silently fall through to password-only login.
-      if (process.env.NODE_ENV === "production") {
-        const message =
-          error instanceof EmailDeliveryError
-            ? error.message
-            : "Verification code email could not be sent. Please try again later.";
+      const deliveryMessage =
+        error instanceof EmailDeliveryError
+          ? error.message
+          : "Verification code email could not be sent. Please try again later.";
+      const resendTestingMode =
+        /testing mode/i.test(deliveryMessage) ||
+        /only send to the account owner's address/i.test(deliveryMessage);
+
+      // Never fall through to password-only login when OTP is required.
+      // For Resend "testing mode" (unverified domain), still return the OTP
+      // challenge and log the code so operators can complete login / fix EMAIL_FROM.
+      // Hard-fail other production delivery errors so users are not left with
+      // an unreachable OTP session and no recovery path.
+      if (process.env.NODE_ENV === "production" && !resendTestingMode) {
         throw new AuthError(
-          message,
+          deliveryMessage,
           502,
           AUTH_ERROR_CODES.EMAIL_DELIVERY_FAILED,
         );
       }
 
       console.warn(
-        `[auth] OTP challenge created without email delivery (dev).\n` +
+        `[auth] OTP challenge created without email delivery` +
+          `${resendTestingMode ? " (Resend testing mode)" : " (dev)"}.\n` +
           `  email: ${user.email}\n` +
           `  purpose: ${purpose}\n` +
           `  code: ${code}\n` +

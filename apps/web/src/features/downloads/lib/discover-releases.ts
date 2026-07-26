@@ -4,12 +4,14 @@ import path from "node:path";
 export type ReleaseArtifactId =
   | "desktop-setup"
   | "desktop-portable"
-  | "extension-zip";
+  | "extension-zip"
+  | "android-apk";
 
 export interface ReleaseArtifact {
   id: ReleaseArtifactId;
   filename: string;
   version: string | null;
+  versionCode?: number | null;
   sizeBytes: number;
   releasedAt: string;
   href: string;
@@ -28,8 +30,11 @@ export interface ReleaseCatalog {
     zip: ReleaseArtifact | null;
   };
   android: {
-    available: false;
-    status: "coming-soon";
+    available: boolean;
+    status: "available" | "coming-soon";
+    version: string | null;
+    versionCode: number | null;
+    apk: ReleaseArtifact | null;
   };
 }
 
@@ -56,6 +61,12 @@ const ARTIFACT_SPECS: Array<{
     dirSegments: ["apps", "extension", "release"],
     prefix: "EliteFlow-Extension-",
     suffix: ".zip",
+  },
+  {
+    id: "android-apk",
+    dirSegments: ["apps", "mobile", "release"],
+    prefix: "EliteFlow-",
+    suffix: ".apk",
   },
 ];
 
@@ -84,20 +95,41 @@ function parseVersion(filename: string): string | null {
   return match?.[1] ?? null;
 }
 
+function parseVersionCode(filename: string): number | null {
+  const match = filename.match(/-vc(\d+)/i);
+  if (!match?.[1]) return null;
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) ? value : null;
+}
+
 function toDownloadHref(filename: string): string {
   return `/releases/${filename}`;
+}
+
+function isAndroidApkCandidate(name: string): boolean {
+  return (
+    name.startsWith("EliteFlow-") &&
+    name.endsWith(".apk") &&
+    !name.includes("Setup") &&
+    !name.includes("Portable") &&
+    !name.includes("Extension")
+  );
 }
 
 function pickLatest(
   dir: string,
   prefix: string,
   suffix: string,
+  id?: ReleaseArtifactId,
 ): { name: string; fullPath: string; size: number; mtimeMs: number } | null {
   if (!fs.existsSync(dir)) return null;
 
   const matches = fs
     .readdirSync(dir)
-    .filter((name) => name.startsWith(prefix) && name.endsWith(suffix))
+    .filter((name) => {
+      if (id === "android-apk") return isAndroidApkCandidate(name);
+      return name.startsWith(prefix) && name.endsWith(suffix);
+    })
     .map((name) => {
       const fullPath = path.join(dir, name);
       try {
@@ -116,10 +148,80 @@ function pickLatest(
   return matches[0] ?? null;
 }
 
+function readAndroidBuildInfo(
+  monorepoRoot: string,
+  apkFilename: string,
+): {
+  versionCode: number | null;
+  releasedAt: string | null;
+  version: string | null;
+  downloadUrl: string | null;
+} {
+  const infoPath = path.join(
+    monorepoRoot,
+    "apps",
+    "mobile",
+    "release",
+    "build-info.json",
+  );
+  if (!fs.existsSync(infoPath)) {
+    return {
+      versionCode: parseVersionCode(apkFilename),
+      releasedAt: null,
+      version: parseVersion(apkFilename),
+      downloadUrl: null,
+    };
+  }
+
+  try {
+    const raw = JSON.parse(fs.readFileSync(infoPath, "utf8")) as {
+      filename?: string;
+      version?: string;
+      versionCode?: number;
+      releasedAt?: string;
+      downloadUrl?: string;
+    };
+    if (raw.filename && raw.filename !== apkFilename) {
+      return {
+        versionCode: parseVersionCode(apkFilename),
+        releasedAt: null,
+        version: parseVersion(apkFilename),
+        downloadUrl: null,
+      };
+    }
+    return {
+      versionCode:
+        typeof raw.versionCode === "number"
+          ? raw.versionCode
+          : parseVersionCode(apkFilename),
+      releasedAt: raw.releasedAt ?? null,
+      version: raw.version ?? parseVersion(apkFilename),
+      downloadUrl:
+        typeof raw.downloadUrl === "string" && raw.downloadUrl.trim()
+          ? raw.downloadUrl.trim()
+          : null,
+    };
+  } catch {
+    return {
+      versionCode: parseVersionCode(apkFilename),
+      releasedAt: null,
+      version: parseVersion(apkFilename),
+      downloadUrl: null,
+    };
+  }
+}
+
 function normalizeArtifact(artifact: ReleaseArtifact): ReleaseArtifact {
   return {
     ...artifact,
-    href: toDownloadHref(artifact.filename),
+    href: artifact.href.startsWith("http")
+      ? artifact.href
+      : toDownloadHref(artifact.filename),
+    versionCode:
+      artifact.versionCode ??
+      (artifact.id === "android-apk"
+        ? parseVersionCode(artifact.filename)
+        : null),
   };
 }
 
@@ -149,16 +251,25 @@ function discoverFromDisk(monorepoRoot: string): ReleaseArtifact[] {
 
   for (const spec of ARTIFACT_SPECS) {
     const dir = path.join(monorepoRoot, ...spec.dirSegments);
-    const found = pickLatest(dir, spec.prefix, spec.suffix);
+    const found = pickLatest(dir, spec.prefix, spec.suffix, spec.id);
     if (!found) continue;
+
+    const androidInfo =
+      spec.id === "android-apk"
+        ? readAndroidBuildInfo(monorepoRoot, found.name)
+        : null;
 
     artifacts.push({
       id: spec.id,
       filename: found.name,
-      version: parseVersion(found.name),
+      version: androidInfo?.version ?? parseVersion(found.name),
+      versionCode: androidInfo?.versionCode ?? null,
       sizeBytes: found.size,
-      releasedAt: new Date(found.mtimeMs).toISOString(),
-      href: toDownloadHref(found.name),
+      releasedAt:
+        androidInfo?.releasedAt ?? new Date(found.mtimeMs).toISOString(),
+      href:
+        androidInfo?.downloadUrl ??
+        toDownloadHref(found.name),
       sourcePath: path
         .relative(monorepoRoot, found.fullPath)
         .replace(/\\/g, "/"),
@@ -170,22 +281,32 @@ function discoverFromDisk(monorepoRoot: string): ReleaseArtifact[] {
 
 function discoverFromPublic(
   publicReleasesDir: string,
+  monorepoRoot: string,
 ): ReleaseArtifact[] {
   if (!fs.existsSync(publicReleasesDir)) return [];
 
   const artifacts: ReleaseArtifact[] = [];
 
   for (const spec of ARTIFACT_SPECS) {
-    const found = pickLatest(publicReleasesDir, spec.prefix, spec.suffix);
+    const found = pickLatest(publicReleasesDir, spec.prefix, spec.suffix, spec.id);
     if (!found) continue;
+
+    const androidInfo =
+      spec.id === "android-apk"
+        ? readAndroidBuildInfo(monorepoRoot, found.name)
+        : null;
 
     artifacts.push({
       id: spec.id,
       filename: found.name,
-      version: parseVersion(found.name),
+      version: androidInfo?.version ?? parseVersion(found.name),
+      versionCode: androidInfo?.versionCode ?? null,
       sizeBytes: found.size,
-      releasedAt: new Date(found.mtimeMs).toISOString(),
-      href: toDownloadHref(found.name),
+      releasedAt:
+        androidInfo?.releasedAt ?? new Date(found.mtimeMs).toISOString(),
+      href:
+        androidInfo?.downloadUrl ??
+        toDownloadHref(found.name),
       sourcePath: path
         .join("apps", "web", "public", "releases", found.name)
         .replace(/\\/g, "/"),
@@ -193,6 +314,16 @@ function discoverFromPublic(
   }
 
   return artifacts;
+}
+
+function mergeArtifacts(
+  preferred: ReleaseArtifact[],
+  fallback: ReleaseArtifact[],
+): ReleaseArtifact[] {
+  const byId = new Map<ReleaseArtifactId, ReleaseArtifact>();
+  for (const artifact of fallback) byId.set(artifact.id, artifact);
+  for (const artifact of preferred) byId.set(artifact.id, artifact);
+  return Array.from(byId.values());
 }
 
 function byId(
@@ -203,27 +334,28 @@ function byId(
 }
 
 /**
- * Automatically detect Desktop + Chrome Extension release artifacts.
+ * Automatically detect Desktop + Chrome Extension + Android release artifacts.
  * Prefers public/releases binaries (production CDN), then monorepo release
- * folders, then manifest.json metadata.
+ * folders, then manifest.json metadata (including external hrefs).
  */
 export function discoverReleases(): ReleaseCatalog {
   const monorepoRoot = resolveMonorepoRoot();
   const publicReleasesDir = path.join(process.cwd(), "public", "releases");
 
   const manifest = readManifest(publicReleasesDir);
-  const publicArtifacts = discoverFromPublic(publicReleasesDir);
+  const publicArtifacts = discoverFromPublic(publicReleasesDir, monorepoRoot);
   const diskArtifacts = discoverFromDisk(monorepoRoot);
+
+  const discovered = mergeArtifacts(publicArtifacts, diskArtifacts);
   const artifacts =
-    publicArtifacts.length > 0
-      ? publicArtifacts
-      : diskArtifacts.length > 0
-        ? diskArtifacts
-        : (manifest?.artifacts ?? []);
+    discovered.length > 0
+      ? mergeArtifacts(discovered, manifest?.artifacts ?? [])
+      : (manifest?.artifacts ?? []);
 
   const setup = byId(artifacts, "desktop-setup");
   const portable = byId(artifacts, "desktop-portable");
   const zip = byId(artifacts, "extension-zip");
+  const apk = byId(artifacts, "android-apk");
 
   return {
     generatedAt: manifest?.generatedAt ?? new Date().toISOString(),
@@ -236,9 +368,20 @@ export function discoverReleases(): ReleaseCatalog {
       version: zip?.version ?? null,
       zip,
     },
-    android: {
-      available: false,
-      status: "coming-soon",
-    },
+    android: apk
+      ? {
+          available: true,
+          status: "available",
+          version: apk.version,
+          versionCode: apk.versionCode ?? parseVersionCode(apk.filename),
+          apk,
+        }
+      : {
+          available: false,
+          status: "coming-soon",
+          version: null,
+          versionCode: null,
+          apk: null,
+        },
   };
 }
