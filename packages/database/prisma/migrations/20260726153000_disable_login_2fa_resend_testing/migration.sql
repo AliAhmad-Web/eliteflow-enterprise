@@ -1,4 +1,4 @@
-﻿-- Resend production is still onboarding@resend.dev (testing mode).
+-- Resend production is still onboarding@resend.dev (testing mode).
 -- LOGIN_2FA hard-failed every admin login with AUTH_EMAIL_DELIVERY_FAILED.
 -- Disable 2FA until a verified sending domain is configured.
 UPDATE "users"
