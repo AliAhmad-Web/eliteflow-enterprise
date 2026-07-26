@@ -6,6 +6,7 @@ import {
   Bot,
   Calendar,
   CheckSquare,
+  Download,
   FileText,
   FolderKanban,
   FolderOpen,
@@ -245,6 +246,16 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         title: "Settings",
         href: ROUTES.SETTINGS,
         icon: Settings,
+      },
+    ],
+  },
+  {
+    label: "Apps",
+    items: [
+      {
+        title: "Downloads",
+        href: ROUTES.DOWNLOADS,
+        icon: Download,
       },
     ],
   },

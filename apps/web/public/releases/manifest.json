@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-07-26T09:14:48.306Z",
+  "artifacts": [
+    {
+      "id": "desktop-setup",
+      "filename": "EliteFlow-Setup-1.0.0-win-x64.exe",
+      "version": "1.0.0",
+      "sizeBytes": 92635719,
+      "releasedAt": "2026-07-26T06:47:10.611Z",
+      "href": "/releases/EliteFlow-Setup-1.0.0-win-x64.exe",
+      "sourcePath": "apps/desktop/release/EliteFlow-Setup-1.0.0-win-x64.exe",
+      "sync": "linked"
+    },
+    {
+      "id": "desktop-portable",
+      "filename": "EliteFlow-Portable-1.0.0-win-x64.exe",
+      "version": "1.0.0",
+      "sizeBytes": 92368013,
+      "releasedAt": "2026-07-26T06:47:18.190Z",
+      "href": "/releases/EliteFlow-Portable-1.0.0-win-x64.exe",
+      "sourcePath": "apps/desktop/release/EliteFlow-Portable-1.0.0-win-x64.exe",
+      "sync": "linked"
+    },
+    {
+      "id": "extension-zip",
+      "filename": "EliteFlow-Extension-1.0.0.zip",
+      "version": "1.0.0",
+      "sizeBytes": 138957,
+      "releasedAt": "2026-07-26T07:57:14.932Z",
+      "href": "/releases/EliteFlow-Extension-1.0.0.zip",
+      "sourcePath": "apps/extension/release/EliteFlow-Extension-1.0.0.zip",
+      "sync": "linked"
+    }
+  ]
+}

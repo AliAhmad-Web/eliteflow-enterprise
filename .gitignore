@@ -3,6 +3,13 @@
 dist/
 build/
 .next/
+apps/desktop/release/
+apps/desktop/dist/
+apps/web/public/releases/*
+!apps/web/public/releases/.gitkeep
+!apps/web/public/releases/manifest.json
+!apps/web/public/releases/EliteFlow-*.exe
+!apps/web/public/releases/EliteFlow-*.zip
 .env
 .env.*
 !.env.example
@@ -16,3 +23,5 @@ apps/api/storage/
 *.p8
 *.p12
 *.mobileprovision
+.vercel
+.env*

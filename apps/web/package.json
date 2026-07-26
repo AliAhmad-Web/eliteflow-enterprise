@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "sync:releases": "node ./scripts/sync-releases.mjs",
+    "predev": "node ./scripts/sync-releases.mjs",
     "dev": "next dev --webpack",
+    "prebuild": "node ./scripts/sync-releases.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
