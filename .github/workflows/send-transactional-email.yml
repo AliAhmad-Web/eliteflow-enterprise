@@ -1,0 +1,31 @@
+name: Send transactional email
+
+# Railway blocks outbound SMTP (connection timeout to smtp.gmail.com).
+# The API dispatches auth emails here over HTTPS; GitHub-hosted runners send
+# via Gmail SMTP using repo secrets (no custom domain required).
+
+on:
+  repository_dispatch:
+    types: [transactional_email]
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send mail
+        uses: dawidd6/action-send-mail@v4
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          secure: false
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          from: ${{ secrets.EMAIL_FROM }}
+          to: ${{ github.event.client_payload.to }}
+          subject: ${{ github.event.client_payload.subject }}
+          body: ${{ github.event.client_payload.text }}
+          html_body: ${{ github.event.client_payload.html }}
+          convert_markdown: false
+          ignore_cert: false
+          reply_to: ${{ secrets.SMTP_USER }}

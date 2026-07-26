@@ -8,6 +8,8 @@ import {
   isResendConfigured,
   isSmtpConfigured,
 } from "../../config/email.config.js";
+import { sendViaGithubEmailRelay } from "./github-email-relay.js";
+import { sendViaGmailApi } from "./gmail-api.sender.js";
 import { getResendRuntimeApiKey } from "./email-runtime-config.js";
 
 export interface PasswordResetEmailInput {
@@ -240,16 +242,20 @@ class EmailService {
           `  link: ${input.logUrl}`,
       );
       throw new EmailDeliveryError(
-        "Email service is not configured. Set SMTP_HOST/SMTP_USER/SMTP_PASS (recommended without a custom domain) or RESEND_API_KEY.",
+        "Email service is not configured. Set GITHUB_EMAIL_RELAY_TOKEN + GITHUB_EMAIL_RELAY_REPO (Railway), GMAIL_OAUTH_REFRESH_TOKEN, SMTP_*, or RESEND_API_KEY.",
         "email transport not configured",
       );
     }
 
     try {
       const result =
-        transport === "smtp"
-          ? await this.sendViaSmtp(input)
-          : await this.sendViaResendWithRetry(input);
+        transport === "gmail_api"
+          ? await sendViaGmailApi(input)
+          : transport === "github_relay"
+            ? await sendViaGithubEmailRelay(input)
+            : transport === "smtp"
+              ? await this.sendViaSmtp(input)
+              : await this.sendViaResendWithRetry(input);
       console.info(
         `[email] Sent ${input.logLabel} via ${transport} to ${input.to}` +
           (result.id ? ` (id=${result.id})` : ""),
