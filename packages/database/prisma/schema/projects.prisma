@@ -28,6 +28,7 @@ model Project {
   folders     Folder[]
   managedFiles ManagedFile[]
   calendarEvents CalendarEvent[]
+  whiteboards    Whiteboard[]
 
   @@index([name])
   @@index([status])

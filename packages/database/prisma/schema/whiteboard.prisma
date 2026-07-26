@@ -1,0 +1,86 @@
+// =============================================================================
+// Whiteboards — Enterprise drawing workspaces (projects/tasks/clients/teams)
+// =============================================================================
+
+model Whiteboard {
+  id             String    @id @default(uuid()) @db.Uuid
+  /// Reserved for future multi-tenant orgs (EliteFlow is currently single-tenant).
+  organizationId String?   @map("organization_id") @db.Uuid
+  /// Reserved for future workspace tenancy.
+  workspaceId    String?   @map("workspace_id") @db.Uuid
+  projectId      String?   @map("project_id") @db.Uuid
+  taskId         String?   @map("task_id") @db.Uuid
+  clientId       String?   @map("client_id") @db.Uuid
+  teamId         String?   @map("team_id") @db.Uuid
+  title          String    @db.VarChar(200)
+  canvasData     Json      @default("{}") @map("canvas_data")
+  thumbnail      String?   @db.Text
+  ownerId        String    @map("owner_id") @db.Uuid
+  createdById    String?   @map("created_by_id") @db.Uuid
+  updatedById    String?   @map("updated_by_id") @db.Uuid
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  owner     User  @relation("WhiteboardOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("WhiteboardCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("WhiteboardUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  versions  WhiteboardVersion[]
+  comments  WhiteboardComment[]
+
+  @@index([ownerId, deletedAt])
+  @@index([projectId, deletedAt])
+  @@index([taskId, deletedAt])
+  @@index([clientId, deletedAt])
+  @@index([teamId, deletedAt])
+  @@index([updatedAt])
+  @@map("whiteboards")
+}
+
+/// Version history snapshots for restore (collaboration Phase 5).
+model WhiteboardVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  whiteboardId String   @map("whiteboard_id") @db.Uuid
+  version      Int
+  title        String   @db.VarChar(200)
+  canvasData   Json     @map("canvas_data")
+  thumbnail    String?  @db.Text
+  createdById  String?  @map("created_by_id") @db.Uuid
+  label        String?  @db.VarChar(200)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  whiteboard Whiteboard @relation(fields: [whiteboardId], references: [id], onDelete: Cascade)
+  createdBy  User?      @relation("WhiteboardVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([whiteboardId, version])
+  @@index([whiteboardId, createdAt])
+  @@map("whiteboard_versions")
+}
+
+/// Threaded comments anchored to canvas coordinates (realtime later).
+model WhiteboardComment {
+  id           String    @id @default(uuid()) @db.Uuid
+  whiteboardId String    @map("whiteboard_id") @db.Uuid
+  authorId     String    @map("author_id") @db.Uuid
+  body         String    @db.Text
+  anchorX      Float     @default(0) @map("anchor_x")
+  anchorY      Float     @default(0) @map("anchor_y")
+  objectId     String?   @map("object_id") @db.VarChar(64)
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  whiteboard Whiteboard @relation(fields: [whiteboardId], references: [id], onDelete: Cascade)
+  author     User       @relation("WhiteboardCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([whiteboardId, deletedAt])
+  @@index([authorId])
+  @@map("whiteboard_comments")
+}

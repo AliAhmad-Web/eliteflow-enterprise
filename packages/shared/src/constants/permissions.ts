@@ -47,6 +47,10 @@ export const PERMISSIONS = {
   CHAT_READ: "chat:read",
   CHAT_WRITE: "chat:write",
 
+  WHITEBOARDS_READ: "whiteboards:read",
+  WHITEBOARDS_WRITE: "whiteboards:write",
+  WHITEBOARDS_DELETE: "whiteboards:delete",
+
   /** Phase 20 — Enterprise Communication Hub */
   COMMUNICATION_READ: "communication:read",
   COMMUNICATION_WRITE: "communication:write",
@@ -84,6 +88,7 @@ export const MODULE_PERMISSIONS = {
   notifications: PERMISSIONS.NOTIFICATIONS_READ,
   chat: PERMISSIONS.CHAT_READ,
   communication: PERMISSIONS.COMMUNICATION_READ,
+  whiteboards: PERMISSIONS.WHITEBOARDS_READ,
   portal: PERMISSIONS.PROJECTS_READ,
   dashboard: PERMISSIONS.PROJECTS_READ,
 } as const;
@@ -104,6 +109,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/invoices": PERMISSIONS.INVOICES_READ,
   "/reports": PERMISSIONS.REPORTS_READ,
   "/calendar": PERMISSIONS.CALENDAR_READ,
+  "/whiteboard": PERMISSIONS.WHITEBOARDS_READ,
   "/file-manager": PERMISSIONS.FILES_READ,
   "/ai-assistant": PERMISSIONS.AI_USE,
   "/ai-documents": PERMISSIONS.AI_USE,

@@ -163,6 +163,13 @@ model User {
   webhookEndpointsCreated      WebhookEndpoint[]     @relation("WebhookEndpointCreatedBy")
   syncHistoryTriggered         SyncHistory[]         @relation("SyncHistoryTriggeredBy")
 
+  // Whiteboards
+  whiteboardsOwned             Whiteboard[]          @relation("WhiteboardOwner")
+  whiteboardsCreated           Whiteboard[]          @relation("WhiteboardCreatedBy")
+  whiteboardsUpdated           Whiteboard[]          @relation("WhiteboardUpdatedBy")
+  whiteboardVersionsCreated    WhiteboardVersion[]   @relation("WhiteboardVersionCreatedBy")
+  whiteboardCommentsAuthored   WhiteboardComment[]   @relation("WhiteboardCommentAuthor")
+
   @@index([roleId])
   @@index([status])
   @@index([email, deletedAt])

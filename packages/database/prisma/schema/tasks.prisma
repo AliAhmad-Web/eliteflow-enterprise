@@ -29,6 +29,7 @@ model Task {
   attachments TaskAttachment[]
   activityLogs TaskActivityLog[]
   calendarEvents CalendarEvent[]
+  whiteboards    Whiteboard[]
 
   @@index([title])
   @@index([status])

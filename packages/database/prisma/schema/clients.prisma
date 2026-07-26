@@ -28,6 +28,7 @@ model Client {
   managedFiles ManagedFile[]
   fileShares  FileShare[]
   calendarEvents CalendarEvent[]
+  whiteboards    Whiteboard[]
 
   @@index([email])
   @@index([companyName])

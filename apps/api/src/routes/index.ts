@@ -17,6 +17,7 @@ import { communicationRouter } from "../modules/communication/index.js";
 import { securityRouter } from "../modules/security/index.js";
 import { settingsRouter } from "../modules/settings/index.js";
 import { integrationsRouter } from "../modules/integrations/index.js";
+import { whiteboardsRouter } from "../modules/whiteboards/index.js";
 
 const apiRouter = Router();
 
@@ -35,6 +36,7 @@ apiRouter.use("/communication", communicationRouter);
 apiRouter.use("/security", securityRouter);
 apiRouter.use("/settings", settingsRouter);
 apiRouter.use("/integrations", integrationsRouter);
+apiRouter.use("/whiteboards", whiteboardsRouter);
 
 apiRouter.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

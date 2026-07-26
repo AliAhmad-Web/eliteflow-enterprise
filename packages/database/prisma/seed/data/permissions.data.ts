@@ -265,6 +265,24 @@ export const PERMISSIONS: PermissionSeedDefinition[] = [
     action: "manage",
     description: "Resolve, pin, and moderate discussion threads",
   },
+  {
+    key: "whiteboards:read",
+    resource: "whiteboards",
+    action: "read",
+    description: "View whiteboards and canvas content",
+  },
+  {
+    key: "whiteboards:write",
+    resource: "whiteboards",
+    action: "write",
+    description: "Create, update, duplicate, and rename whiteboards",
+  },
+  {
+    key: "whiteboards:delete",
+    resource: "whiteboards",
+    action: "delete",
+    description: "Delete whiteboards",
+  },
 ];
 
 export const ALL_PERMISSION_KEYS = PERMISSIONS.map((permission) => permission.key);

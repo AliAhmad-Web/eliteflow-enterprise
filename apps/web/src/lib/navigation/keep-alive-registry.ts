@@ -51,6 +51,10 @@ export const KEEP_ALIVE_LOADERS: Record<string, KeepAliveLoader> = {
     import("@/features/calendar/components/calendar-page-content").then(
       (m) => ({ default: m.CalendarPageContent }),
     ),
+  [ROUTES.WHITEBOARD]: () =>
+    import("@/features/whiteboard/components/whiteboard-page-content").then(
+      (m) => ({ default: m.WhiteboardPageContent }),
+    ),
   [ROUTES.MESSAGES]: () =>
     import("@/features/communication/components/messages-page-content").then(
       (m) => ({ default: m.MessagesPageContent }),

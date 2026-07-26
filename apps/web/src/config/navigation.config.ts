@@ -15,6 +15,7 @@ import {
   Megaphone,
   MessageSquare,
   MessagesSquare,
+  PenTool,
   Plug,
   Receipt,
   Settings,
@@ -201,6 +202,12 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.CALENDAR,
         icon: Calendar,
         permission: PERMISSIONS.CALENDAR_READ,
+      },
+      {
+        title: "Whiteboard",
+        href: ROUTES.WHITEBOARD,
+        icon: PenTool,
+        permission: PERMISSIONS.WHITEBOARDS_READ,
       },
       {
         title: "File Manager",

@@ -46,6 +46,9 @@ export const ROLE_PERMISSION_MAP: Record<string, readonly string[]> = {
     "announcement:manage",
     "meeting:manage",
     "thread:manage",
+    "whiteboards:read",
+    "whiteboards:write",
+    "whiteboards:delete",
   ],
 
   [ROLE_CODES.EMPLOYEE]: [
@@ -67,6 +70,9 @@ export const ROLE_PERMISSION_MAP: Record<string, readonly string[]> = {
     "team:read",
     "reports:read",
     "integrations:read",
+    "whiteboards:read",
+    "whiteboards:write",
+    "whiteboards:delete",
   ],
 
   [ROLE_CODES.CLIENT]: [
@@ -83,5 +89,6 @@ export const ROLE_PERMISSION_MAP: Record<string, readonly string[]> = {
     "ai:use",
     "reports:read",
     "integrations:read",
+    "whiteboards:read",
   ],
 };

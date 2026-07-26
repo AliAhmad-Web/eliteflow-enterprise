@@ -19,6 +19,7 @@ export const ROUTES = {
   INVOICES: "/invoices",
   REPORTS: "/reports",
   CALENDAR: "/calendar",
+  WHITEBOARD: "/whiteboard",
   AI_ASSISTANT: "/ai-assistant",
   AI_DOCUMENTS: "/ai-documents",
   FILE_MANAGER: "/file-manager",

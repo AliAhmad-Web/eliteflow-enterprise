@@ -84,7 +84,8 @@ model Team {
   leader     User?        @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   createdBy  User?        @relation("TeamCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy  User?        @relation("TeamUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  members    TeamMember[]
+  members     TeamMember[]
+  whiteboards Whiteboard[]
 
   @@index([departmentId])
   @@index([leaderId])

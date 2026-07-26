@@ -25,6 +25,7 @@ export {
   SECURITY_API_PREFIX,
   SETTINGS_API_PREFIX,
   INTEGRATIONS_API_PREFIX,
+  WHITEBOARDS_API_PREFIX,
   AUTH_COOKIES,
   AUTH_ERROR_CODES,
   AUTH_HEADERS,
@@ -1161,3 +1162,42 @@ export type {
   ManualSyncInput,
   TestIntegrationInput,
 } from "./schemas/integrations.schema.js";
+
+// Schemas — Whiteboards
+export {
+  WHITEBOARD_AI_ACTIONS,
+  WHITEBOARD_EXPORT_FORMATS,
+  createWhiteboardCommentSchema,
+  createWhiteboardSchema,
+  duplicateWhiteboardSchema,
+  listWhiteboardsQuerySchema,
+  renameWhiteboardSchema,
+  updateWhiteboardSchema,
+  whiteboardAiActionSchema,
+  whiteboardAiRequestSchema,
+  whiteboardCanvasDataSchema,
+  whiteboardDtoSchema,
+  whiteboardExportFormatSchema,
+  whiteboardIdParamsSchema,
+  whiteboardListItemSchema,
+  whiteboardListResponseSchema,
+  whiteboardVersionDtoSchema,
+} from "./schemas/whiteboard.schema.js";
+
+export type {
+  CreateWhiteboardCommentInput,
+  CreateWhiteboardInput,
+  DuplicateWhiteboardInput,
+  ListWhiteboardsQueryInput,
+  RenameWhiteboardInput,
+  UpdateWhiteboardInput,
+  WhiteboardAiActionValue,
+  WhiteboardAiRequestInput,
+  WhiteboardCanvasDataInput,
+  WhiteboardDto,
+  WhiteboardExportFormatValue,
+  WhiteboardIdParamsInput,
+  WhiteboardListItem,
+  WhiteboardListResponse,
+  WhiteboardVersionDto,
+} from "./schemas/whiteboard.schema.js";

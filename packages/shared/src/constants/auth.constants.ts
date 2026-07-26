@@ -137,6 +137,7 @@ export const COMMUNICATION_API_PREFIX = `${API_PREFIX}/communication` as const;
 export const SECURITY_API_PREFIX = `${API_PREFIX}/security` as const;
 export const SETTINGS_API_PREFIX = `${API_PREFIX}/settings` as const;
 export const INTEGRATIONS_API_PREFIX = `${API_PREFIX}/integrations` as const;
+export const WHITEBOARDS_API_PREFIX = `${API_PREFIX}/whiteboards` as const;
 
 // =============================================================================
 // Auth Error Codes (Authentication Architecture §10.7)
