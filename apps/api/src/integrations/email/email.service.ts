@@ -1,6 +1,13 @@
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 import { Resend } from "resend";
 
-import { emailConfig } from "../../config/email.config.js";
+import {
+  emailConfig,
+  getEmailTransportLabel,
+  isResendConfigured,
+  isSmtpConfigured,
+} from "../../config/email.config.js";
 import { getResendRuntimeApiKey } from "./email-runtime-config.js";
 
 export interface PasswordResetEmailInput {
@@ -47,10 +54,11 @@ function mapProviderError(error: {
 
   if (
     lower.includes("only send testing emails to your own email") ||
-    lower.includes("verify a domain")
+    lower.includes("verify a domain") ||
+    lower.includes("email address not authorized")
   ) {
     return new EmailDeliveryError(
-      "Email could not be delivered. The email provider is in testing mode and can only send to the account owner's address. Verify a domain at resend.com/domains (and update EMAIL_FROM) to email any Gmail or other inbox.",
+      "Email could not be delivered. Configure SMTP (for example Gmail App Password via SMTP_HOST/SMTP_USER/SMTP_PASS) so verification works without a custom domain. Resend/Supabase default mailers cannot send to arbitrary inboxes without domain or org membership.",
       providerMessage,
       statusCode,
     );
@@ -59,10 +67,23 @@ function mapProviderError(error: {
   if (
     lower.includes("too many requests") ||
     lower.includes("rate limit") ||
-    lower.includes("quota")
+    lower.includes("quota") ||
+    lower.includes("daily user sending limit")
   ) {
     return new EmailDeliveryError(
       "Email could not be sent because the email provider rate limit or quota was reached. Please try again in a few minutes.",
+      providerMessage,
+      statusCode,
+    );
+  }
+
+  if (
+    lower.includes("invalid login") ||
+    lower.includes("authentication failed") ||
+    lower.includes("username and password not accepted")
+  ) {
+    return new EmailDeliveryError(
+      "Email could not be sent because SMTP authentication failed. Check SMTP_USER and SMTP_PASS (use a Gmail App Password, not your normal password).",
       providerMessage,
       statusCode,
     );
@@ -76,8 +97,10 @@ function mapProviderError(error: {
 }
 
 class EmailService {
-  private client: Resend | null = null;
-  private clientKey: string | null = null;
+  private resendClient: Resend | null = null;
+  private resendClientKey: string | null = null;
+  private smtpTransporter: Transporter | null = null;
+  private smtpFingerprint: string | null = null;
 
   private escapeHtml(value: string): string {
     return value
@@ -88,7 +111,7 @@ class EmailService {
       .replaceAll("'", "&#39;");
   }
 
-  private resolveApiKey(): string | null {
+  private resolveResendApiKey(): string | null {
     return (
       getResendRuntimeApiKey() ||
       emailConfig.resendApiKey?.trim() ||
@@ -96,18 +119,47 @@ class EmailService {
     );
   }
 
-  private getClient(): Resend | null {
-    const apiKey = this.resolveApiKey();
+  private getResendClient(): Resend | null {
+    const apiKey = this.resolveResendApiKey();
     if (!apiKey) {
       return null;
     }
 
-    if (!this.client || this.clientKey !== apiKey) {
-      this.client = new Resend(apiKey);
-      this.clientKey = apiKey;
+    if (!this.resendClient || this.resendClientKey !== apiKey) {
+      this.resendClient = new Resend(apiKey);
+      this.resendClientKey = apiKey;
     }
 
-    return this.client;
+    return this.resendClient;
+  }
+
+  private getSmtpTransporter(): Transporter | null {
+    if (!isSmtpConfigured()) {
+      return null;
+    }
+
+    const fingerprint = [
+      emailConfig.smtp.host,
+      emailConfig.smtp.port,
+      emailConfig.smtp.secure,
+      emailConfig.smtp.user,
+      emailConfig.smtp.pass,
+    ].join("|");
+
+    if (!this.smtpTransporter || this.smtpFingerprint !== fingerprint) {
+      this.smtpTransporter = nodemailer.createTransport({
+        host: emailConfig.smtp.host,
+        port: emailConfig.smtp.port,
+        secure: emailConfig.smtp.secure,
+        auth: {
+          user: emailConfig.smtp.user,
+          pass: emailConfig.smtp.pass,
+        },
+      });
+      this.smtpFingerprint = fingerprint;
+    }
+
+    return this.smtpTransporter;
   }
 
   async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
@@ -180,22 +232,26 @@ class EmailService {
     logLabel: string;
     logUrl: string;
   }): Promise<void> {
-    if (!this.getClient()) {
+    const transport = getEmailTransportLabel();
+    if (transport === "none") {
       console.error(
-        `[email] ${input.logLabel} failed — Resend is not configured\n` +
+        `[email] ${input.logLabel} failed — no SMTP or Resend configured\n` +
           `  to: ${input.to}\n` +
           `  link: ${input.logUrl}`,
       );
       throw new EmailDeliveryError(
-        "Email service is not configured. Connect Resend in Integration Center or set RESEND_API_KEY.",
-        "RESEND_API_KEY not set",
+        "Email service is not configured. Set SMTP_HOST/SMTP_USER/SMTP_PASS (recommended without a custom domain) or RESEND_API_KEY.",
+        "email transport not configured",
       );
     }
 
     try {
-      const result = await this.sendWithRetry(input);
+      const result =
+        transport === "smtp"
+          ? await this.sendViaSmtp(input)
+          : await this.sendViaResendWithRetry(input);
       console.info(
-        `[email] Sent ${input.logLabel} to ${input.to}` +
+        `[email] Sent ${input.logLabel} via ${transport} to ${input.to}` +
           (result.id ? ` (id=${result.id})` : ""),
       );
     } catch (error) {
@@ -203,7 +259,8 @@ class EmailService {
       console.error(
         `[email] ${input.logLabel} details\n` +
           `  to: ${input.to}\n` +
-          `  link: ${input.logUrl}`,
+          `  link: ${input.logUrl}\n` +
+          `  transport: ${transport}`,
       );
 
       if (error instanceof EmailDeliveryError) {
@@ -216,30 +273,55 @@ class EmailService {
     }
   }
 
-  private async sendWithRetry(input: {
+  private async sendViaSmtp(input: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<{ id?: string }> {
+    const transporter = this.getSmtpTransporter();
+    if (!transporter) {
+      throw new EmailDeliveryError(
+        "SMTP is not configured.",
+        "SMTP_HOST/SMTP_USER/SMTP_PASS not set",
+      );
+    }
+
+    const info = await transporter.sendMail({
+      from: emailConfig.fromEmail,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+    });
+
+    return { id: typeof info.messageId === "string" ? info.messageId : undefined };
+  }
+
+  private async sendViaResendWithRetry(input: {
     to: string;
     subject: string;
     html: string;
     text: string;
   }): Promise<{ id?: string }> {
     try {
-      return await this.sendViaSdk(input);
+      return await this.sendViaResendSdk(input);
     } catch (firstError) {
       console.warn("[email] Primary Resend send failed, retrying via fetch:", firstError);
-      return this.sendViaFetch(input);
+      return this.sendViaResendFetch(input);
     }
   }
 
-  private async sendViaSdk(input: {
+  private async sendViaResendSdk(input: {
     to: string;
     subject: string;
     html: string;
     text: string;
   }): Promise<{ id?: string }> {
-    const client = this.getClient();
+    const client = this.getResendClient();
     if (!client) {
       throw new EmailDeliveryError(
-        "Email service is not configured. Set RESEND_API_KEY to send emails.",
+        "Email service is not configured. Set SMTP_* or RESEND_API_KEY.",
         "RESEND_API_KEY not set",
       );
     }
@@ -259,16 +341,24 @@ class EmailService {
     return { id: data?.id };
   }
 
-  private async sendViaFetch(input: {
+  private async sendViaResendFetch(input: {
     to: string;
     subject: string;
     html: string;
     text: string;
   }): Promise<{ id?: string }> {
+    if (!isResendConfigured() && !this.resolveResendApiKey()) {
+      throw new EmailDeliveryError(
+        "Email service is not configured. Set SMTP_* or RESEND_API_KEY.",
+        "RESEND_API_KEY not set",
+      );
+    }
+
+    const apiKey = this.resolveResendApiKey()!;
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${emailConfig.resendApiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
