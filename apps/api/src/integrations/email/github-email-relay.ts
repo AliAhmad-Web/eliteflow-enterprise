@@ -71,14 +71,16 @@ async function waitForWorkflowSuccess(input: {
   while (Date.now() < deadline) {
     const runs = await listRecentWorkflowRuns(input.repo, input.token);
 
-    const candidate =
-      trackedRunId !== null
-        ? runs.find((run) => run.id === trackedRunId)
-        : runs.find(
-            (run) =>
-              run.event === "repository_dispatch" &&
-              !input.knownRunIds.has(run.id),
-          );
+    let candidate: WorkflowRun | undefined;
+    if (trackedRunId !== null) {
+      candidate = runs.find((run) => run.id === trackedRunId);
+    } else {
+      candidate = runs.find(
+        (run) =>
+          run.event === "repository_dispatch" &&
+          !input.knownRunIds.has(run.id),
+      );
+    }
 
     if (candidate) {
       trackedRunId = candidate.id;
