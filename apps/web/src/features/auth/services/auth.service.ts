@@ -33,7 +33,8 @@ export const authService = {
     }>(`${AUTH_API_PREFIX}/signup`, {
       method: "POST",
       body: input,
-      timeoutMs: 60_000,
+      // Auth emails go through GitHub Actions relay; allow time for SMTP confirm.
+      timeoutMs: 120_000,
     });
   },
 
@@ -47,8 +48,8 @@ export const authService = {
     }>(`${AUTH_API_PREFIX}/login`, {
       method: "POST",
       body: input,
-      // Remote Postgres often needs >15s for auth + session writes.
-      timeoutMs: 60_000,
+      // Login may send OTP email via GitHub Actions relay (~SMTP confirm).
+      timeoutMs: 120_000,
     });
 
     if (data.tokens?.accessToken && data.user) {
@@ -68,8 +69,8 @@ export const authService = {
     }>(`${AUTH_API_PREFIX}/oauth/callback`, {
       method: "POST",
       body: input,
-      // OAuth completion hits remote DB + provider lookups; allow longer than default 15s.
-      timeoutMs: 60_000,
+      // OAuth completion may also send OTP email via Actions relay.
+      timeoutMs: 120_000,
     });
 
     if (data.tokens?.accessToken && data.user) {
@@ -151,6 +152,8 @@ export const authService = {
       {
         method: "POST",
         body: input,
+        // Password-reset email is confirmed via GitHub Actions SMTP relay.
+        timeoutMs: 120_000,
       },
     );
   },
@@ -171,6 +174,7 @@ export const authService = {
       {
         method: "POST",
         body: { email },
+        timeoutMs: 120_000,
       },
     );
   },
@@ -204,6 +208,7 @@ export const authService = {
       {
         method: "POST",
         body: { otpSessionId },
+        timeoutMs: 120_000,
       },
     );
   },

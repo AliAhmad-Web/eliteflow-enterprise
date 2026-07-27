@@ -252,7 +252,7 @@ class EmailService {
         transport === "gmail_api"
           ? await sendViaGmailApi(input)
           : transport === "github_relay"
-            ? await sendViaGithubEmailRelay(input)
+            ? await this.sendViaGithubRelayWithRetry(input)
             : transport === "smtp"
               ? await this.sendViaSmtp(input)
               : await this.sendViaResendWithRetry(input);
@@ -276,6 +276,23 @@ class EmailService {
       throw mapProviderError({
         message: error instanceof Error ? error.message : "Unknown email error",
       });
+    }
+  }
+
+  private async sendViaGithubRelayWithRetry(input: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<{ id?: string }> {
+    try {
+      return await sendViaGithubEmailRelay(input);
+    } catch (firstError) {
+      console.warn(
+        "[email] GitHub relay send failed, retrying once:",
+        firstError,
+      );
+      return sendViaGithubEmailRelay(input);
     }
   }
 

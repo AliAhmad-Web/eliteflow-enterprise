@@ -2,13 +2,15 @@
  * Dispatch transactional email to GitHub Actions (HTTPS).
  * Used when the API host blocks outbound SMTP (e.g. Railway → Gmail).
  *
- * Waits for the workflow run to complete so callers do not report success
- * when Gmail SMTP later fails inside Actions.
+ * Waits for the *new* workflow run (not a prior run) to complete so callers
+ * do not report success when Gmail SMTP later fails inside Actions.
  */
+import { randomBytes } from "node:crypto";
+
 import { emailConfig } from "../../config/email.config.js";
 
 const WORKFLOW_FILE = "send-transactional-email.yml";
-const POLL_INTERVAL_MS = 3_000;
+const POLL_INTERVAL_MS = 2_000;
 const POLL_TIMEOUT_MS = 90_000;
 
 export function isGithubEmailRelayConfigured(): boolean {
@@ -42,7 +44,7 @@ async function listRecentWorkflowRuns(
   token: string,
 ): Promise<WorkflowRun[]> {
   const response = await fetch(
-    `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=repository_dispatch&per_page=10`,
+    `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=repository_dispatch&per_page=15`,
     { headers: githubHeaders(token) },
   );
 
@@ -60,25 +62,26 @@ async function listRecentWorkflowRuns(
 async function waitForWorkflowSuccess(input: {
   repo: string;
   token: string;
-  dispatchedAtMs: number;
+  knownRunIds: Set<number>;
 }): Promise<{ id: string }> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
-  // Allow small clock skew between API host and GitHub.
-  const minCreatedAtMs = input.dispatchedAtMs - 15_000;
   let lastStatus = "pending";
+  let trackedRunId: number | null = null;
 
   while (Date.now() < deadline) {
     const runs = await listRecentWorkflowRuns(input.repo, input.token);
-    const candidate = runs.find((run) => {
-      const createdAtMs = Date.parse(run.created_at);
-      return (
-        run.event === "repository_dispatch" &&
-        Number.isFinite(createdAtMs) &&
-        createdAtMs >= minCreatedAtMs
-      );
-    });
+
+    const candidate =
+      trackedRunId !== null
+        ? runs.find((run) => run.id === trackedRunId)
+        : runs.find(
+            (run) =>
+              run.event === "repository_dispatch" &&
+              !input.knownRunIds.has(run.id),
+          );
 
     if (candidate) {
+      trackedRunId = candidate.id;
       lastStatus = `${candidate.status}:${candidate.conclusion ?? "none"}`;
       if (candidate.status === "completed") {
         if (candidate.conclusion === "success") {
@@ -110,7 +113,11 @@ export async function sendViaGithubEmailRelay(input: {
     throw new Error("GitHub email relay is not configured");
   }
 
-  const dispatchedAtMs = Date.now();
+  // Snapshot existing runs so we wait for *this* dispatch, not a prior success.
+  const existing = await listRecentWorkflowRuns(repo, token);
+  const knownRunIds = new Set(existing.map((run) => run.id));
+  const nonce = randomBytes(8).toString("hex");
+
   const response = await fetch(`https://api.github.com/repos/${repo}/dispatches`, {
     method: "POST",
     headers: githubHeaders(token),
@@ -119,8 +126,10 @@ export async function sendViaGithubEmailRelay(input: {
       client_payload: {
         to: input.to,
         subject: input.subject,
-        html: input.html,
-        text: input.text,
+        // Keep payloads compact — GitHub client_payload has a size ceiling.
+        html: input.html.slice(0, 40_000),
+        text: input.text.slice(0, 20_000),
+        nonce,
       },
     }),
   });
@@ -132,5 +141,5 @@ export async function sendViaGithubEmailRelay(input: {
     );
   }
 
-  return waitForWorkflowSuccess({ repo, token, dispatchedAtMs });
+  return waitForWorkflowSuccess({ repo, token, knownRunIds });
 }

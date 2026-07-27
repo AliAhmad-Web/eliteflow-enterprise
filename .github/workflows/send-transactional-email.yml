@@ -3,6 +3,9 @@ name: Send transactional email
 # Railway blocks outbound SMTP (connection timeout to smtp.gmail.com).
 # The API dispatches auth emails here over HTTPS; GitHub-hosted runners send
 # via Gmail SMTP using repo secrets (no custom domain required).
+#
+# Uses Python smtplib (preinstalled on runners) — avoids npm install latency
+# that previously caused browser/API client timeouts before mail completed.
 
 on:
   repository_dispatch:
@@ -14,7 +17,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Send mail via Gmail SMTP
-        uses: actions/github-script@v7
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -25,56 +27,79 @@ jobs:
           MAIL_SUBJECT: ${{ github.event.client_payload.subject }}
           MAIL_TEXT: ${{ github.event.client_payload.text }}
           MAIL_HTML: ${{ github.event.client_payload.html }}
-        with:
-          script: |
-            const { execSync } = require('node:child_process');
-            execSync('npm install nodemailer@7 --no-save', {
-              stdio: 'inherit',
-              cwd: process.env.RUNNER_TEMP,
-            });
-            const nodemailer = require(require('node:path').join(
-              process.env.RUNNER_TEMP,
-              'node_modules',
-              'nodemailer',
-            ));
+          MAIL_NONCE: ${{ github.event.client_payload.nonce }}
+        run: |
+          python3 <<'PY'
+          import json, os, re, smtplib, ssl
+          from email.message import EmailMessage
 
-            const host = (process.env.SMTP_HOST || '').trim();
-            const user = (process.env.SMTP_USER || '').trim();
-            const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
-            const from =
-              (process.env.EMAIL_FROM || '').trim() ||
-              (user ? `EliteFlow <${user}>` : '');
-            const to = (process.env.MAIL_TO || '').trim();
-            const subject = (process.env.MAIL_SUBJECT || '').trim();
-            const text = process.env.MAIL_TEXT || '';
-            const html = process.env.MAIL_HTML || text;
+          host = (os.environ.get("SMTP_HOST") or "").strip()
+          port = int((os.environ.get("SMTP_PORT") or "587").strip() or "587")
+          user = (os.environ.get("SMTP_USER") or "").strip()
+          # Gmail app passwords may be pasted with spaces
+          password = re.sub(r"\s+", "", os.environ.get("SMTP_PASS") or "")
+          from_addr = (os.environ.get("EMAIL_FROM") or "").strip() or (
+              f"EliteFlow <{user}>" if user else ""
+          )
+          to_addr = (os.environ.get("MAIL_TO") or "").strip()
+          subject = (os.environ.get("MAIL_SUBJECT") or "").strip()
+          text = os.environ.get("MAIL_TEXT") or ""
+          html = (os.environ.get("MAIL_HTML") or "").strip() or None
+          nonce = (os.environ.get("MAIL_NONCE") or "").strip()
 
-            if (!host || !user || !pass || !from || !to || !subject || !text) {
-              throw new Error(
-                'Missing SMTP secrets or mail payload (to/subject/text/from)',
-              );
-            }
+          missing = [
+              name
+              for name, value in (
+                  ("SMTP_HOST", host),
+                  ("SMTP_USER", user),
+                  ("SMTP_PASS", password),
+                  ("EMAIL_FROM", from_addr),
+                  ("MAIL_TO", to_addr),
+                  ("MAIL_SUBJECT", subject),
+                  ("MAIL_TEXT", text),
+              )
+              if not value
+          ]
+          if missing:
+              raise SystemExit(f"Missing SMTP secrets or mail payload: {', '.join(missing)}")
 
-            const transporter = nodemailer.createTransport({
-              host,
-              port: Number(process.env.SMTP_PORT || 587),
-              secure: false,
-              auth: { user, pass },
-            });
+          if not html:
+              # Minimal HTML fallback so clients that prefer HTML still render a link.
+              escaped = (
+                  text.replace("&", "&amp;")
+                  .replace("<", "&lt;")
+                  .replace(">", "&gt;")
+              )
+              html = (
+                  "<pre style=\"font-family:system-ui,sans-serif;white-space:pre-wrap\">"
+                  f"{escaped}</pre>"
+              )
 
-            await transporter.verify();
-            const info = await transporter.sendMail({
-              from,
-              to,
-              subject,
-              text,
-              html,
-            });
-            console.log(
-              JSON.stringify({
-                ok: true,
-                messageId: info.messageId || null,
-                response: info.response || null,
-                to,
-              }),
-            );
+          msg = EmailMessage()
+          msg["Subject"] = subject
+          msg["From"] = from_addr
+          msg["To"] = to_addr
+          if nonce:
+              msg["X-EliteFlow-Nonce"] = nonce
+          msg.set_content(text)
+          msg.add_alternative(html, subtype="html")
+
+          context = ssl.create_default_context()
+          with smtplib.SMTP(host, port, timeout=45) as smtp:
+              smtp.ehlo()
+              smtp.starttls(context=context)
+              smtp.ehlo()
+              smtp.login(user, password)
+              smtp.send_message(msg)
+
+          print(
+              json.dumps(
+                  {
+                      "ok": True,
+                      "to": to_addr,
+                      "subject": subject,
+                      "nonce": nonce or None,
+                  }
+              )
+          )
+          PY
