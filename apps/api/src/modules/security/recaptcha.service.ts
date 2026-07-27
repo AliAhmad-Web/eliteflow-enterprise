@@ -56,6 +56,14 @@ export class RecaptchaService {
       );
     }
 
+    // Optional ops-only bypass for production email delivery probes.
+    // Disabled unless E2E_CAPTCHA_BYPASS_TOKEN is explicitly configured.
+    const bypassToken = process.env.E2E_CAPTCHA_BYPASS_TOKEN?.trim();
+    if (bypassToken && input.token === bypassToken) {
+      console.warn("[recaptcha] Accepted E2E bypass token");
+      return;
+    }
+
     const secret = process.env.RECAPTCHA_SECRET_KEY!.trim();
     const body = new URLSearchParams({
       secret,
