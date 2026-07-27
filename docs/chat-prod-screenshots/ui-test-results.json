@@ -1,0 +1,52 @@
+{
+  "steps": [
+    {
+      "name": "api_login",
+      "ok": true,
+      "detail": "user=admin@eliteflow.dev"
+    },
+    {
+      "name": "api_login",
+      "ok": true,
+      "detail": "admin@eliteflow.dev"
+    },
+    {
+      "name": "login_page",
+      "ok": true,
+      "detail": "https://eliteflow-web.vercel.app/login"
+    },
+    {
+      "name": "messages_auth",
+      "ok": true,
+      "detail": "url=https://eliteflow-web.vercel.app/messages"
+    },
+    {
+      "name": "conversation_list",
+      "ok": true,
+      "detail": "sidebar/list visible markers"
+    },
+    {
+      "name": "mobile_viewport",
+      "ok": true,
+      "detail": "390x844"
+    },
+    {
+      "name": "open_conversation",
+      "ok": true,
+      "detail": "AI Discussion"
+    },
+    {
+      "name": "send_message_ui",
+      "ok": true,
+      "detail": "Live UI chat proof 1785159442"
+    }
+  ],
+  "screenshots": [
+    "01-login.png",
+    "02-after-login.png",
+    "03-messages-page.png",
+    "04-conversation-open.png",
+    "05-after-send.png",
+    "06-messages-mobile.png"
+  ]
+}

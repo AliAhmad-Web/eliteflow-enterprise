@@ -1,0 +1,388 @@
+﻿[
+  {
+    "id": "9fc0a7ec-09c1-4cea-9b8c-d8207f50b279",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/Ywd0atgAPTajAX29_2KtgbYhOFxUvnbxDTCIb5kczyI.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/Ywd0atgAPTajAX29_2KtgbYhOFxUvnbxDTCIb5kczyI.apk"
+    },
+    "fingerprint": {
+      "id": "019f9d01-598e-708e-9927-8edfb2d919c8",
+      "hash": "4a52f6f61bc2d6958d98068f1071979c9537aed7"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/9fc0a7ec-09c1-4cea-9b8c-d8207f50b279/2026-07-26T05%3A59%3A04Z-cad1aeb6-fb5b-4b25-a04c-7053d0f94720.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=87edc11a72e9b8f8134c4cef0282d60b35e392d74d2661c724988082ef5d41658a0daf4ebc8cb2ecebf2d940fba00757afa9f42a361d477c028fe667d3b0a7c819e6b21431e13d1327afe69efa1f1145a1e74e68aed46e45cce78a058497ae52165073fdbe37320be17d41b1ca7444b3a7e3288853740381c157a6f409d1803166260932cf695192e1626020c8d2a0effc552d24e702e808d51b2abfb9e03922a458e2d6f9471e273271b51536ef86a2fa2eece247273ef9e0470fde799811ef58c900ad559d52d9f4f5dc82b7233c961d38c7c1348276e16dae48c986de0d034f592375720f185f7ea9725e3d4377bd62ae1d36fb073aa5129bfb954f87d03f"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "12",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-26T05:58:59.171Z",
+    "updatedAt": "2026-07-26T06:11:58.592Z",
+    "completedAt": "2026-07-26T06:11:58.417Z",
+    "expirationDate": "2026-08-09T05:58:59.205Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4874,
+      "buildQueueTime": 4601,
+      "buildDuration": 769771
+    }
+  },
+  {
+    "id": "4959e71e-3e14-4c8e-97dd-3caac98fcf3b",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/IVyYanFfBYKqEL1K2IlhiVBKrEaQyyxyDOX2ie2DU70.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/IVyYanFfBYKqEL1K2IlhiVBKrEaQyyxyDOX2ie2DU70.apk"
+    },
+    "fingerprint": {
+      "id": "019f9acd-23b7-74f7-854a-cf9caa330356",
+      "hash": "ceb1f6d8e6b17420e2e62cebd9e0985551a565da"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/4959e71e-3e14-4c8e-97dd-3caac98fcf3b/2026-07-25T19%3A42%3A44Z-978d74d3-3418-4530-a71b-da12f2a49dd4.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=652c872ea9bd73cc345bac204c03675c3a22ea7964bde6b2e0e3fc11e89fbe5c11d3dbb21f0727fa2cb8fc9addc1254b063b9c45df69b5f5e4b80d8089573427f33f73120fea38409ff9be776fe31492e22ca13d1d4ede3406d1b49f85e24ef52182fa6d881ce4cbd515aca4fd7f7cfcd8c9a951b726336bcbfef5c74a9c3b112a4d7dc3ef1bbf13844a5f32cbe4d1c7291e8375833cd435224e3a438461a606eae44860ebcf428b441766c6f9683876783dd22c49a8a6130ab24f856ef7a10a565469f58ad194be8dee980b089611eeea0b1cb466d4daf5e5882e880a7beb12ba806ef281b0b7f76e56c474f11ced4beb96e033364988db844de4280a767e01"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "11",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-25T19:42:43.032Z",
+    "updatedAt": "2026-07-25T23:01:35.002Z",
+    "completedAt": "2026-07-25T19:58:50.548Z",
+    "expirationDate": "2026-08-08T19:42:43.115Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 1112,
+      "buildQueueTime": 4894,
+      "buildDuration": 961510
+    }
+  },
+  {
+    "id": "09be29fd-ee65-429c-bf41-18b4755a7b89",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/yEP67398hHHRSKIonFcY6Z3sTwI_rXHiGWRi6FFr8BE.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/yEP67398hHHRSKIonFcY6Z3sTwI_rXHiGWRi6FFr8BE.apk"
+    },
+    "fingerprint": {
+      "id": "019f9a7b-3cdb-7f37-a4d1-cc2b654c7f19",
+      "hash": "2ab96080e19a7803be18b1353c63ca0a2b33671c"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/09be29fd-ee65-429c-bf41-18b4755a7b89/2026-07-25T18%3A13%3A19Z-fba7d8be-be3d-496b-ac63-c48bafa1f5b5.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=8fd4beda92c110bd6bb28977f3266e197e946447a17c189eab95acdd456b3b54e062ec15fbeee25c4176d16ebcd18f39303a2aab51e1a6445b08061b4b738394bbee238156817b620e7d87d6d28f1a4650331b5f3c5e40b465bd3ad106b5502a4a2d76d7f6c15e6e6acddd5aa195af848002f8ab5339573bf54b6e44241beee048a56571b4f6eaa638eaf8ab409618f2be44400c8a3556154f33ff732fadb325b6dbadeeb00d8c21b4942d169bb1a6200bb7e0c83e565ef5f28e372fb2dfdf93f083f0e510a975fcecc9eebd3e68aac670f950ef9191578cd0267395993598a967e0c306998a1c9bfdc637de78b1356bbda729166feda1723fb3c1a0c5aad7aa"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "10",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-25T18:13:15.571Z",
+    "updatedAt": "2026-07-25T22:00:56.143Z",
+    "completedAt": "2026-07-25T18:33:54.222Z",
+    "expirationDate": "2026-08-08T18:13:15.605Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3497,
+      "buildQueueTime": 4567,
+      "buildDuration": 1230587
+    }
+  },
+  {
+    "id": "f2e8ce6a-cbc6-4923-8922-4ab1fa7bbbef",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+      "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "019f9a74-5e25-7e4f-8a1f-2707b80a55bb",
+      "hash": "3c152a8504b58678a97f89abfba858a7fc4d3611"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/f2e8ce6a-cbc6-4923-8922-4ab1fa7bbbef/2026-07-25T18%3A05%3A49Z-2a0cd0e3-3efe-4652-83d0-52e54dd2ef87.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5bac46ecbdee5fafaa46d14f65f422a3edbbdd4e2064073f84b9a205ba0ac8c7146b018e60f371c66168fe0f454f6bccaf8fd41d167cf28d909dcd88a74ff6b96b68adb91a57e31a12f83e7db4777064a9767d6f8e4012f2b7f171b6e886bb85882a7249be54da6047ea69aa4804989eb71734eb2c803f3b2f33f326224f6d934ab4738df4ac2d6fa74616487631eff6022ecc42f02be66aa56c02603f6eac732489139f7b70276c7cf33b5bd19086309c91c6b8efc8d26724782fa243d90015a94c7b561dc98b997ccb2aa86817864e8dd81d44d2b6109a9cf37a36cc8da541f0ff4c828c72f467fbad814efc897b863db4d04a0d6644206a3e726e825e7fb6"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "9",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-25T18:05:45.339Z",
+    "updatedAt": "2026-07-25T22:00:26.228Z",
+    "completedAt": "2026-07-25T18:08:51.128Z",
+    "expirationDate": "2026-08-08T18:05:45.371Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3763,
+      "buildQueueTime": 4386,
+      "buildDuration": 177640
+    }
+  },
+  {
+    "id": "771b41fe-e589-40b9-837d-7d3bbbd127e2",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/M5xgF0-CF0hRj5roB_70OG5sO0a8aFqdcAFv6tvScU0.apk",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/M5xgF0-CF0hRj5roB_70OG5sO0a8aFqdcAFv6tvScU0.apk"
+    },
+    "fingerprint": {
+      "id": "019f99e4-1037-7cc1-9e56-8926cfa36fc8",
+      "hash": "48506915704a0d878ecbe2efd0d58b8aceed685d"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/771b41fe-e589-40b9-837d-7d3bbbd127e2/2026-07-25T15%3A28%3A09Z-2f6d04af-af79-4bd9-9b8e-e18767f629cd.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=a8948e22fc4a150d531b47e42ef6e519155a5f29ace5f25f6bfd9b7295c33202f4ed55a3e6704567ed667329f13e3a8b5ed969f87f697d2517d8591da4bac17b1ffbc61ff77112cc8eab1dfacc9d56c5d35276ccf49489ec9c87304fc58650359d0a1c90e964e8ca0517c1cb1b6a22da29d72616fd11aa9f6de29f88244c5d44ca4b00566eb6877f5fc3ab6a4d9e4a96d8b942c5afac728bb60f0c9956d7f349c9046db27409730a7e45493e5c8fd582c14565e2891e3adb6988db5f1491dd88b5cfa8c88548b1e90f1943d20d864b460ff49af352a88376157afb711a99b9c079c6b0ed4426176e048670d6c31ec849433a1403dc2000d239915bdfa7784e99"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "8",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-25T15:28:08.077Z",
+    "updatedAt": "2026-07-25T19:00:59.450Z",
+    "completedAt": "2026-07-25T15:41:32.836Z",
+    "expirationDate": "2026-08-08T15:28:08.237Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 1147,
+      "buildQueueTime": 4605,
+      "buildDuration": 799007
+    }
+  },
+  {
+    "id": "fb67134d-710b-4ff9-b163-80fe28d248d2",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "UNKNOWN_ERROR",
+      "message": "Unknown error. See logs of the Install dependencies build phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "019f99e2-7ce7-7629-b2c9-c48a1a0666d7",
+      "hash": "ecdf657e3990c25800a8e0c19c962ea201b7beee"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/fb67134d-710b-4ff9-b163-80fe28d248d2/2026-07-25T15%3A26%3A29Z-9e11800c-fa5d-41cc-b6cc-26b47b2973ca.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=cae64a22c032e05c78a61d63f12366a58806d4cc04468d344cb44d9d5ed0ee1c47d0a395548ff9912ef45d1e6cf5909ea82f54d82903955982d2e1fc46814c6e13784f9d9b59e924eb6f6e95a007b2eb6aad560303cdd68391fd64e41639f571f0ad3a8a14cf3495e3a65e87ea3755dbd0870e8ed8c1f75245c80a9b749db2be32668f3ead62a5422bd8d2895ea4bc5d971ee838b561e295fd497a3f395e68b97e6ae8c24490683fd4e920ad5321bdfea5644d264a9c32612620b11ac660ab42143ffafa82e5b61d1f72ad0910f9b0a5c7a6d43968a07d94e5d607d378f50194af7d6559599eae3baec00723494d8c8052802f28f8e555386b4dc8e26a72f99a"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "7",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-25T15:26:24.947Z",
+    "updatedAt": "2026-07-25T19:00:44.093Z",
+    "completedAt": "2026-07-25T15:26:52.411Z",
+    "expirationDate": "2026-08-08T15:26:24.993Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 4107,
+      "buildQueueTime": 4441,
+      "buildDuration": 18916
+    }
+  },
+  {
+    "id": "14342505-9d8a-4f2c-8ba6-d0208fcef283",
+    "status": "ERRORED",
+    "platform": "ANDROID",
+    "error": {
+      "errorCode": "UNKNOWN_ERROR",
+      "message": "Unknown error. See logs of the Bundle JavaScript build phase for more information."
+    },
+    "artifacts": {},
+    "fingerprint": {
+      "id": "019f99db-0a6e-740e-9ef1-8410f1966bb8",
+      "hash": "be79a66734f667c29d268110997f5dbfa047f3ba"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/14342505-9d8a-4f2c-8ba6-d0208fcef283/2026-07-25T15%3A18%3A19Z-ecbfa92b-f814-423b-8151-495425954a84.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=75b4d7ab3bfdd66a5dc1c8deb14e74dcf65f1b8de8bb0f3b4aa276f4bf0dfb017250a53d3c6e8310197f0cfd84a7f110b931a81692deab16fb4546e9b78ed005df2816b44c092432eaf07149d3eb3cd1e7ad9788704fa3869240cba40707f1c0745e85baec89973dff38c7e329fd1fc98154ee70fd762ce2d449eb05355f14f8b4a420939c6de3ea73899829f7c7b6aef4d55ec2454be7bfdb8fee02b206c3fc0f8ab2b845f9a8b85e59653bdbd51a69c2edddaed0fa01423210936809aae1d1ce89f14d697a7752a09f423708bc17b4ac98817c63e9eca174e2851f880e57dd6ee7b7c2b940248247633cadfec13584057fff9d70e04b97e949e67661a1a4a8"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "INTERNAL",
+    "buildProfile": "production-apk",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "5",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "9d074d31c4c8b86686036f34eeb69a55a75e5fa1",
+    "gitCommitMessage": "Use SameSite=None for production refresh cookies.\n\nCross-origin Vercel to Railway credentialed fetches require None+Secure so the browser stores the httpOnly refresh cookie.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL",
+    "createdAt": "2026-07-25T15:18:16.819Z",
+    "updatedAt": "2026-07-25T19:00:36.622Z",
+    "completedAt": "2026-07-25T15:19:49.445Z",
+    "expirationDate": "2026-08-08T15:18:16.937Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 2268,
+      "buildQueueTime": 4539,
+      "buildDuration": 85819
+    }
+  },
+  {
+    "id": "5d79251c-93bd-4ee0-bf47-64f88db65418",
+    "status": "FINISHED",
+    "platform": "ANDROID",
+    "artifacts": {
+      "buildUrl": "https://expo.dev/artifacts/eas/ICdm3r6ZEw-k7JXkZOc-dPz-kzS89-hNdAerz2P385E.aab",
+      "applicationArchiveUrl": "https://expo.dev/artifacts/eas/ICdm3r6ZEw-k7JXkZOc-dPz-kzS89-hNdAerz2P385E.aab"
+    },
+    "fingerprint": {
+      "id": "019f9851-dfa7-7409-a777-39eb013b7025",
+      "hash": "6934d3bb74c3d71a9bf7ddadd1953365e173f56a"
+    },
+    "initiatingActor": {
+      "id": "e8ab3b5a-4b4b-49f6-9afb-bc00a5ae9853",
+      "displayName": "aliahmad_web"
+    },
+    "logFiles": [
+      "https://storage.googleapis.com/eas-workflows-production/logs/4c37822c-bb9e-4b21-98d9-7a68ca38f68e/5d79251c-93bd-4ee0-bf47-64f88db65418/2026-07-25T08%3A18%3A14Z-d611584a-349e-4a41-aa35-cd1f6d6b9d67.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260726%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260726T093547Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=7b7385fb0d97163ecb7e695b6a68d8dccc45af91807d6fc4109179c7f7f3533981570eba558fccbf813584f638aaca142adfc7d1d7e9ba02b5b299a919a9c6b507705138e97bf501ddb700342bf9b00b085db488bb81385832c488b343f3b72db2982efcbada94c15ec98f44de5252cb1fe7d3df7e38d575ae3f24a5dfadf26d7f795e58360fec8842dff6bff890e4fa5dbd5dce88b6c7d52eb41312789b0a1bf55fc3a809c62c8c944cdaed25357a71685c4acbc99773cd0ca74029e5323ce6dc22041b2ba0b023d1de2c3229e703336b86b0c33911b4aa76d6262f85f644f081fdf5bd80f46ca0b99b053353f3e2b4f088f4b0efc257d1da54a1006d449e20"
+    ],
+    "project": {
+      "id": "4c37822c-bb9e-4b21-98d9-7a68ca38f68e",
+      "name": "EliteFlow",
+      "slug": "eliteflow",
+      "ownerAccount": {
+        "id": "fd1176d8-ed13-4e5a-ad0b-74befd4ef098",
+        "name": "aliahmadwebs-team"
+      }
+    },
+    "distribution": "STORE",
+    "buildProfile": "production",
+    "sdkVersion": "57.0.0",
+    "appVersion": "1.0.0",
+    "appBuildVersion": "4",
+    "runtimeVersion": "1.0.0",
+    "gitCommitHash": "deefd7f802dd4895f801d8f67d87d0d4f09086a9",
+    "gitCommitMessage": "Initialize repository for EAS monorepo builds.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+    "priority": "NORMAL_PLUS",
+    "createdAt": "2026-07-25T08:18:10.259Z",
+    "updatedAt": "2026-07-25T12:00:38.758Z",
+    "completedAt": "2026-07-25T08:36:32.793Z",
+    "expirationDate": "2026-08-24T08:18:10.304Z",
+    "isForIosSimulator": false,
+    "metrics": {
+      "buildWaitTime": 3815,
+      "buildQueueTime": 4606,
+      "buildDuration": 1094113
+    }
+  }
+]
