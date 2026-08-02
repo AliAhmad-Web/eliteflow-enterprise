@@ -23,7 +23,17 @@ import {
   toAiDocumentDto,
   toAiMessageDto,
 } from "./ai.types.js";
-import { aiProvider } from "./providers/index.js";
+import {
+  isAiFoundationOrchestratorEnabled,
+  promptOrchestrator,
+  toAiGenerateParams,
+  type AiMemoryMessage,
+  type AiRuntimePipelineState,
+} from "./foundation/index.js";
+import {
+  aiProvider,
+  type AiGenerateParams,
+} from "./providers/index.js";
 import { apiKeyProviderService } from "../integrations/api-keys/api-key-provider.service.js";
 
 export interface AiActor {
@@ -122,6 +132,26 @@ async function prepareChatContext(input: AiChatRequestInput, actor: AiActor) {
   };
 }
 
+async function loadPriorConversationHistory(
+  conversationId: string | undefined,
+  userId: string,
+): Promise<AiMemoryMessage[]> {
+  if (!conversationId) return [];
+
+  const conversation = await aiRepository.getConversation(
+    conversationId,
+    userId,
+  );
+  if (!conversation) {
+    throw new AiError("Conversation not found", 404, AI_ERROR_CODES.NOT_FOUND);
+  }
+
+  return (conversation.messages ?? []).map((message) => ({
+    role: message.role as AiMemoryMessage["role"],
+    content: message.content,
+  }));
+}
+
 export class AiService {
   async listConversations(
     query: ListAiConversationsQueryInput,
@@ -183,16 +213,113 @@ export class AiService {
     input: AiChatRequestInput,
     actor: AiActor,
   ): Promise<AiChatResponseDto> {
+    if (!isAiFoundationOrchestratorEnabled()) {
+      return this.executeChat(input, actor);
+    }
+
+    const conversationHistory = await loadPriorConversationHistory(
+      input.conversationId,
+      actor.userId,
+    );
+
+    return promptOrchestrator.runChat(
+      (state) => this.executeChat(input, actor, state),
+      {
+        userId: actor.userId,
+        conversationHistory,
+        prompt: input.message,
+        mode: input.mode,
+        contextHints: {
+          surface: "ASSISTANT",
+          module: "ai",
+          conversationId: input.conversationId ?? null,
+          mode: input.mode,
+          role: actor.role,
+          email: actor.email,
+          entityRefs: [],
+        },
+      },
+    );
+  }
+
+  async chatStream(
+    input: AiChatRequestInput,
+    actor: AiActor,
+    handlers: AiChatStreamHandlers = {},
+  ): Promise<AiChatResponseDto> {
+    if (!isAiFoundationOrchestratorEnabled()) {
+      return this.executeChatStream(input, actor, handlers);
+    }
+
+    const conversationHistory = await loadPriorConversationHistory(
+      input.conversationId,
+      actor.userId,
+    );
+
+    return promptOrchestrator.runChatStream(
+      (state) => this.executeChatStream(input, actor, handlers, state),
+      {
+        userId: actor.userId,
+        conversationHistory,
+        prompt: input.message,
+        mode: input.mode,
+        streaming: true,
+        contextHints: {
+          surface: "ASSISTANT",
+          module: "ai",
+          conversationId: input.conversationId ?? null,
+          mode: input.mode,
+          role: actor.role,
+          email: actor.email,
+          entityRefs: [],
+        },
+      },
+    );
+  }
+
+  /**
+   * Resolve generate params from Foundation providerRequest when present;
+   * otherwise use the legacy input + conversation history path.
+   */
+  private resolveChatGenerateParams(
+    input: AiChatRequestInput,
+    context: Awaited<ReturnType<typeof prepareChatContext>>,
+    pipelineState?: AiRuntimePipelineState<AiChatResponseDto>,
+  ): AiGenerateParams {
+    const providerRequest = pipelineState?.providerRequest;
+    if (providerRequest) {
+      return toAiGenerateParams(providerRequest, input.mode);
+    }
+
+    return {
+      mode: input.mode,
+      prompt: input.message,
+      history: [
+        ...(pipelineState?.providerHistory ?? context.providerHistory),
+      ],
+    };
+  }
+
+  /**
+   * Existing non-streaming chat implementation.
+   * When pipeline state includes providerRequest, consumes Foundation params.
+   */
+  private async executeChat(
+    input: AiChatRequestInput,
+    actor: AiActor,
+    pipelineState?: AiRuntimePipelineState<AiChatResponseDto>,
+  ): Promise<AiChatResponseDto> {
     const context = await prepareChatContext(input, actor);
+    const generateParams = this.resolveChatGenerateParams(
+      input,
+      context,
+      pipelineState,
+    );
 
     let generated;
     const started = Date.now();
     try {
-      generated = await aiProvider.generate({
-        mode: input.mode,
-        prompt: input.message,
-        history: context.providerHistory,
-      });
+      generated = await aiProvider.generate(generateParams);
     } catch (error) {
       throw new AiError(
         error instanceof Error
@@ -213,12 +340,22 @@ export class AiService {
     });
   }
 
-  async chatStream(
+  /**
+   * Existing streaming chat implementation.
+   * When pipeline state includes providerRequest, consumes Foundation params.
+   */
+  private async executeChatStream(
     input: AiChatRequestInput,
     actor: AiActor,
     handlers: AiChatStreamHandlers = {},
+    pipelineState?: AiRuntimePipelineState<AiChatResponseDto>,
   ): Promise<AiChatResponseDto> {
     const context = await prepareChatContext(input, actor);
+    const generateParams = this.resolveChatGenerateParams(
+      input,
+      context,
+      pipelineState,
+    );
 
     await handlers.onMeta?.({
       conversationId: context.conversationId,
@@ -229,24 +366,13 @@ export class AiService {
     let generated;
     try {
       generated = aiProvider.generateStream
-        ? await aiProvider.generateStream(
-            {
-              mode: input.mode,
-              prompt: input.message,
-              history: context.providerHistory,
-            },
-            { onDelta: handlers.onDelta },
-          )
-        : await aiProvider
-            .generate({
-              mode: input.mode,
-              prompt: input.message,
-              history: context.providerHistory,
-            })
-            .then(async (result) => {
-              await handlers.onDelta?.(result.content);
-              return result;
-            });
+        ? await aiProvider.generateStream(generateParams, {
+            onDelta: handlers.onDelta,
+          })
+        : await aiProvider.generate(generateParams).then(async (result) => {
+            await handlers.onDelta?.(result.content);
+            return result;
+          });
     } catch (error) {
       throw new AiError(
         error instanceof Error

@@ -109,6 +109,7 @@ export type {
   AiConversation,
   AiMessage,
   AiDocument,
+  AiMemoryRecord,
   Folder,
   ManagedFile,
   FileVersion,

@@ -1,70 +1,108 @@
 "use client";
 
 import {
-  AI_DOCUMENT_TYPES,
   type AiDocument,
   type AiDocumentTypeValue,
   type ListAiDocumentsQueryInput,
+  type UpdateAiDocumentInput,
 } from "@enterprise/shared";
 import {
-  Copy,
-  Download,
-  FileText,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-} from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { EmptyState } from "@/components/common/feedback/empty-state";
-import { ErrorState } from "@/components/common/feedback/error-state";
-import { LoadingState } from "@/components/common/feedback/loading-state";
-import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
+import {
+  usePerformanceMemo,
+  usePerformanceStableCallback,
+  useRenderProfiler,
+} from "@/features/performance";
 import { ApiClientError } from "@/services/api/api-error";
-import { cn } from "@/lib/utils";
 
+import {
+  isAiDocsAutosaveEnabled,
+  isAiDocsCreateManualEnabled,
+  isAiDocsDeepLinkFetchEnabled,
+  isAiDocsEnhancedFeedbackEnabled,
+  isAiDocsEnterpriseShellEnabled,
+  isAiDocsExportEnhancedEnabled,
+  isAiDocsLivePreviewEnabled,
+  isAiDocsSkeletonsEnabled,
+  isAiDocsTemplatePresetsEnabled,
+} from "../feature-flags";
 import {
   useCreateAiDocument,
   useDeleteAiDocument,
   useUpdateAiDocument,
 } from "../hooks/use-ai-mutations";
-import { useAiDocuments } from "../hooks/use-ai";
-import { AI_DOCUMENT_TYPE_LABELS } from "../types/ai.types";
-import { MarkdownView } from "./markdown-view";
+import { useAiDocument, useAiDocuments } from "../hooks/use-ai";
+import type { AiDocumentCreateMode } from "./ai-document-create-dialog";
+import type { AiDocumentAutosaveStatus } from "./ai-document-editor";
+import {
+  AI_DOCUMENT_TEMPLATES,
+  type AiDocumentTemplate,
+} from "./ai-document-templates";
+import {
+  buildAiDocumentExportFilename,
+  buildAiDocumentLegacyExportFilename,
+  downloadAiDocumentMarkdown,
+  printAiDocument,
+} from "./ai-documents-export";
+import type { AiDocumentsShellProps } from "./ai-documents-enterprise-shell";
+import { AiDocumentsEnterpriseShell } from "./ai-documents-enterprise-shell";
+import { AiDocumentsLegacyLayout } from "./ai-documents-legacy-layout";
+import { AiUiToastViewport, useAiUiToasts } from "./ai-ui-toast";
 
-const selectClassName =
-  "flex h-10 w-full rounded-lg border border-input bg-background/80 px-3 py-2 text-sm text-foreground shadow-[var(--shadow-xs)] transition-all focus-visible:outline-none focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring/50";
+const AUTOSAVE_DEBOUNCE_MS = 1500;
+const MANUAL_CREATE_PROMPT_FALLBACK = "Manually authored document";
 
+/**
+ * AI Documents orchestration layer.
+ * Owns React Query, mutations, dialogs, filters, search, pagination, handlers.
+ * Phase 2 UX enhancements are opt-in via AI_DOCS_* flags (default OFF).
+ */
 export function AiDocumentsPageContent() {
+  useRenderProfiler("AiDocumentsPageContent");
+
+  const enterpriseShell = isAiDocsEnterpriseShellEnabled();
+  const deepLinkFetch = isAiDocsDeepLinkFetchEnabled();
+  const createManual = isAiDocsCreateManualEnabled();
+  const livePreview = isAiDocsLivePreviewEnabled();
+  const templatePresets = isAiDocsTemplatePresetsEnabled();
+  const exportEnhanced = isAiDocsExportEnhancedEnabled();
+  const autosave = isAiDocsAutosaveEnabled();
+  const skeletons = isAiDocsSkeletonsEnabled();
+  const enhancedFeedback = isAiDocsEnhancedFeedbackEnabled();
+
+  const useModularShell =
+    enterpriseShell ||
+    deepLinkFetch ||
+    createManual ||
+    livePreview ||
+    templatePresets ||
+    exportEnhanced ||
+    autosave ||
+    skeletons ||
+    enhancedFeedback;
+
+  const { toasts, pushToast, dismiss } = useAiUiToasts();
+
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [type, setType] = useState<AiDocumentTypeValue | "ALL">("ALL");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
-  const deepLink = useEntityDeepLink((openId) => setViewId(openId));
+  /** Immediate document for the viewer (avoids empty sheet while list refetch races). */
+  const [viewedDocument, setViewedDocument] = useState<AiDocument | null>(null);
+  const deepLink = useEntityDeepLink((openId) => {
+    setViewedDocument(null);
+    setViewId(openId);
+  });
   const [editDoc, setEditDoc] = useState<AiDocument | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<AiDocument | null>(null);
 
@@ -72,8 +110,28 @@ export function AiDocumentsPageContent() {
     useState<AiDocumentTypeValue>("PROPOSAL");
   const [createTitle, setCreateTitle] = useState("");
   const [createPrompt, setCreatePrompt] = useState("");
+  const [createContent, setCreateContent] = useState("");
+  const [createMode, setCreateMode] =
+    useState<AiDocumentCreateMode>("generate");
+
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [autosaveStatus, setAutosaveStatus] =
+    useState<AiDocumentAutosaveStatus>("idle");
+
+  const editBaselineRef = useRef({ title: "", content: "" });
+  const autosaveTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const pendingAutosaveRef = useRef(false);
+  const editDocRef = useRef<AiDocument | null>(null);
+  const editTitleRef = useRef(editTitle);
+  const editContentRef = useRef(editContent);
+
+  useEffect(() => {
+    editDocRef.current = editDoc;
+    editTitleRef.current = editTitle;
+    editContentRef.current = editContent;
+  }, [editDoc, editTitle, editContent]);
 
   const query = useMemo<ListAiDocumentsQueryInput>(
     () => ({
@@ -86,49 +144,206 @@ export function AiDocumentsPageContent() {
   );
 
   const documentsQuery = useAiDocuments(query);
+  const documents = documentsQuery.data?.items ?? [];
+  const listActiveDoc =
+    documents.find((document) => document.id === viewId) ?? null;
+  const seededViewDoc =
+    viewedDocument?.id === viewId ? viewedDocument : null;
+  const needsViewFetch = Boolean(
+    viewId &&
+      !seededViewDoc &&
+      (deepLinkFetch || !listActiveDoc),
+  );
+  const fetchedDocumentQuery = useAiDocument(needsViewFetch ? viewId : null);
   const createMutation = useCreateAiDocument();
   const updateMutation = useUpdateAiDocument();
   const deleteMutation = useDeleteAiDocument();
 
-  const documents = documentsQuery.data?.items ?? [];
   const pagination = documentsQuery.data?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
+
   const activeDoc =
-    documents.find((document) => document.id === viewId) ?? null;
+    seededViewDoc ?? fetchedDocumentQuery.data ?? listActiveDoc;
+
+  const clearAutosaveTimer = useCallback(() => {
+    if (autosaveTimerRef.current !== null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+  }, []);
+
+  const buildChangedUpdateInput = useCallback((): UpdateAiDocumentInput | null => {
+    const baseline = editBaselineRef.current;
+    const nextTitle = editTitleRef.current.trim();
+    const nextContent = editContentRef.current;
+    const input: UpdateAiDocumentInput = {};
+
+    if (nextTitle !== baseline.title.trim() && nextTitle.length > 0) {
+      input.title = nextTitle;
+    }
+    if (nextContent !== baseline.content && nextContent.trim().length > 0) {
+      input.content = nextContent;
+    }
+
+    return Object.keys(input).length > 0 ? input : null;
+  }, []);
+
+  // Refs + self-reentry for pending autosave — intentional; Compiler cannot preserve.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- autosave flush
+  const flushAutosave = useCallback(async () => {
+    const document = editDocRef.current;
+    if (!document || !autosave) return;
+
+    const input = buildChangedUpdateInput();
+    if (!input) {
+      setAutosaveStatus("idle");
+      return;
+    }
+
+    if (saveInFlightRef.current) {
+      pendingAutosaveRef.current = true;
+      return;
+    }
+
+    saveInFlightRef.current = true;
+    setAutosaveStatus("saving");
+
+    try {
+      const updated = await updateMutation.mutateAsync({
+        id: document.id,
+        input,
+      });
+      editBaselineRef.current = {
+        title: updated.title,
+        content: updated.content,
+      };
+      editDocRef.current = updated;
+      setEditDoc(updated);
+      setAutosaveStatus("saved");
+    } catch {
+      setAutosaveStatus("error");
+    } finally {
+      saveInFlightRef.current = false;
+      if (pendingAutosaveRef.current) {
+        pendingAutosaveRef.current = false;
+        void flushAutosave();
+      }
+    }
+  }, [autosave, buildChangedUpdateInput, updateMutation]);
+
+  const scheduleAutosave = useCallback(() => {
+    if (!autosave || !editDocRef.current) return;
+    setAutosaveStatus("dirty");
+    clearAutosaveTimer();
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      void flushAutosave();
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }, [autosave, clearAutosaveTimer, flushAutosave]);
+
+  useEffect(() => {
+    return () => {
+      clearAutosaveTimer();
+    };
+  }, [clearAutosaveTimer]);
+
+  const resetCreateForm = () => {
+    setCreateTitle("");
+    setCreatePrompt("");
+    setCreateContent("");
+    setCreateMode("generate");
+    setCreateType("PROPOSAL");
+  };
 
   const handleCreate = async () => {
+    const isManual = createManual && createMode === "manual";
     try {
-      const created = await createMutation.mutateAsync({
-        type: createType,
-        title: createTitle,
-        prompt: createPrompt,
-        generate: true,
-      });
+      const created = await createMutation.mutateAsync(
+        isManual
+          ? {
+              type: createType,
+              title: createTitle,
+              prompt: createPrompt.trim() || MANUAL_CREATE_PROMPT_FALLBACK,
+              content: createContent,
+              generate: false,
+            }
+          : {
+              type: createType,
+              title: createTitle,
+              prompt: createPrompt,
+              generate: true,
+            },
+      );
       setCreateOpen(false);
-      setCreateTitle("");
-      setCreatePrompt("");
+      resetCreateForm();
+      setType("ALL");
+      setPage(1);
+      setViewedDocument(created);
       setViewId(created.id);
-    } catch {
-      // surfaced below
+      if (enhancedFeedback) {
+        pushToast(
+          isManual ? "Document created" : "Document generated",
+          "success",
+        );
+      }
+    } catch (error) {
+      if (enhancedFeedback) {
+        pushToast(
+          error instanceof Error ? error.message : "Create failed",
+          "error",
+        );
+      }
     }
   };
 
   const openEdit = (document: AiDocument) => {
+    clearAutosaveTimer();
+    pendingAutosaveRef.current = false;
     setEditDoc(document);
     setEditTitle(document.title);
     setEditContent(document.content);
+    editBaselineRef.current = {
+      title: document.title,
+      content: document.content,
+    };
+    setAutosaveStatus("idle");
+  };
+
+  const handleEditTitleChange = (value: string) => {
+    setEditTitle(value);
+    scheduleAutosave();
+  };
+
+  const handleEditContentChange = (value: string) => {
+    setEditContent(value);
+    scheduleAutosave();
   };
 
   const handleUpdate = async () => {
     if (!editDoc) return;
+    clearAutosaveTimer();
+    pendingAutosaveRef.current = false;
+
+    const input = buildChangedUpdateInput() ?? {
+      title: editTitle.trim() || editDoc.title,
+      content: editContent.trim() ? editContent : editDoc.content,
+    };
+
     try {
       await updateMutation.mutateAsync({
         id: editDoc.id,
-        input: { title: editTitle, content: editContent },
+        input,
       });
       setEditDoc(null);
-    } catch {
-      // surfaced below
+      setAutosaveStatus("idle");
+      if (enhancedFeedback) pushToast("Document saved", "success");
+    } catch (error) {
+      if (enhancedFeedback) {
+        pushToast(
+          error instanceof Error ? error.message : "Save failed",
+          "error",
+        );
+      }
     }
   };
 
@@ -136,425 +351,319 @@ export function AiDocumentsPageContent() {
     if (!deleteDoc) return;
     try {
       await deleteMutation.mutateAsync(deleteDoc.id);
-      if (viewId === deleteDoc.id) setViewId(null);
+      if (viewId === deleteDoc.id) {
+        setViewId(null);
+        setViewedDocument(null);
+      }
       setDeleteDoc(null);
-    } catch {
-      // surfaced below
+      if (enhancedFeedback) pushToast("Document deleted", "success");
+    } catch (error) {
+      if (enhancedFeedback) {
+        pushToast(
+          error instanceof Error ? error.message : "Delete failed",
+          "error",
+        );
+      }
     }
   };
 
   const handleCopy = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
+      if (enhancedFeedback) pushToast("Copied to clipboard", "success");
     } catch {
-      // ignore
+      if (enhancedFeedback) pushToast("Copy failed", "error");
     }
   };
 
   const handleExport = (document: AiDocument) => {
-    const blob = new Blob([document.content], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = window.document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${document.title.replace(/\s+/g, "-").toLowerCase()}.md`;
-    window.document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    const filename = exportEnhanced
+      ? buildAiDocumentExportFilename(document)
+      : buildAiDocumentLegacyExportFilename(document);
+    downloadAiDocumentMarkdown(document, filename);
+    if (enhancedFeedback) pushToast("Markdown exported", "success");
   };
 
+  const handlePrint = (document: AiDocument) => {
+    printAiDocument(document);
+    if (enhancedFeedback) pushToast("Print dialog opened", "info");
+  };
+
+  const handleApplyTemplate = (template: AiDocumentTemplate) => {
+    setCreateType(template.type);
+    setCreateTitle(template.title);
+    setCreatePrompt(template.defaultPrompt);
+    if (createManual && createMode === "manual") {
+      setCreateContent(template.defaultContent);
+    }
+  };
+
+  const onSearchChange = usePerformanceStableCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  });
+  const onTypeChange = usePerformanceStableCallback(
+    (value: AiDocumentTypeValue | "ALL") => {
+      setType(value);
+      setPage(1);
+    },
+  );
+  const onOpenCreate = usePerformanceStableCallback(() => setCreateOpen(true));
+  const onRetry = usePerformanceStableCallback(() => {
+    void documentsQuery.refetch();
+  });
+  const onOpenDocument = usePerformanceStableCallback((id: string) => {
+    const fromList = documents.find((document) => document.id === id) ?? null;
+    setViewedDocument(fromList);
+    setViewId(id);
+  });
+  const onPreviousPage = usePerformanceStableCallback(() => {
+    setPage((current) => Math.max(1, current - 1));
+  });
+  const onNextPage = usePerformanceStableCallback(() => {
+    setPage((current) => Math.min(totalPages, current + 1));
+  });
+  const onCreateOpenChange = usePerformanceStableCallback((open: boolean) => {
+    setCreateOpen(open);
+    if (!open) resetCreateForm();
+  });
+  const onApplyTemplate = usePerformanceStableCallback(
+    (template: AiDocumentTemplate) => {
+      handleApplyTemplate(template);
+    },
+  );
+  const onCreateSubmit = usePerformanceStableCallback(() => {
+    void handleCreate();
+  });
+  const onEditOpenChange = usePerformanceStableCallback((open: boolean) => {
+    if (!open) {
+      clearAutosaveTimer();
+      pendingAutosaveRef.current = false;
+      setEditDoc(null);
+      setAutosaveStatus("idle");
+    }
+  });
+  const onEditTitleChange = usePerformanceStableCallback(
+    (value: string) => {
+      handleEditTitleChange(value);
+    },
+  );
+  const onEditContentChange = usePerformanceStableCallback(
+    (value: string) => {
+      handleEditContentChange(value);
+    },
+  );
+  const onEditSave = usePerformanceStableCallback(() => {
+    void handleUpdate();
+  });
+  const onDeleteOpenChange = usePerformanceStableCallback((open: boolean) => {
+    if (!open) setDeleteDoc(null);
+  });
+  const onDeleteConfirm = usePerformanceStableCallback(() => {
+    void handleDelete();
+  });
+  const onViewOpenChange = usePerformanceStableCallback((open: boolean) => {
+    if (!open) {
+      setViewId(null);
+      setViewedDocument(null);
+      deepLink.clearDeepLinkParams();
+    }
+  });
+  const onViewRetry = usePerformanceStableCallback(() => {
+    void fetchedDocumentQuery.refetch();
+  });
+  const onCopy = usePerformanceStableCallback((content: string) => {
+    void handleCopy(content);
+  });
+  const onExport = usePerformanceStableCallback((document: AiDocument) => {
+    handleExport(document);
+  });
+  const onPrint = usePerformanceStableCallback((document: AiDocument) => {
+    handlePrint(document);
+  });
+  const onEditDocument = usePerformanceStableCallback(
+    (document: AiDocument) => {
+      openEdit(document);
+    },
+  );
+  const onRequestDelete = usePerformanceStableCallback(
+    (document: AiDocument) => {
+      setDeleteDoc(document);
+    },
+  );
+
+  const errorMessage =
+    documentsQuery.error instanceof Error
+      ? documentsQuery.error.message
+      : "Please try again.";
+  const createErrorMessage =
+    createMutation.error instanceof ApiClientError
+      ? createMutation.error.message
+      : null;
+  const editErrorMessage =
+    updateMutation.error instanceof ApiClientError
+      ? updateMutation.error.message
+      : null;
+  const deleteErrorMessage =
+    deleteMutation.error instanceof ApiClientError
+      ? deleteMutation.error.message
+      : null;
+  const viewErrorMessage =
+    fetchedDocumentQuery.error instanceof Error
+      ? fetchedDocumentQuery.error.message
+      : null;
+  const viewIsLoading = Boolean(
+    needsViewFetch && viewId && fetchedDocumentQuery.isLoading,
+  );
+  const viewIsError = Boolean(
+    needsViewFetch && viewId && fetchedDocumentQuery.isError && !activeDoc,
+  );
+
+  const shellProps = usePerformanceMemo(
+    (): AiDocumentsShellProps => ({
+      bannerVisible: deepLink.bannerVisible,
+      onDismissBanner: deepLink.dismissBanner,
+      search,
+      onSearchChange,
+      type,
+      onTypeChange,
+      onOpenCreate,
+      documents,
+      isLoading: documentsQuery.isLoading,
+      isError: documentsQuery.isError,
+      errorMessage,
+      useSkeletons: skeletons,
+      onRetry,
+      onOpenDocument,
+      page,
+      totalPages,
+      onPreviousPage,
+      onNextPage,
+      createOpen,
+      onCreateOpenChange,
+      createType,
+      createTitle,
+      createPrompt,
+      createContent,
+      createMode,
+      createErrorMessage,
+      isCreating: createMutation.isPending,
+      allowManualCreate: createManual,
+      showTemplatePresets: templatePresets,
+      templates: AI_DOCUMENT_TEMPLATES,
+      onCreateTypeChange: setCreateType,
+      onCreateTitleChange: setCreateTitle,
+      onCreatePromptChange: setCreatePrompt,
+      onCreateContentChange: setCreateContent,
+      onCreateModeChange: setCreateMode,
+      onApplyTemplate,
+      onCreateSubmit,
+      editOpen: Boolean(editDoc),
+      editTitle,
+      editContent,
+      editErrorMessage,
+      isSaving: updateMutation.isPending,
+      livePreview,
+      autosaveEnabled: autosave,
+      autosaveStatus,
+      onEditOpenChange,
+      onEditTitleChange,
+      onEditContentChange,
+      onEditSave,
+      deleteDoc,
+      deleteErrorMessage,
+      isDeleting: deleteMutation.isPending,
+      onDeleteOpenChange,
+      onDeleteConfirm,
+      viewOpen: Boolean(viewId),
+      activeDoc,
+      viewIsLoading,
+      viewIsError,
+      viewErrorMessage,
+      exportEnhanced,
+      onViewOpenChange,
+      onViewRetry,
+      onCopy,
+      onExport,
+      onPrint,
+      onEditDocument,
+      onRequestDelete,
+    }),
+    [
+      deepLink.bannerVisible,
+      deepLink.dismissBanner,
+      search,
+      onSearchChange,
+      type,
+      onTypeChange,
+      onOpenCreate,
+      documents,
+      documentsQuery.isLoading,
+      documentsQuery.isError,
+      errorMessage,
+      skeletons,
+      onRetry,
+      onOpenDocument,
+      page,
+      totalPages,
+      onPreviousPage,
+      onNextPage,
+      createOpen,
+      onCreateOpenChange,
+      createType,
+      createTitle,
+      createPrompt,
+      createContent,
+      createMode,
+      createErrorMessage,
+      createMutation.isPending,
+      createManual,
+      templatePresets,
+      onApplyTemplate,
+      onCreateSubmit,
+      editDoc,
+      editTitle,
+      editContent,
+      editErrorMessage,
+      updateMutation.isPending,
+      livePreview,
+      autosave,
+      autosaveStatus,
+      onEditOpenChange,
+      onEditTitleChange,
+      onEditContentChange,
+      onEditSave,
+      deleteDoc,
+      deleteErrorMessage,
+      deleteMutation.isPending,
+      onDeleteOpenChange,
+      onDeleteConfirm,
+      viewId,
+      activeDoc,
+      viewIsLoading,
+      viewIsError,
+      viewErrorMessage,
+      exportEnhanced,
+      onViewOpenChange,
+      onViewRetry,
+      onCopy,
+      onExport,
+      onPrint,
+      onEditDocument,
+      onRequestDelete,
+    ],
+  );
+
   return (
-    <div className="space-y-6">
-      <OpenedFromNotificationBanner
-        visible={deepLink.bannerVisible}
-        onDismiss={deepLink.dismissBanner}
-      />
-      <PageHeader
-        title="AI Documents"
-        description="Generate, edit, and export proposals, emails, meeting notes, and technical docs."
-        actionLabel="Generate document"
-        onAction={() => setCreateOpen(true)}
-      />
-
-      <Card className="border-border/50">
-        <CardContent className="space-y-4 p-4 sm:p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="relative w-full max-w-md">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search documents..."
-                className="pl-9"
-                aria-label="Search documents"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                className={cn(selectClassName, "min-w-[160px]")}
-                value={type}
-                onChange={(event) => {
-                  setType(event.target.value as AiDocumentTypeValue | "ALL");
-                  setPage(1);
-                }}
-                aria-label="Filter by type"
-              >
-                <option value="ALL">All types</option>
-                {AI_DOCUMENT_TYPES.map((value) => (
-                  <option key={value} value={value}>
-                    {AI_DOCUMENT_TYPE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-              <Button type="button" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Generate
-              </Button>
-            </div>
-          </div>
-
-          {documentsQuery.isLoading ? (
-            <LoadingState label="Loading documents" className="border-0" />
-          ) : null}
-
-          {documentsQuery.isError ? (
-            <ErrorState
-              title="Could not load documents"
-              description={
-                documentsQuery.error instanceof Error
-                  ? documentsQuery.error.message
-                  : "Please try again."
-              }
-              onRetry={() => void documentsQuery.refetch()}
-            />
-          ) : null}
-
-          {!documentsQuery.isLoading && !documentsQuery.isError ? (
-            <>
-              {documents.length === 0 ? (
-                <EmptyState
-                  title="No AI documents yet"
-                  description="Generate a proposal, email, or technical document to get started."
-                  actionLabel="Generate document"
-                  onAction={() => setCreateOpen(true)}
-                />
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {documents.map((document) => (
-                    <button
-                      key={document.id}
-                      type="button"
-                      className="rounded-xl border border-border/50 bg-card p-4 text-left transition hover:border-primary/30 hover:bg-muted/20"
-                      onClick={() => setViewId(document.id)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="icon-box icon-box-sm rounded-lg bg-primary/10 text-primary">
-                          <FileText className="h-4 w-4" aria-hidden="true" />
-                        </div>
-                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                          {AI_DOCUMENT_TYPE_LABELS[document.type]}
-                        </span>
-                      </div>
-                      <p className="mt-3 line-clamp-2 text-sm font-medium text-foreground">
-                        {document.title}
-                      </p>
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        {document.prompt}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {totalPages > 1 ? (
-                <div className="flex items-center justify-between gap-3 pt-2">
-                  <p className="text-xs text-muted-foreground">
-                    Page {page} of {totalPages}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={page <= 1}
-                      onClick={() =>
-                        setPage((current) => Math.max(1, current - 1))
-                      }
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={page >= totalPages}
-                      onClick={() =>
-                        setPage((current) => Math.min(totalPages, current + 1))
-                      }
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Generate AI document</DialogTitle>
-            <DialogDescription>
-              Choose a document type and describe what you need. Content is
-              generated automatically.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="doc-type">Type</Label>
-              <select
-                id="doc-type"
-                className={selectClassName}
-                value={createType}
-                onChange={(event) =>
-                  setCreateType(event.target.value as AiDocumentTypeValue)
-                }
-              >
-                {AI_DOCUMENT_TYPES.map((value) => (
-                  <option key={value} value={value}>
-                    {AI_DOCUMENT_TYPE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="doc-title">Title (optional)</Label>
-              <Input
-                id="doc-title"
-                value={createTitle}
-                onChange={(event) => setCreateTitle(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="doc-prompt" required>
-                Prompt
-              </Label>
-              <Textarea
-                id="doc-prompt"
-                rows={4}
-                value={createPrompt}
-                onChange={(event) => setCreatePrompt(event.target.value)}
-                placeholder="Describe the document you need…"
-              />
-            </div>
-            {createMutation.error instanceof ApiClientError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {createMutation.error.message}
-              </p>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setCreateOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              isLoading={createMutation.isPending}
-              disabled={!createPrompt.trim()}
-              onClick={() => {
-                void handleCreate();
-              }}
-            >
-              Generate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(editDoc)}
-        onOpenChange={(open) => {
-          if (!open) setEditDoc(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit document</DialogTitle>
-            <DialogDescription>
-              Update the title or markdown content.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-title">Title</Label>
-              <Input
-                id="edit-title"
-                value={editTitle}
-                onChange={(event) => setEditTitle(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-content">Content</Label>
-              <Textarea
-                id="edit-content"
-                rows={12}
-                value={editContent}
-                onChange={(event) => setEditContent(event.target.value)}
-              />
-            </div>
-            {updateMutation.error instanceof ApiClientError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {updateMutation.error.message}
-              </p>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setEditDoc(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              isLoading={updateMutation.isPending}
-              onClick={() => {
-                void handleUpdate();
-              }}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(deleteDoc)}
-        onOpenChange={(open) => {
-          if (!open) setDeleteDoc(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete document</DialogTitle>
-            <DialogDescription>
-              {deleteDoc
-                ? `Delete “${deleteDoc.title}”? This soft-deletes the document.`
-                : "Delete this document?"}
-            </DialogDescription>
-          </DialogHeader>
-          {deleteMutation.error instanceof ApiClientError ? (
-            <p className="text-sm text-destructive" role="alert">
-              {deleteMutation.error.message}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setDeleteDoc(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              isLoading={deleteMutation.isPending}
-              onClick={() => {
-                void handleDelete();
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Sheet
-        open={Boolean(viewId)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setViewId(null);
-            deepLink.clearDeepLinkParams();
-          }
-        }}
-      >
-        <SheetContent
-          side="right"
-          className="w-full max-w-lg overflow-y-auto bg-background p-0 sm:max-w-xl"
-        >
-          <SheetHeader className="border-b border-border px-6 py-4 text-left">
-            <SheetTitle className="pr-8">
-              {activeDoc?.title ?? "Document"}
-            </SheetTitle>
-          </SheetHeader>
-          {activeDoc ? (
-            <div className="space-y-4 px-6 py-5">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                {AI_DOCUMENT_TYPE_LABELS[activeDoc.type]}
-              </p>
-              <p className="text-sm text-muted-foreground">{activeDoc.prompt}</p>
-              <MarkdownView content={activeDoc.content} />
-              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    void handleCopy(activeDoc.content);
-                  }}
-                >
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                  Copy
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleExport(activeDoc)}
-                >
-                  <Download className="h-4 w-4" aria-hidden="true" />
-                  Export
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => openEdit(activeDoc)}
-                >
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setDeleteDoc(activeDoc)}
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  Delete
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </SheetContent>
-      </Sheet>
-    </div>
+    <>
+      {useModularShell ? (
+        <AiDocumentsEnterpriseShell {...shellProps} />
+      ) : (
+        <AiDocumentsLegacyLayout {...shellProps} />
+      )}
+      {enhancedFeedback ? (
+        <AiUiToastViewport toasts={toasts} onDismiss={dismiss} />
+      ) : null}
+    </>
   );
 }

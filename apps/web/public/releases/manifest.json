@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-26T18:16:56.646Z",
+  "generatedAt": "2026-08-02T18:20:58.740Z",
   "artifacts": [
     {
       "id": "desktop-setup",
@@ -8,8 +8,8 @@
       "sizeBytes": 92635719,
       "releasedAt": "2026-07-26T06:47:10.611Z",
       "href": "/releases/EliteFlow-Setup-1.0.0-win-x64.exe",
-      "sourcePath": "apps/desktop/release/EliteFlow-Setup-1.0.0-win-x64.exe",
-      "sync": "linked"
+      "sourcePath": "apps/web/public/releases/EliteFlow-Setup-1.0.0-win-x64.exe",
+      "sync": "public"
     },
     {
       "id": "desktop-portable",
@@ -18,8 +18,8 @@
       "sizeBytes": 92368013,
       "releasedAt": "2026-07-26T06:47:18.190Z",
       "href": "/releases/EliteFlow-Portable-1.0.0-win-x64.exe",
-      "sourcePath": "apps/desktop/release/EliteFlow-Portable-1.0.0-win-x64.exe",
-      "sync": "linked"
+      "sourcePath": "apps/web/public/releases/EliteFlow-Portable-1.0.0-win-x64.exe",
+      "sync": "public"
     },
     {
       "id": "extension-zip",
@@ -28,8 +28,8 @@
       "sizeBytes": 138957,
       "releasedAt": "2026-07-26T07:57:14.932Z",
       "href": "/releases/EliteFlow-Extension-1.0.0.zip",
-      "sourcePath": "apps/extension/release/EliteFlow-Extension-1.0.0.zip",
-      "sync": "linked"
+      "sourcePath": "apps/web/public/releases/EliteFlow-Extension-1.0.0.zip",
+      "sync": "public"
     },
     {
       "id": "android-apk",
@@ -40,7 +40,7 @@
       "releasedAt": "2026-07-26T06:11:58.417Z",
       "href": "https://github.com/AliAhmad-Web/eliteflow-enterprise/releases/download/v1.0.0/EliteFlow-1.0.0-android-vc12.apk",
       "sourcePath": "apps/mobile/release/EliteFlow-1.0.0-android-vc12.apk",
-      "sync": "metadata"
+      "sync": "preserved"
     }
   ]
 }

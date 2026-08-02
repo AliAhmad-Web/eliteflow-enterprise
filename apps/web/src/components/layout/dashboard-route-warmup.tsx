@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAuthStore } from "@/features/auth/stores/auth.store";
+import { isPerformanceRoutePrefetchEnabled } from "@/features/performance";
 import {
   matchKeepAliveRoute,
   preloadKeepAliveRoute,
@@ -34,6 +35,9 @@ function runWhenIdle(callback: () => void, timeoutMs = 4_000) {
 /**
  * After access token is ready: warm ONLY the current route chunk.
  * Avoid Settings/Communication/list stampede that saturates refresh (RC#1, RC#3).
+ *
+ * When PERFORMANCE_ROUTE_PREFETCH is ON, also idle-warm a small set of
+ * high-traffic dashboard routes (Reports + AI surfaces) — never all routes.
  */
 export function DashboardRouteWarmup() {
   const router = useRouter();
@@ -61,12 +65,24 @@ export function DashboardRouteWarmup() {
     })();
 
     // RC#3: idle — preload one adjacent chunk only (dashboard home), not all routes/APIs.
+    // Phase 2: when ROUTE_PREFETCH is ON, also warm Reports + AI keep-alive chunks.
     return runWhenIdle(() => {
       void (async () => {
         try {
           const { ROUTES } = await import("@/constants/routes");
+          const targets = new Set<string>();
           if (current !== ROUTES.DASHBOARD) {
-            void preloadKeepAliveRoute(ROUTES.DASHBOARD);
+            targets.add(ROUTES.DASHBOARD);
+          }
+          if (isPerformanceRoutePrefetchEnabled()) {
+            targets.add(ROUTES.REPORTS);
+            targets.add(ROUTES.AI_ASSISTANT);
+            targets.add(ROUTES.AI_DOCUMENTS);
+          }
+          targets.delete(current);
+          for (const route of targets) {
+            void preloadKeepAliveRoute(route);
+            router.prefetch(route);
           }
         } catch {
           // ignore

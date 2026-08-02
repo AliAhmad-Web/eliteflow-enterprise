@@ -80,6 +80,14 @@ export const LazyAiAssistantPage = dynamic(
   { loading: () => null },
 );
 
+export const LazyAiDocumentsPage = dynamic(
+  () =>
+    import("@/features/ai/components/ai-documents-page-content").then(
+      (m) => m.AiDocumentsPageContent,
+    ),
+  { loading: () => null },
+);
+
 /** Client wrapper so server route pages can compose error boundaries without calling client fns. */
 export function FeaturePageShell({
   title,

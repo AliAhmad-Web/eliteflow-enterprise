@@ -2,6 +2,8 @@
 
 import { keepPreviousData, QueryClient } from "@tanstack/react-query";
 
+import { getPerformanceQueryDefaultOverlay } from "@/features/performance";
+
 const PERSIST_KEY = "eliteflow-rq-cache-v1";
 const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -106,26 +108,38 @@ function schedulePersist(client: QueryClient): void {
 
 /** Shared TanStack Query defaults for enterprise production caching. */
 export function createQueryClient(): QueryClient {
+  const baseQueries = {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+    /**
+     * Soft nav + keep-alive remount: reuse cache (RC#6).
+     * Realtime/poll queries opt into refetchInterval or explicit refetchOnMount.
+     */
+    refetchOnMount: false as const,
+    placeholderData: keepPreviousData,
+    structuralSharing: true,
+    networkMode: "online" as const,
+  };
+
+  const baseMutations = {
+    retry: 0,
+    networkMode: "online" as const,
+  };
+
+  const overlay = getPerformanceQueryDefaultOverlay();
+
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 5 * 60 * 1000,
-        gcTime: 60 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: true,
-        /**
-         * Soft nav + keep-alive remount: reuse cache (RC#6).
-         * Realtime/poll queries opt into refetchInterval or explicit refetchOnMount.
-         */
-        refetchOnMount: false,
-        placeholderData: keepPreviousData,
-        structuralSharing: true,
-        networkMode: "online",
+        ...baseQueries,
+        ...(overlay?.queries ?? {}),
       },
       mutations: {
-        retry: 0,
-        networkMode: "online",
+        ...baseMutations,
+        ...(overlay?.mutations ?? {}),
       },
     },
   });

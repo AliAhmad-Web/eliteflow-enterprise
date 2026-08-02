@@ -41,6 +41,8 @@ export interface AiChatStreamHandlers {
     provider: string;
   }) => void;
   onDelta?: (chunk: string) => void;
+  /** Optional abort signal for stop-generation (Phase 2 stream controls). */
+  signal?: AbortSignal;
 }
 
 async function chatStream(
@@ -54,6 +56,7 @@ async function chatStream(
       Accept: "text/event-stream",
     },
     body: JSON.stringify(input),
+    signal: handlers.signal,
   });
 
   if (!response.ok || !response.body) {
@@ -137,17 +140,45 @@ async function chatStream(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      if (handlers.signal?.aborted) {
+        throw new ApiClientError(
+          "Generation stopped",
+          "AI_STREAM_ABORTED",
+          499,
+        );
+      }
 
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() ?? "";
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    for (const part of parts) {
-      processBlock(part);
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+
+      for (const part of parts) {
+        processBlock(part);
+      }
     }
+  } catch (error) {
+    const aborted =
+      handlers.signal?.aborted ||
+      (error instanceof DOMException && error.name === "AbortError") ||
+      (typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        (error as { name: string }).name === "AbortError");
+
+    if (aborted) {
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore cancel errors
+      }
+      throw new ApiClientError("Generation stopped", "AI_STREAM_ABORTED", 499);
+    }
+    throw error;
   }
 
   if (buffer.trim()) {

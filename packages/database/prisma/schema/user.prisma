@@ -57,6 +57,7 @@ model User {
   aiConversations         AiConversation[]  @relation("AiConversationOwner")
   aiDocuments             AiDocument[]      @relation("AiDocumentOwner")
   aiDocumentsCreated      AiDocument[]      @relation("AiDocumentCreatedBy")
+  aiMemoryRecords         AiMemoryRecord[]  @relation("AiMemoryRecordOwner")
   foldersCreated          Folder[]          @relation("FolderCreatedBy")
   foldersUpdated          Folder[]          @relation("FolderUpdatedBy")
   managedFilesCreated     ManagedFile[]     @relation("ManagedFileCreatedBy")

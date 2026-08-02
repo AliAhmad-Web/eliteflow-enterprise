@@ -1,20 +1,10 @@
 "use client";
 
 import {
-  AI_ASSIST_MODES,
   type AiAssistModeValue,
   type AiConversation,
   type AiMessage,
 } from "@enterprise/shared";
-import {
-  Bot,
-  Copy,
-  Plus,
-  RefreshCw,
-  Search,
-  Send,
-  Trash2,
-} from "lucide-react";
 import {
   useDeferredValue,
   useEffect,
@@ -23,44 +13,113 @@ import {
   useState,
 } from "react";
 
-import { EmptyState } from "@/components/common/feedback/empty-state";
-import { ErrorState } from "@/components/common/feedback/error-state";
-import { LoadingState } from "@/components/common/feedback/loading-state";
-import { PageHeader } from "@/components/layout/page-header";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  usePerformanceMemo,
+  usePerformanceStableCallback,
+  useRenderProfiler,
+} from "@/features/performance";
 import { ApiClientError } from "@/services/api/api-error";
-import { FORM_SELECT_CLASS_MD } from "@/lib/form-styles";
-import { cn } from "@/lib/utils";
 
+import {
+  isAiUiContextIndicatorsEnabled,
+  isAiUiEnhancedFeedbackEnabled,
+  isAiUiEnterpriseShellEnabled,
+  isAiUiHistoryPaginationEnabled,
+  isAiUiMobileHistorySheetEnabled,
+  isAiUiProviderBadgeEnabled,
+  isAiUiShortcutsEnabled,
+  isAiUiSkeletonsEnabled,
+  isAiUiStreamControlsEnabled,
+} from "../feature-flags";
 import {
   useAiChat,
   useDeleteAiConversation,
 } from "../hooks/use-ai-mutations";
 import { useAiConversation, useAiConversations } from "../hooks/use-ai";
 import { AI_MODE_LABELS } from "../types/ai.types";
-import { MarkdownView } from "./markdown-view";
+import { AiAssistantEnterpriseShell } from "./ai-assistant-enterprise-shell";
+import type { AiAssistantShellProps } from "./ai-assistant-enterprise-shell";
+import { AiAssistantLegacyLayout } from "./ai-assistant-legacy-layout";
+import { AiUiToastViewport, useAiUiToasts } from "./ai-ui-toast";
 
-const selectClassName = FORM_SELECT_CLASS_MD;
+const HISTORY_PAGE_SIZE_DEFAULT = 50;
+const HISTORY_PAGE_SIZE_PAGED = 20;
 
+/**
+ * AI Assistant orchestration layer.
+ * Owns selection, draft, mode, local messages, handlers, and React Query.
+ * Phase 2 UX enhancements are opt-in via feature flags (default OFF).
+ */
 export function AiAssistantPageContent() {
+  useRenderProfiler("AiAssistantPageContent");
+
+  const enterpriseShell = isAiUiEnterpriseShellEnabled();
+  const streamControls = isAiUiStreamControlsEnabled();
+  const enhancedFeedback = isAiUiEnhancedFeedbackEnabled();
+  const skeletons = isAiUiSkeletonsEnabled();
+  const shortcuts = isAiUiShortcutsEnabled();
+  const providerBadge = isAiUiProviderBadgeEnabled();
+  const contextIndicators = isAiUiContextIndicatorsEnabled();
+  const mobileHistorySheet = isAiUiMobileHistorySheetEnabled();
+  const historyPagination = isAiUiHistoryPaginationEnabled();
+
+  const useModularShell =
+    enterpriseShell ||
+    streamControls ||
+    enhancedFeedback ||
+    skeletons ||
+    shortcuts ||
+    providerBadge ||
+    contextIndicators ||
+    mobileHistorySheet ||
+    historyPagination;
+
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<AiAssistModeValue>("ASK");
   const [draft, setDraft] = useState("");
   const [localMessages, setLocalMessages] = useState<AiMessage[]>([]);
+  const [page, setPage] = useState(1);
+  const [accumulatedConversations, setAccumulatedConversations] = useState<
+    AiConversation[]
+  >([]);
+  const [providerLabel, setProviderLabel] = useState<string | null>(null);
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(
+    null,
+  );
+  const [deleteTarget, setDeleteTarget] = useState<AiConversation | null>(null);
+  const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
+  const [streamStatusText, setStreamStatusText] = useState<string | null>(null);
+
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const stoppedRef = useRef(false);
+
+  const { toasts, pushToast, dismiss } = useAiUiToasts();
+
+  const pageSize = historyPagination
+    ? HISTORY_PAGE_SIZE_PAGED
+    : HISTORY_PAGE_SIZE_DEFAULT;
 
   const listQuery = useMemo(
     () => ({
       search: deferredSearch,
-      page: 1,
-      limit: 50,
+      page: historyPagination ? page : 1,
+      limit: pageSize,
     }),
-    [deferredSearch],
+    [deferredSearch, historyPagination, page, pageSize],
   );
 
   const conversationsQuery = useAiConversations(listQuery);
@@ -68,11 +127,43 @@ export function AiAssistantPageContent() {
   const chatMutation = useAiChat();
   const deleteMutation = useDeleteAiConversation();
 
-  const conversations = conversationsQuery.data?.items ?? [];
-  const messages =
-    localMessages.length > 0
-      ? localMessages
-      : (conversationQuery.data?.messages ?? []);
+  useEffect(() => {
+    setPage(1);
+    setAccumulatedConversations([]);
+  }, [deferredSearch]);
+
+  useEffect(() => {
+    const items = conversationsQuery.data?.items ?? [];
+    if (!historyPagination) {
+      setAccumulatedConversations(items);
+      return;
+    }
+    if (page === 1) {
+      setAccumulatedConversations(items);
+      return;
+    }
+    setAccumulatedConversations((current) => {
+      const seen = new Set(current.map((item) => item.id));
+      const next = items.filter((item) => !seen.has(item.id));
+      return [...current, ...next];
+    });
+  }, [conversationsQuery.data, historyPagination, page]);
+
+  const conversations = historyPagination
+    ? accumulatedConversations
+    : (conversationsQuery.data?.items ?? []);
+
+  const pagination = conversationsQuery.data?.pagination;
+  const hasMore = historyPagination
+    ? (pagination?.page ?? 1) < (pagination?.totalPages ?? 1)
+    : false;
+
+  const messages = useMemo(() => {
+    if (localMessages.length > 0) return localMessages;
+    // New chat: never reuse keepPreviousData from the last selected conversation.
+    if (!selectedId) return [];
+    return conversationQuery.data?.messages ?? [];
+  }, [localMessages, selectedId, conversationQuery.data?.messages]);
 
   useEffect(() => {
     setLocalMessages([]);
@@ -82,12 +173,61 @@ export function AiAssistantPageContent() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, chatMutation.isPending]);
 
+  useEffect(() => {
+    if (!shortcuts) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setSelectedId(null);
+        setLocalMessages([]);
+        setDraft("");
+        setLastFailedMessage(null);
+        setStreamStatusText(null);
+        setProviderLabel(null);
+        composerRef.current?.focus();
+        return;
+      }
+      if (meta && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        composerRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [shortcuts]);
+
+  const contextChips = useMemo(() => {
+    if (!contextIndicators) return [];
+    const chips = [
+      "Workspace: EliteFlow",
+      `Mode: ${AI_MODE_LABELS[mode]}`,
+      selectedId ? "Session: Active conversation" : "Session: New conversation",
+      "Settings: AI preferences (read-only)",
+    ];
+    if (providerLabel) {
+      chips.push(`Provider: ${providerLabel}`);
+    }
+    return chips;
+  }, [contextIndicators, mode, selectedId, providerLabel]);
+
   const handleSend = async (overrideMessage?: string) => {
     const message = (overrideMessage ?? draft).trim();
     if (!message || chatMutation.isPending) return;
 
     const tempUserId = `temp-user-${Date.now()}`;
     const tempAssistantId = `temp-assistant-${Date.now()}`;
+    stoppedRef.current = false;
+
+    const controller = streamControls ? new AbortController() : null;
+    abortRef.current = controller;
 
     setLocalMessages((current) => [
       ...current,
@@ -111,6 +251,9 @@ export function AiAssistantPageContent() {
       setDraft("");
     }
 
+    setLastFailedMessage(null);
+    if (shortcuts) setStreamStatusText("Assistant is thinking");
+
     try {
       const result = await chatMutation.mutateAsync({
         input: {
@@ -118,8 +261,13 @@ export function AiAssistantPageContent() {
           message,
           mode,
         },
+        signal: controller?.signal,
         onMeta: (meta) => {
           setSelectedId(meta.conversationId);
+          if (providerBadge || contextIndicators) {
+            setProviderLabel(meta.provider);
+          }
+          if (shortcuts) setStreamStatusText("Assistant is responding");
         },
         onDelta: (chunk) => {
           setLocalMessages((current) =>
@@ -133,13 +281,53 @@ export function AiAssistantPageContent() {
       });
       setSelectedId(result.conversation.id);
       setLocalMessages(result.conversation.messages ?? []);
-    } catch {
+      if (shortcuts) setStreamStatusText("Response complete");
+    } catch (error) {
+      const aborted =
+        stoppedRef.current ||
+        (error instanceof ApiClientError && error.code === "AI_STREAM_ABORTED");
+
+      if (aborted) {
+        setLocalMessages((current) => {
+          const assistant = current.find((item) => item.id === tempAssistantId);
+          if (assistant?.content?.trim()) {
+            return current;
+          }
+          return current.filter(
+            (item) => item.id !== tempUserId && item.id !== tempAssistantId,
+          );
+        });
+        if (shortcuts) setStreamStatusText("Generation stopped");
+        if (enhancedFeedback) pushToast("Generation stopped", "info");
+        return;
+      }
+
       setLocalMessages((current) =>
         current.filter(
           (item) => item.id !== tempUserId && item.id !== tempAssistantId,
         ),
       );
+      setLastFailedMessage(message);
+      if (shortcuts) setStreamStatusText("Response failed");
+      if (enhancedFeedback) {
+        pushToast(
+          error instanceof Error ? error.message : "Request failed",
+          "error",
+        );
+      }
+    } finally {
+      abortRef.current = null;
     }
+  };
+
+  const handleStop = () => {
+    stoppedRef.current = true;
+    abortRef.current?.abort();
+  };
+
+  const handleRetry = async () => {
+    if (!lastFailedMessage) return;
+    await handleSend(lastFailedMessage);
   };
 
   const handleRegenerate = async () => {
@@ -153,287 +341,282 @@ export function AiAssistantPageContent() {
   const handleCopy = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
+      if (enhancedFeedback) pushToast("Copied to clipboard", "success");
     } catch {
-      // ignore clipboard failures
+      if (enhancedFeedback) pushToast("Copy failed", "error");
     }
   };
 
-  const handleDelete = async (conversation: AiConversation) => {
+  const executeDelete = async (conversation: AiConversation) => {
     try {
       await deleteMutation.mutateAsync(conversation.id);
+      setAccumulatedConversations((current) =>
+        current.filter((item) => item.id !== conversation.id),
+      );
       if (selectedId === conversation.id) {
         setSelectedId(null);
         setLocalMessages([]);
       }
-    } catch {
-      // ignore
+      if (enhancedFeedback) pushToast("Conversation deleted", "success");
+    } catch (error) {
+      if (enhancedFeedback) {
+        pushToast(
+          error instanceof Error ? error.message : "Delete failed",
+          "error",
+        );
+      }
     }
   };
 
+  const handleDeleteRequest = (conversation: AiConversation) => {
+    if (enhancedFeedback) {
+      setDeleteTarget(conversation);
+      return;
+    }
+    void executeDelete(conversation);
+  };
+
+  const startNewConversation = () => {
+    if (streamControls && chatMutation.isPending) {
+      abortRef.current?.abort();
+      stoppedRef.current = true;
+      abortRef.current = null;
+    }
+    setSelectedId(null);
+    setLocalMessages([]);
+    setDraft("");
+    setLastFailedMessage(null);
+    setStreamStatusText(null);
+    setProviderLabel(null);
+    if (shortcuts) {
+      queueMicrotask(() => composerRef.current?.focus());
+    }
+  };
+
+  const onHistoryRetry = usePerformanceStableCallback(() => {
+    void conversationsQuery.refetch();
+  });
+  const onNewConversation = usePerformanceStableCallback(() => {
+    startNewConversation();
+  });
+  const onSelectConversation = usePerformanceStableCallback((id: string) => {
+    setSelectedId(id);
+  });
+  const onDeleteConversation = usePerformanceStableCallback(
+    (conversation: AiConversation) => {
+      handleDeleteRequest(conversation);
+    },
+  );
+  const onHeaderNewChat = usePerformanceStableCallback(() => {
+    startNewConversation();
+  });
+  const onCopy = usePerformanceStableCallback((content: string) => {
+    void handleCopy(content);
+  });
+  const onSend = usePerformanceStableCallback(() => {
+    void handleSend();
+  });
+  const onRegenerate = usePerformanceStableCallback(() => {
+    void handleRegenerate();
+  });
+  const onStopStable = usePerformanceStableCallback(() => {
+    handleStop();
+  });
+  const onRetry = usePerformanceStableCallback(() => {
+    void handleRetry();
+  });
+  const onLoadMore = usePerformanceStableCallback(() => {
+    if (!hasMore || conversationsQuery.isFetching) return;
+    setPage((current) => current + 1);
+  });
+  const onSearchChange = usePerformanceStableCallback((value: string) => {
+    setSearch(value);
+  });
+  const onDraftChange = usePerformanceStableCallback((value: string) => {
+    setDraft(value);
+  });
+  const onModeChange = usePerformanceStableCallback(
+    (value: AiAssistModeValue) => {
+      setMode(value);
+    },
+  );
+  const onMobileHistoryOpenChange = usePerformanceStableCallback(
+    (open: boolean) => {
+      setMobileHistoryOpen(open);
+    },
+  );
+
+  const historyErrorMessage =
+    conversationsQuery.error instanceof Error
+      ? conversationsQuery.error.message
+      : "Please try again.";
+  const composerErrorMessage =
+    chatMutation.error instanceof ApiClientError &&
+    chatMutation.error.code !== "AI_STREAM_ABORTED"
+      ? chatMutation.error.message
+      : null;
+  const canRegenerate =
+    Boolean(selectedId) && messages.some((message) => message.role === "USER");
+  const isHistoryLoading = conversationsQuery.isLoading && page === 1;
+  const isLoadingMore =
+    historyPagination && conversationsQuery.isFetching && page > 1;
+  const threadTitle = selectedId
+    ? (conversationQuery.data?.title ?? "Conversation")
+    : "New conversation";
+  const isLoadingConversation = Boolean(
+    selectedId && conversationQuery.isLoading,
+  );
+
+  const shellProps = usePerformanceMemo(
+    (): AiAssistantShellProps => ({
+      search,
+      onSearchChange,
+      conversations,
+      selectedId,
+      isHistoryLoading,
+      isHistoryError: conversationsQuery.isError,
+      historyErrorMessage,
+      onHistoryRetry,
+      onNewConversation,
+      onSelectConversation,
+      onDeleteConversation,
+      onHeaderNewChat,
+      threadTitle,
+      mode,
+      onModeChange,
+      messages,
+      isLoadingConversation,
+      isStreaming: chatMutation.isPending,
+      onCopy,
+      bottomRef,
+      draft,
+      onDraftChange,
+      onSend,
+      onRegenerate,
+      composerErrorMessage,
+      canRegenerate,
+      useSkeletons: skeletons,
+      showStreamControls: streamControls,
+      onStop: onStopStable,
+      onRetry,
+      canRetry: Boolean(lastFailedMessage),
+      showProviderBadge: providerBadge,
+      providerLabel,
+      showContextIndicators: contextIndicators,
+      contextChips,
+      showShortcuts: shortcuts,
+      streamStatusText,
+      showMobileHistorySheet: mobileHistorySheet,
+      mobileHistoryOpen,
+      onMobileHistoryOpenChange,
+      showPagination: historyPagination,
+      hasMore,
+      isLoadingMore,
+      onLoadMore,
+      searchInputRef,
+      composerRef,
+    }),
+    [
+      search,
+      onSearchChange,
+      conversations,
+      selectedId,
+      isHistoryLoading,
+      conversationsQuery.isError,
+      historyErrorMessage,
+      onHistoryRetry,
+      onNewConversation,
+      onSelectConversation,
+      onDeleteConversation,
+      onHeaderNewChat,
+      threadTitle,
+      mode,
+      onModeChange,
+      messages,
+      isLoadingConversation,
+      chatMutation.isPending,
+      onCopy,
+      draft,
+      onDraftChange,
+      onSend,
+      onRegenerate,
+      composerErrorMessage,
+      canRegenerate,
+      skeletons,
+      streamControls,
+      onStopStable,
+      onRetry,
+      lastFailedMessage,
+      providerBadge,
+      providerLabel,
+      contextIndicators,
+      contextChips,
+      shortcuts,
+      streamStatusText,
+      mobileHistorySheet,
+      mobileHistoryOpen,
+      onMobileHistoryOpenChange,
+      historyPagination,
+      hasMore,
+      isLoadingMore,
+      onLoadMore,
+    ],
+  );
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="AI Assistant"
-        description="Ask questions, draft emails, summarize work, and generate proposals."
-        actionLabel="New chat"
-        onAction={() => {
-          setSelectedId(null);
-          setLocalMessages([]);
-          setDraft("");
-        }}
-      />
+    <>
+      {useModularShell ? (
+        <AiAssistantEnterpriseShell {...shellProps} />
+      ) : (
+        <AiAssistantLegacyLayout {...shellProps} />
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <Card className="border-border/50 shadow-(--shadow-sm)">
-          <CardContent className="space-y-3 p-4">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search conversations..."
-                className="pl-9"
-                aria-label="Search conversations"
-              />
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full justify-start border-primary/20 hover:border-primary/35 hover:bg-primary/5"
-              onClick={() => {
-                setSelectedId(null);
-                setLocalMessages([]);
-              }}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              New conversation
-            </Button>
-
-            {conversationsQuery.isLoading ? (
-              <LoadingState
-                label="Loading history"
-                className="min-h-40 border-0 bg-transparent"
-              />
-            ) : null}
-
-            {conversationsQuery.isError ? (
-              <ErrorState
-                title="Could not load history"
-                description={
-                  conversationsQuery.error instanceof Error
-                    ? conversationsQuery.error.message
-                    : "Please try again."
-                }
-                onRetry={() => void conversationsQuery.refetch()}
-              />
-            ) : null}
-
-            {!conversationsQuery.isLoading &&
-            !conversationsQuery.isError &&
-            conversations.length === 0 ? (
-              <EmptyState
-                title="No conversations"
-                description="Start a chat to build your AI history."
-                className="border-0 bg-transparent py-8"
-              />
-            ) : null}
-
-            <ul className="max-h-[60vh] space-y-1 overflow-y-auto scrollbar-thin">
-              {conversations.map((conversation) => (
-                <li key={conversation.id}>
-                  <div
-                    className={cn(
-                      "group flex items-start gap-1 rounded-xl border border-transparent px-2.5 py-2.5 transition-colors hover:bg-accent/50",
-                      selectedId === conversation.id &&
-                        "border-primary/20 bg-primary/5 shadow-(--shadow-xs)",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => setSelectedId(conversation.id)}
-                    >
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {conversation.title}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                        {conversation.preview ?? "No messages yet"}
-                      </p>
-                    </button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label={`Delete ${conversation.title}`}
-                      onClick={() => {
-                        void handleDelete(conversation);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <Card className="ai-surface overflow-hidden border-primary/20 shadow-(--shadow-glow-primary)">
-          <CardContent className="flex h-[70vh] min-h-130 flex-col p-0">
-            <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-card/60 px-4 py-3 backdrop-blur-sm">
-              <div className="flex items-center gap-2.5">
-                <div className="icon-box icon-box-sm rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
-                  <Bot strokeWidth={1.75} aria-hidden="true" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold tracking-tight text-foreground">
-                    {conversationQuery.data?.title ?? "New conversation"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Mode: {AI_MODE_LABELS[mode]}
-                  </p>
-                </div>
-              </div>
-              <select
-                className={cn(selectClassName, "min-w-40")}
-                value={mode}
-                onChange={(event) =>
-                  setMode(event.target.value as AiAssistModeValue)
-                }
-                aria-label="Assistant mode"
-              >
-                {AI_ASSIST_MODES.map((value) => (
-                  <option key={value} value={value}>
-                    {AI_MODE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 scrollbar-thin">
-              {selectedId && conversationQuery.isLoading ? (
-                <LoadingState
-                  label="Loading conversation"
-                  className="border-0 bg-transparent"
-                />
-              ) : null}
-
-              {!selectedId && messages.length === 0 ? (
-                <EmptyState
-                  title="Ask EliteFlow AI"
-                  description="Choose a mode, type a prompt, and get structured help for emails, proposals, summaries, and more."
-                  className="border-0 bg-transparent"
-                />
-              ) : null}
-
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "rounded-xl border px-4 py-3 shadow-(--shadow-xs)",
-                    message.role === "USER"
-                      ? "ml-8 border-primary/25 bg-primary/8"
-                      : "mr-8 border-border/50 bg-card/80",
-                  )}
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {message.role === "USER" ? "You" : "Assistant"}
-                    </p>
-                    {message.role === "ASSISTANT" ? (
-                      <div className="flex gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          aria-label="Copy response"
-                          onClick={() => {
-                            void handleCopy(message.content);
-                          }}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                  {message.role === "ASSISTANT" ? (
-                    message.content ? (
-                      <MarkdownView content={message.content} />
-                    ) : chatMutation.isPending ? (
-                      <p className="text-sm text-muted-foreground">Thinking…</p>
-                    ) : (
-                      <MarkdownView content={message.content} />
-                    )
-                  ) : (
-                    <p className="whitespace-pre-wrap text-sm text-foreground">
-                      {message.content}
-                    </p>
-                  )}
-                </div>
-              ))}
-
-              <div ref={bottomRef} />
-            </div>
-
-            <div className="space-y-3 border-t border-border/60 bg-card/70 p-4 backdrop-blur-sm">
-              {chatMutation.error instanceof ApiClientError ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {chatMutation.error.message}
-                </p>
-              ) : null}
-
-              <Textarea
-                rows={3}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Ask a question or describe what you need…"
-                className="min-h-22 border-primary/15 focus-visible:border-primary/35"
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void handleSend();
-                  }
-                }}
-              />
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
+      {enhancedFeedback ? (
+        <>
+          <AiUiToastViewport toasts={toasts} onDismiss={dismiss} />
+          <Dialog
+            open={Boolean(deleteTarget)}
+            onOpenChange={(open) => {
+              if (!open) setDeleteTarget(null);
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Delete conversation</DialogTitle>
+                <DialogDescription>
+                  Delete{" "}
+                  <span className="font-medium text-foreground">
+                    {deleteTarget?.title}
+                  </span>
+                  ? This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  disabled={
-                    chatMutation.isPending ||
-                    !messages.some((message) => message.role === "USER")
-                  }
-                  onClick={() => {
-                    void handleRegenerate();
-                  }}
+                  onClick={() => setDeleteTarget(null)}
                 >
-                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                  Regenerate
+                  Cancel
                 </Button>
                 <Button
                   type="button"
-                  isLoading={chatMutation.isPending}
-                  disabled={!draft.trim()}
+                  variant="destructive"
+                  isLoading={deleteMutation.isPending}
                   onClick={() => {
-                    void handleSend();
+                    if (!deleteTarget) return;
+                    const target = deleteTarget;
+                    setDeleteTarget(null);
+                    void executeDelete(target);
                   }}
                 >
-                  <Send className="h-4 w-4" aria-hidden="true" />
-                  Send
+                  Delete
                 </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
+    </>
   );
 }
