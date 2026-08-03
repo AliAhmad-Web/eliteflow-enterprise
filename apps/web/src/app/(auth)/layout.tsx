@@ -3,10 +3,17 @@ import { Suspense } from "react";
 
 import { LoadingState } from "@/components/common/feedback/loading-state";
 import { AuthGuestGuard } from "@/features/auth/components/auth-guest-guard";
+import { isSeoRobotsEnabled } from "@/features/seo/feature-flags";
+import { composePrivateSurfaceMetadata } from "@/features/seo/metadata/compose-public-page-metadata";
 
-export const metadata: Metadata = {
+const AUTH_BASELINE: Metadata = {
   title: "Authentication",
 };
+
+export const metadata: Metadata = composePrivateSurfaceMetadata(
+  AUTH_BASELINE,
+  isSeoRobotsEnabled(),
+);
 
 export default function AuthLayout({
   children,
@@ -26,7 +33,10 @@ export default function AuthLayout({
       <div className="relative w-full max-w-md">
         <Suspense
           fallback={
-            <LoadingState label="Loading" className="min-h-[320px] border-0 bg-transparent" />
+            <LoadingState
+              label="Loading"
+              className="min-h-[320px] border-0 bg-transparent"
+            />
           }
         >
           <AuthGuestGuard>{children}</AuthGuestGuard>

@@ -2,6 +2,7 @@ import type { Request } from "express";
 
 import { prisma, Prisma } from "@enterprise/database";
 
+import { isApiSecurityMonitoringEnabled } from "../../config/security-flags.js";
 import { AUTH_AUDIT_RESOURCE } from "../../modules/auth/auth.constants.js";
 
 const AUTH_Z_AUDIT_ACTIONS = {
@@ -55,6 +56,8 @@ export async function logAuthorizationDenied(
         ? input.req.headers["x-forwarded-for"].split(",")[0]?.trim()
         : input.req.ip;
 
+    const monitoring = isApiSecurityMonitoringEnabled();
+
     await prisma.auditLog.create({
       data: {
         userId: input.req.auth?.userId ?? null,
@@ -69,6 +72,13 @@ export async function logAuthorizationDenied(
           requiredRoles: input.requiredRoles ?? [],
           requiredPermissions: input.requiredPermissions ?? [],
           mode: input.mode ?? null,
+          ...(monitoring
+            ? {
+                sessionId: input.req.auth?.sessionId ?? null,
+                permissionCount: input.req.auth?.permissions?.length ?? 0,
+                monitoring: true,
+              }
+            : {}),
         } as Prisma.InputJsonValue,
         ipAddress: ip ?? null,
         userAgent:

@@ -38,6 +38,8 @@ export const NOTIFICATION_AUDIENCE_TYPES = [
   "ROLE",
   "DEPARTMENT",
   "CLIENT_GROUP",
+  /** Fan-out to an explicit list of user IDs (teams, everyone, multi-select). */
+  "USER_LIST",
 ] as const;
 
 export const notificationCategorySchema = z.enum(NOTIFICATION_CATEGORIES);
@@ -157,6 +159,8 @@ export type NotificationIdParamsInput = z.infer<typeof notificationIdParamsSchem
 
 export const createNotificationSchema = z.object({
   userId: uuidSchema.optional(),
+  /** Explicit recipients for USER_LIST (and optional multi-individual fan-out). */
+  userIds: z.array(uuidSchema).min(1).max(500).optional(),
   title: z.string().trim().min(1).max(200),
   body: z.string().trim().min(1).max(2000),
   category: notificationCategorySchema.optional().default("SYSTEM"),

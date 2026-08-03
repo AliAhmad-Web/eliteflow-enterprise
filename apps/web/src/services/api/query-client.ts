@@ -3,9 +3,22 @@
 import { keepPreviousData, QueryClient } from "@tanstack/react-query";
 
 import { getPerformanceQueryDefaultOverlay } from "@/features/performance";
+import {
+  buildTenantAwarePersistStorageKey,
+  getSaasCacheDefaultOverlay,
+  isSaasCacheStrategyEnabled,
+  isSaasTenantReadinessEnabled,
+} from "@/features/saas";
 
-const PERSIST_KEY = "eliteflow-rq-cache-v1";
+const PERSIST_KEY_BASE = "eliteflow-rq-cache-v1";
 const PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function getPersistKey(): string {
+  if (!isSaasTenantReadinessEnabled()) {
+    return PERSIST_KEY_BASE;
+  }
+  return buildTenantAwarePersistStorageKey(PERSIST_KEY_BASE);
+}
 
 /** Queries safe to restore across F5 (list/overview shells — not realtime-only). */
 const PERSIST_KEY_PREFIXES = [
@@ -59,7 +72,7 @@ function dehydrateForPersist(client: QueryClient): string {
 function hydrateFromPersist(client: QueryClient): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = window.localStorage.getItem(PERSIST_KEY);
+    const raw = window.localStorage.getItem(getPersistKey());
     if (!raw) return;
     const parsed = JSON.parse(raw) as {
       timestamp?: number;
@@ -73,7 +86,7 @@ function hydrateFromPersist(client: QueryClient): void {
       Date.now() - parsed.timestamp > PERSIST_MAX_AGE_MS ||
       !Array.isArray(parsed.entries)
     ) {
-      window.localStorage.removeItem(PERSIST_KEY);
+      window.localStorage.removeItem(getPersistKey());
       return;
     }
 
@@ -85,7 +98,7 @@ function hydrateFromPersist(client: QueryClient): void {
     }
   } catch {
     try {
-      window.localStorage.removeItem(PERSIST_KEY);
+      window.localStorage.removeItem(getPersistKey());
     } catch {
       // ignore
     }
@@ -99,7 +112,7 @@ function schedulePersist(client: QueryClient): void {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     try {
-      window.localStorage.setItem(PERSIST_KEY, dehydrateForPersist(client));
+      window.localStorage.setItem(getPersistKey(), dehydrateForPersist(client));
     } catch {
       // Quota / private mode — ignore
     }
@@ -130,16 +143,19 @@ export function createQueryClient(): QueryClient {
   };
 
   const overlay = getPerformanceQueryDefaultOverlay();
+  const saasOverlay = getSaasCacheDefaultOverlay();
 
   return new QueryClient({
     defaultOptions: {
       queries: {
         ...baseQueries,
         ...(overlay?.queries ?? {}),
+        ...(saasOverlay?.queries ?? {}),
       },
       mutations: {
         ...baseMutations,
         ...(overlay?.mutations ?? {}),
+        ...(saasOverlay?.mutations ?? {}),
       },
     },
   });
@@ -166,7 +182,11 @@ export function getQueryClient(): QueryClient {
 export function clearPersistedQueryCache(): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(PERSIST_KEY);
+    window.localStorage.removeItem(getPersistKey());
+    // Also clear legacy/global key when tenant readiness remaps storage.
+    if (isSaasTenantReadinessEnabled() || isSaasCacheStrategyEnabled()) {
+      window.localStorage.removeItem(PERSIST_KEY_BASE);
+    }
   } catch {
     // ignore
   }

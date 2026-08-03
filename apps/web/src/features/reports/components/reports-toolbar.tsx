@@ -25,6 +25,7 @@ export interface ReportsToolbarProps {
   showRefresh?: boolean;
   isRefreshing?: boolean;
   onRefresh?: () => void;
+  biExportExperience?: boolean;
 }
 
 export function ReportsToolbar({
@@ -38,6 +39,7 @@ export function ReportsToolbar({
   showRefresh = false,
   isRefreshing = false,
   onRefresh,
+  biExportExperience = false,
 }: ReportsToolbarProps) {
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border/50 bg-card/50 p-4 lg:flex-row lg:items-end lg:justify-between">
@@ -91,6 +93,7 @@ export function ReportsToolbar({
           disabled={exportDisabled}
           isExporting={isExporting}
           onExport={onExport}
+          enhancedExperience={biExportExperience}
         />
       ) : null}
     </div>

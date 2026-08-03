@@ -17,6 +17,7 @@ import {
 
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
 import {
+  useAdvancedPerformanceProfiler,
   usePerformanceMemo,
   usePerformanceStableCallback,
   useRenderProfiler,
@@ -67,6 +68,7 @@ const MANUAL_CREATE_PROMPT_FALLBACK = "Manually authored document";
  */
 export function AiDocumentsPageContent() {
   useRenderProfiler("AiDocumentsPageContent");
+  useAdvancedPerformanceProfiler("AiDocumentsPageContent");
 
   const enterpriseShell = isAiDocsEnterpriseShellEnabled();
   const deepLinkFetch = isAiDocsDeepLinkFetchEnabled();

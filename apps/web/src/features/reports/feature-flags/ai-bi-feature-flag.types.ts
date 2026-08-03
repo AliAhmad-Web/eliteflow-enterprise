@@ -1,0 +1,46 @@
+/**
+ * AI Business Intelligence feature flag identifiers (Phase 6).
+ * Env vars use the NEXT_PUBLIC_AI_BI_* prefix; defaults are always OFF.
+ *
+ * Complements Task 1.3 AI_ANALYTICS_* flags — does not replace them.
+ * Phase 2 adds brief aliases (EXECUTIVE_SUMMARY, BUSINESS_HEALTH, …).
+ */
+export const AI_BI_FEATURE_FLAG_IDS = [
+  "AI_BI_ENTERPRISE_FOUNDATION",
+  "AI_BI_EXECUTIVE_KPIS",
+  "AI_BI_HEALTH_SCORE",
+  "AI_BI_OPERATIONAL_SUMMARIES",
+  "AI_BI_DEPARTMENT_SUMMARIES",
+  "AI_BI_REVENUE_INTELLIGENCE",
+  "AI_BI_CLIENT_INTELLIGENCE",
+  "AI_BI_PROJECT_INTELLIGENCE",
+  "AI_BI_TEAM_PRODUCTIVITY",
+  "AI_BI_INVOICE_INTELLIGENCE",
+  "AI_BI_AI_BUSINESS_SUMMARIES",
+  "AI_BI_INSIGHT_PRIORITIZATION",
+  "AI_BI_INSIGHT_CATEGORIES",
+  "AI_BI_RECOMMENDATION_GROUPING",
+  "AI_BI_HISTORICAL_COMPARISON",
+  "AI_BI_TREND_COMPOSITION",
+  "AI_BI_REPORT_COMPOSITION",
+  "AI_BI_SAVED_REPORT_EVOLUTION",
+  "AI_BI_EXPORT_ENHANCEMENTS",
+  "AI_BI_FILTER_CONSISTENCY",
+  "AI_BI_DRILL_DOWN",
+  /** Phase 2 brief aliases */
+  "AI_BI_EXECUTIVE_SUMMARY",
+  "AI_BI_BUSINESS_HEALTH",
+  "AI_BI_DEPARTMENT_INTELLIGENCE",
+  "AI_BI_RECOMMENDATIONS",
+  "AI_BI_HISTORY_COMPARE",
+  "AI_BI_REPORT_LAYOUT",
+  "AI_BI_SAVED_REPORTS",
+  "AI_BI_EXPORT_EXPERIENCE",
+] as const;
+
+export type AiBiFeatureFlagId = (typeof AI_BI_FEATURE_FLAG_IDS)[number];
+
+/** Snapshot of all AI BI flags (all default false). */
+export type AiBiFeatureFlags = Readonly<
+  Record<AiBiFeatureFlagId, boolean>
+>;

@@ -14,6 +14,8 @@ import {
   prisma,
 } from "@enterprise/database";
 
+import { runNotificationQueueWorker } from "../../shared/services/saas-queue.helpers.js";
+import { isApiCommunicationEmailAutomationEnabled } from "../../config/communication-flags.js";
 import {
   notificationDispatcher,
   processNotificationQueue,
@@ -34,6 +36,8 @@ import {
 } from "./notifications.mapper.js";
 import { notificationsRepository } from "./notifications.repository.js";
 import {
+  canCreateNotifications,
+  canProcessNotificationQueue,
   isOrgAdmin,
   isSuperAdmin,
   type NotificationsActor,
@@ -99,9 +103,9 @@ export class NotificationsService {
   }
 
   async create(input: CreateNotificationInput, actor: NotificationsActor) {
-    if (!isOrgAdmin(actor)) {
+    if (!canCreateNotifications(actor)) {
       throw new NotificationsError(
-        "Only organization admins can create notifications",
+        "You do not have permission to send notifications or email",
         403,
         NOTIFICATIONS_ERROR_CODES.FORBIDDEN,
       );
@@ -111,7 +115,8 @@ export class NotificationsService {
       | { type: "INDIVIDUAL"; userId: string }
       | { type: "ROLE"; roleCode: string }
       | { type: "DEPARTMENT"; departmentId: string }
-      | { type: "CLIENT_GROUP"; companyId: string };
+      | { type: "CLIENT_GROUP"; companyId: string }
+      | { type: "USER_LIST"; userIds: string[] };
 
     switch (input.audienceType) {
       case "INDIVIDUAL":
@@ -124,6 +129,24 @@ export class NotificationsService {
         }
         audience = { type: "INDIVIDUAL", userId: input.userId };
         break;
+      case "USER_LIST": {
+        const ids = [
+          ...new Set(
+            [...(input.userIds ?? []), ...(input.userId ? [input.userId] : [])].filter(
+              Boolean,
+            ),
+          ),
+        ];
+        if (ids.length === 0) {
+          throw new NotificationsError(
+            "userIds is required for USER_LIST audience",
+            400,
+            NOTIFICATIONS_ERROR_CODES.VALIDATION,
+          );
+        }
+        audience = { type: "USER_LIST", userIds: ids };
+        break;
+      }
       case "ROLE":
         if (!input.roleCode) {
           throw new NotificationsError(
@@ -178,6 +201,15 @@ export class NotificationsService {
       audience,
       scheduledFor: input.scheduledFor ? new Date(input.scheduledFor) : undefined,
     });
+
+    // Auto-flush EMAIL queue so non-admin communicators do not depend on admin processQueue.
+    if (input.sendEmail && result.queued > 0) {
+      try {
+        await runNotificationQueueWorker(processNotificationQueue, 50);
+      } catch {
+        // Queue worker may retry later via automation / admin flush.
+      }
+    }
 
     return result;
   }
@@ -294,14 +326,19 @@ export class NotificationsService {
   }
 
   async listQueue(query: ListQueueQueryInput, actor: NotificationsActor) {
-    if (!isOrgAdmin(actor)) {
+    if (!canCreateNotifications(actor) && !isOrgAdmin(actor)) {
       throw new NotificationsError(
-        "Only organization admins can view the notification queue",
+        "You do not have permission to view the email queue",
         403,
         NOTIFICATIONS_ERROR_CODES.FORBIDDEN,
       );
     }
-    const result = await notificationsRepository.listQueue(query);
+    const result = await notificationsRepository.listQueue({
+      ...query,
+      // Non-admins only see deliveries they triggered (createdBy) or own recipient rows.
+      userId: isOrgAdmin(actor) ? undefined : actor.userId,
+      createdById: isOrgAdmin(actor) ? undefined : actor.userId,
+    });
     return {
       items: result.items.map(toQueueDto),
       total: result.total,
@@ -311,14 +348,18 @@ export class NotificationsService {
   }
 
   async processQueue(actor: NotificationsActor) {
-    if (!isOrgAdmin(actor)) {
+    if (!canProcessNotificationQueue(actor)) {
       throw new NotificationsError(
-        "Only organization admins can process the queue",
+        "You do not have permission to process the email queue",
         403,
         NOTIFICATIONS_ERROR_CODES.FORBIDDEN,
       );
     }
-    return processNotificationQueue(25);
+    // Re-arm failed EMAIL rows before claim — powers "Retry Failed Emails" UI.
+    if (isApiCommunicationEmailAutomationEnabled()) {
+      await notificationsRepository.requeueFailedEmail(25);
+    }
+    return runNotificationQueueWorker(processNotificationQueue, 25);
   }
 
   async runTriggers(actor: NotificationsActor) {
@@ -393,6 +434,47 @@ export class NotificationsService {
         syncedCommentId: sync.syncedCommentId,
       },
     });
+
+    // Deliver reply into the original sender's inbox + email (threaded).
+    const originalSenderId = notification.createdById;
+    if (originalSenderId && originalSenderId !== actor.userId) {
+      const meta =
+        notification.metadata &&
+        typeof notification.metadata === "object" &&
+        !Array.isArray(notification.metadata)
+          ? (notification.metadata as Record<string, unknown>)
+          : {};
+      const threadId =
+        typeof meta.threadId === "string"
+          ? meta.threadId
+          : `thread:${notification.id}`;
+      try {
+        await notificationDispatcher.notify({
+          title: notification.title.startsWith("Re:")
+            ? notification.title
+            : `Re: ${notification.title}`,
+          body: input.message,
+          category: notification.category,
+          priority: NotificationPriority.NORMAL,
+          linkUrl: notification.linkUrl,
+          entityType: notification.entityType,
+          entityId: notification.entityId,
+          createdById: actor.userId,
+          sendEmail: true,
+          audience: { type: "INDIVIDUAL", userId: originalSenderId },
+          metadata: {
+            ...meta,
+            threadId,
+            source: "communication_email_reply",
+            inReplyToNotificationId: notification.id,
+            replyId: reply.id,
+          } as Prisma.InputJsonValue,
+        });
+        await runNotificationQueueWorker(processNotificationQueue, 25);
+      } catch {
+        // Reply row is persisted even if outbound notify fails.
+      }
+    }
 
     return toReplyDto(reply);
   }

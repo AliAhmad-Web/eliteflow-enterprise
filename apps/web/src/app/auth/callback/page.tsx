@@ -5,10 +5,17 @@ import { LoadingState } from "@/components/common/feedback/loading-state";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { AuthPageShell } from "@/features/auth/components/auth-page-shell";
 import { OAuthCallbackHandler } from "@/features/auth/components/oauth-callback-handler";
+import { isSeoRobotsEnabled } from "@/features/seo/feature-flags";
+import { composePrivateSurfaceMetadata } from "@/features/seo/metadata/compose-public-page-metadata";
 
-export const metadata: Metadata = {
+const CALLBACK_BASELINE: Metadata = {
   title: "OAuth callback",
 };
+
+export const metadata: Metadata = composePrivateSurfaceMetadata(
+  CALLBACK_BASELINE,
+  isSeoRobotsEnabled(),
+);
 
 export default function OAuthCallbackPage() {
   return (

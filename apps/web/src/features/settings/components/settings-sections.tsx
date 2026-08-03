@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ROUTES } from "@/constants/routes";
+import { isCommunicationWhatsappPresentationEnabled } from "@/features/communication/feature-flags";
 import { ApiClientError } from "@/services/api/api-error";
 import { cn } from "@/lib/utils";
 
@@ -741,26 +742,39 @@ const NotificationsSection = memo(function NotificationsSection({ data }: { data
     }
   }
 
-  const toggles = [
-    ["emailNotifications", "Email notifications"],
-    ["pushNotifications", "Push notifications"],
-    ["desktopNotifications", "Desktop notifications"],
-    ["smsNotifications", "SMS (future ready)"],
-    ["whatsappNotifications", "WhatsApp (future ready)"],
-  ] as const;
+  const showWhatsapp = isCommunicationWhatsappPresentationEnabled();
+  type NotifToggleKey =
+    | "emailNotifications"
+    | "pushNotifications"
+    | "desktopNotifications"
+    | "smsNotifications"
+    | "whatsappNotifications";
+  const toggles: Array<{ key: NotifToggleKey; label: string }> = [
+    { key: "emailNotifications", label: "Email notifications" },
+    { key: "pushNotifications", label: "Push notifications" },
+    { key: "desktopNotifications", label: "Desktop notifications" },
+    { key: "smsNotifications", label: "SMS (future ready)" },
+  ];
+  if (showWhatsapp) {
+    toggles.push({
+      key: "whatsappNotifications",
+      label: "WhatsApp (future ready)",
+    });
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Notification preferences</CardTitle>
         <CardDescription>
-          Channel delivery for email, push, desktop, and future SMS/WhatsApp.
+          Channel delivery for email, push, desktop
+          {showWhatsapp ? ", and WhatsApp" : ""}.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>
           <div className="grid gap-2 lg:grid-cols-2">
-            {toggles.map(([key, label]) => (
+            {toggles.map(({ key, label }) => (
               <ToggleRow
                 key={key}
                 checked={form[key]}

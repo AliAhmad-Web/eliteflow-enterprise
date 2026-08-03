@@ -11,6 +11,7 @@ import type {
 } from "@enterprise/shared";
 
 import { successResponse } from "../../shared/utils/api-response.js";
+import { recordSaasAiRequest } from "../../shared/services/saas-metrics.service.js";
 import { extractRequestContext } from "../auth/auth.utils.js";
 import { AI_ERROR_CODES, AiError } from "./ai.errors.js";
 import { aiService, type AiActor } from "./ai.service.js";
@@ -61,6 +62,7 @@ export class AiController {
 
   async chat(req: Request, res: Response): Promise<void> {
     const body = req.body as AiChatRequestInput;
+    recordSaasAiRequest();
     const result = await aiService.chat(body, getActor(req));
     res.status(201).json(successResponse(result, "Response generated"));
   }
@@ -68,6 +70,7 @@ export class AiController {
   async chatStream(req: Request, res: Response): Promise<void> {
     const body = req.body as AiChatRequestInput;
     const actor = getActor(req);
+    recordSaasAiRequest();
 
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");

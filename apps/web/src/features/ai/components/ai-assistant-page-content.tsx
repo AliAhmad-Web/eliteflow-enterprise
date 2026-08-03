@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -21,8 +22,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import {
+  isCommunicationFeedbackEnabled,
+  isCommunicationSpeechToTextEnabled,
+  isCommunicationSpeechUiEnabled,
+  isCommunicationTextToSpeechEnabled,
+  isCommunicationVoiceActionsEnabled,
+  isCommunicationVoiceAiEnabled,
+  isCommunicationVoiceAssistantEnabled,
+  isCommunicationVoiceCommandsEnabled,
+  isCommunicationVoicePresentationEnabled,
+  getVoiceSttProviderInfo,
+  getVoiceTtsProviderInfo,
+} from "@/features/communication";
+import {
+  useAdvancedPerformanceProfiler,
   usePerformanceMemo,
   usePerformanceStableCallback,
   useRenderProfiler,
@@ -46,6 +60,20 @@ import {
 } from "../hooks/use-ai-mutations";
 import { useAiConversation, useAiConversations } from "../hooks/use-ai";
 import { AI_MODE_LABELS } from "../types/ai.types";
+import {
+  isVoiceSttReady,
+  isVoiceTtsReady,
+  speakBrowserText,
+  startBrowserSpeechRecognition,
+  stopBrowserSpeechSynthesis,
+} from "../utils/speech-providers";
+import type { VoiceSessionPhase } from "../utils/voice-session";
+import {
+  nextVoicePhaseOnIdle,
+  nextVoicePhaseOnInterrupt,
+  nextVoicePhaseOnStreamProgress,
+  nextVoicePhaseOnStreamStart,
+} from "../utils/voice-session";
 import { AiAssistantEnterpriseShell } from "./ai-assistant-enterprise-shell";
 import type { AiAssistantShellProps } from "./ai-assistant-enterprise-shell";
 import { AiAssistantLegacyLayout } from "./ai-assistant-legacy-layout";
@@ -61,6 +89,7 @@ const HISTORY_PAGE_SIZE_PAGED = 20;
  */
 export function AiAssistantPageContent() {
   useRenderProfiler("AiAssistantPageContent");
+  useAdvancedPerformanceProfiler("AiAssistantPageContent");
 
   const enterpriseShell = isAiUiEnterpriseShellEnabled();
   const streamControls = isAiUiStreamControlsEnabled();
@@ -72,6 +101,19 @@ export function AiAssistantPageContent() {
   const mobileHistorySheet = isAiUiMobileHistorySheetEnabled();
   const historyPagination = isAiUiHistoryPaginationEnabled();
 
+  const voicePresentation = isCommunicationVoicePresentationEnabled();
+  const voiceAi = isCommunicationVoiceAiEnabled();
+  const voiceAssistant = isCommunicationVoiceAssistantEnabled();
+  const speechUi = isCommunicationSpeechUiEnabled();
+  const voiceActions = isCommunicationVoiceActionsEnabled();
+  const voiceCommands = isCommunicationVoiceCommandsEnabled();
+  const speechToText = isCommunicationSpeechToTextEnabled();
+  const textToSpeech = isCommunicationTextToSpeechEnabled();
+  const communicationFeedback = isCommunicationFeedbackEnabled();
+
+  const showVoiceControls = voicePresentation && voiceAi;
+  const feedbackToasts = enhancedFeedback || communicationFeedback;
+
   const useModularShell =
     enterpriseShell ||
     streamControls ||
@@ -81,7 +123,8 @@ export function AiAssistantPageContent() {
     providerBadge ||
     contextIndicators ||
     mobileHistorySheet ||
-    historyPagination;
+    historyPagination ||
+    showVoiceControls;
 
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
@@ -100,14 +143,36 @@ export function AiAssistantPageContent() {
   const [deleteTarget, setDeleteTarget] = useState<AiConversation | null>(null);
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [streamStatusText, setStreamStatusText] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voicePhase, setVoicePhase] = useState<VoiceSessionPhase>("idle");
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const speechStopRef = useRef<(() => void) | null>(null);
+  const listeningTranscriptRef = useRef("");
+  const ttsActiveRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
 
   const { toasts, pushToast, dismiss } = useAiUiToasts();
+
+  const stopSpeechListen = () => {
+    speechStopRef.current?.();
+    speechStopRef.current = null;
+  };
+
+  const stopVoicePlayback = () => {
+    ttsActiveRef.current = false;
+    stopBrowserSpeechSynthesis();
+  };
+
+  useEffect(() => {
+    return () => {
+      stopSpeechListen();
+      stopVoicePlayback();
+    };
+  }, []);
 
   const pageSize = historyPagination
     ? HISTORY_PAGE_SIZE_PAGED
@@ -205,18 +270,35 @@ export function AiAssistantPageContent() {
   }, [shortcuts]);
 
   const contextChips = useMemo(() => {
-    if (!contextIndicators) return [];
-    const chips = [
-      "Workspace: EliteFlow",
-      `Mode: ${AI_MODE_LABELS[mode]}`,
-      selectedId ? "Session: Active conversation" : "Session: New conversation",
-      "Settings: AI preferences (read-only)",
-    ];
-    if (providerLabel) {
-      chips.push(`Provider: ${providerLabel}`);
+    if (!contextIndicators && !showVoiceControls) return [];
+    const chips: string[] = [];
+    if (contextIndicators) {
+      chips.push(
+        "Workspace: EliteFlow",
+        `Mode: ${AI_MODE_LABELS[mode]}`,
+        selectedId ? "Session: Active conversation" : "Session: New conversation",
+        "Settings: AI preferences (read-only)",
+      );
+      if (providerLabel) {
+        chips.push(`Provider: ${providerLabel}`);
+      }
+    }
+    if (showVoiceControls && voiceMode) {
+      chips.push("Voice session: active");
+      if (voiceActions) {
+        chips.push("Voice → Action Framework");
+      }
     }
     return chips;
-  }, [contextIndicators, mode, selectedId, providerLabel]);
+  }, [
+    contextIndicators,
+    mode,
+    selectedId,
+    providerLabel,
+    showVoiceControls,
+    voiceMode,
+    voiceActions,
+  ]);
 
   const handleSend = async (overrideMessage?: string) => {
     const message = (overrideMessage ?? draft).trim();
@@ -226,8 +308,13 @@ export function AiAssistantPageContent() {
     const tempAssistantId = `temp-assistant-${Date.now()}`;
     stoppedRef.current = false;
 
-    const controller = streamControls ? new AbortController() : null;
+    const controller =
+      streamControls || showVoiceControls ? new AbortController() : null;
     abortRef.current = controller;
+
+    if (showVoiceControls && voiceMode) {
+      setVoicePhase(nextVoicePhaseOnStreamStart(true));
+    }
 
     setLocalMessages((current) => [
       ...current,
@@ -253,6 +340,9 @@ export function AiAssistantPageContent() {
 
     setLastFailedMessage(null);
     if (shortcuts) setStreamStatusText("Assistant is thinking");
+    if (showVoiceControls && voiceMode && voiceActions) {
+      setStreamStatusText("Voice turn → Action Framework");
+    }
 
     try {
       const result = await chatMutation.mutateAsync({
@@ -268,6 +358,9 @@ export function AiAssistantPageContent() {
             setProviderLabel(meta.provider);
           }
           if (shortcuts) setStreamStatusText("Assistant is responding");
+          if (showVoiceControls && voiceMode) {
+            setVoicePhase(nextVoicePhaseOnStreamProgress(true));
+          }
         },
         onDelta: (chunk) => {
           setLocalMessages((current) =>
@@ -282,6 +375,50 @@ export function AiAssistantPageContent() {
       setSelectedId(result.conversation.id);
       setLocalMessages(result.conversation.messages ?? []);
       if (shortcuts) setStreamStatusText("Response complete");
+      if (showVoiceControls && voiceMode) {
+        const assistantReply = [...(result.conversation.messages ?? [])]
+          .reverse()
+          .find((item) => item.role === "ASSISTANT")
+          ?.content?.trim();
+
+        if (
+          textToSpeech &&
+          isVoiceTtsReady() &&
+          assistantReply &&
+          !stoppedRef.current
+        ) {
+          setVoicePhase("responding");
+          ttsActiveRef.current = true;
+          void speakBrowserText(assistantReply, {
+            onError: (msg) => {
+              if (feedbackToasts) pushToast(msg, "error");
+            },
+            onEnd: () => {
+              ttsActiveRef.current = false;
+              if (voiceAssistant) {
+                setVoicePhase("listening");
+                if (feedbackToasts) {
+                  pushToast("Ready for next voice turn", "info");
+                }
+              } else {
+                setVoicePhase(nextVoicePhaseOnIdle());
+              }
+            },
+          });
+        } else if (voiceAssistant) {
+          setVoicePhase("listening");
+          if (feedbackToasts) {
+            pushToast(
+              textToSpeech && !isVoiceTtsReady()
+                ? "Ready for next voice turn (TTS unavailable)"
+                : "Ready for next voice turn",
+              "info",
+            );
+          }
+        } else {
+          setVoicePhase(nextVoicePhaseOnIdle());
+        }
+      }
     } catch (error) {
       const aborted =
         stoppedRef.current ||
@@ -298,7 +435,10 @@ export function AiAssistantPageContent() {
           );
         });
         if (shortcuts) setStreamStatusText("Generation stopped");
-        if (enhancedFeedback) pushToast("Generation stopped", "info");
+        if (feedbackToasts) pushToast("Generation stopped", "info");
+        if (showVoiceControls) {
+          setVoicePhase(nextVoicePhaseOnInterrupt());
+        }
         return;
       }
 
@@ -309,11 +449,14 @@ export function AiAssistantPageContent() {
       );
       setLastFailedMessage(message);
       if (shortcuts) setStreamStatusText("Response failed");
-      if (enhancedFeedback) {
+      if (feedbackToasts) {
         pushToast(
           error instanceof Error ? error.message : "Request failed",
           "error",
         );
+      }
+      if (showVoiceControls) {
+        setVoicePhase(nextVoicePhaseOnIdle());
       }
     } finally {
       abortRef.current = null;
@@ -323,6 +466,77 @@ export function AiAssistantPageContent() {
   const handleStop = () => {
     stoppedRef.current = true;
     abortRef.current?.abort();
+  };
+
+  const handleVoiceInterrupt = () => {
+    stopSpeechListen();
+    stopVoicePlayback();
+    handleStop();
+    setVoicePhase(nextVoicePhaseOnInterrupt());
+    if (feedbackToasts) pushToast("Voice interrupted", "info");
+  };
+
+  const handlePushToTalkStart = () => {
+    if (!showVoiceControls || !voiceMode || chatMutation.isPending) return;
+    stopVoicePlayback();
+    stopSpeechListen();
+    listeningTranscriptRef.current = "";
+    setVoicePhase("listening");
+
+    if (!speechToText || !isVoiceSttReady()) {
+      if (feedbackToasts) {
+        pushToast(
+          speechToText
+            ? "Speech recognition unavailable in this browser — type your message"
+            : "Speech-to-Text flag is off — type your message",
+          "info",
+        );
+      }
+      return;
+    }
+
+    const session = startBrowserSpeechRecognition({
+      onInterim: (text) => {
+        listeningTranscriptRef.current = text;
+        setDraft(text);
+      },
+      onFinal: (text) => {
+        listeningTranscriptRef.current = text;
+        setDraft(text);
+      },
+      onError: (message) => {
+        if (feedbackToasts) pushToast(message, "error");
+        setVoicePhase(nextVoicePhaseOnIdle());
+      },
+    });
+
+    if (!session) {
+      if (feedbackToasts) {
+        pushToast(
+          "Could not start microphone / speech recognition. Check browser permissions.",
+          "error",
+        );
+      }
+      setVoicePhase(nextVoicePhaseOnIdle());
+      return;
+    }
+
+    speechStopRef.current = session.stop;
+  };
+
+  const handlePushToTalkEnd = () => {
+    if (!showVoiceControls || !voiceMode) return;
+    stopSpeechListen();
+    const spoken = listeningTranscriptRef.current.trim() || draft.trim();
+    if (spoken) {
+      setDraft(spoken);
+      void handleSend(spoken);
+      return;
+    }
+    setVoicePhase(nextVoicePhaseOnIdle());
+    if (feedbackToasts) {
+      pushToast("No speech captured — try again or type your message", "info");
+    }
   };
 
   const handleRetry = async () => {
@@ -341,9 +555,9 @@ export function AiAssistantPageContent() {
   const handleCopy = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
-      if (enhancedFeedback) pushToast("Copied to clipboard", "success");
+      if (feedbackToasts) pushToast("Copied to clipboard", "success");
     } catch {
-      if (enhancedFeedback) pushToast("Copy failed", "error");
+      if (feedbackToasts) pushToast("Copy failed", "error");
     }
   };
 
@@ -357,9 +571,9 @@ export function AiAssistantPageContent() {
         setSelectedId(null);
         setLocalMessages([]);
       }
-      if (enhancedFeedback) pushToast("Conversation deleted", "success");
+      if (feedbackToasts) pushToast("Conversation deleted", "success");
     } catch (error) {
-      if (enhancedFeedback) {
+      if (feedbackToasts) {
         pushToast(
           error instanceof Error ? error.message : "Delete failed",
           "error",
@@ -369,7 +583,7 @@ export function AiAssistantPageContent() {
   };
 
   const handleDeleteRequest = (conversation: AiConversation) => {
-    if (enhancedFeedback) {
+    if (feedbackToasts) {
       setDeleteTarget(conversation);
       return;
     }
@@ -377,17 +591,20 @@ export function AiAssistantPageContent() {
   };
 
   const startNewConversation = () => {
-    if (streamControls && chatMutation.isPending) {
+    if ((streamControls || showVoiceControls) && chatMutation.isPending) {
       abortRef.current?.abort();
       stoppedRef.current = true;
       abortRef.current = null;
     }
+    stopSpeechListen();
+    stopVoicePlayback();
     setSelectedId(null);
     setLocalMessages([]);
     setDraft("");
     setLastFailedMessage(null);
     setStreamStatusText(null);
     setProviderLabel(null);
+    setVoicePhase(nextVoicePhaseOnIdle());
     if (shortcuts) {
       queueMicrotask(() => composerRef.current?.focus());
     }
@@ -445,6 +662,26 @@ export function AiAssistantPageContent() {
       setMobileHistoryOpen(open);
     },
   );
+  const onVoiceModeChange = usePerformanceStableCallback((enabled: boolean) => {
+    if (!enabled) {
+      stopSpeechListen();
+      stopVoicePlayback();
+    }
+    setVoiceMode(enabled);
+    setVoicePhase(nextVoicePhaseOnIdle());
+    if (feedbackToasts) {
+      pushToast(enabled ? "Voice mode enabled" : "Voice mode disabled", "info");
+    }
+  });
+  const onPushToTalkStart = usePerformanceStableCallback(() => {
+    handlePushToTalkStart();
+  });
+  const onPushToTalkEnd = usePerformanceStableCallback(() => {
+    handlePushToTalkEnd();
+  });
+  const onVoiceInterrupt = usePerformanceStableCallback(() => {
+    handleVoiceInterrupt();
+  });
 
   const historyErrorMessage =
     conversationsQuery.error instanceof Error
@@ -466,6 +703,22 @@ export function AiAssistantPageContent() {
   const isLoadingConversation = Boolean(
     selectedId && conversationQuery.isLoading,
   );
+
+  const voiceCommandsHint =
+    showVoiceControls && voiceMode && (voiceCommands || voiceActions)
+      ? "Spoken turns use the same Action Framework as typed prompts"
+      : null;
+
+  const voiceProviderWarning = showVoiceControls
+    ? (() => {
+        const stt = getVoiceSttProviderInfo();
+        const tts = getVoiceTtsProviderInfo();
+        if (stt.status === "ready" && tts.status === "ready") return null;
+        return [stt.message, tts.message].join(" ");
+      })()
+    : null;
+
+  const showVoiceContextChips = showVoiceControls && voiceMode;
 
   const shellProps = usePerformanceMemo(
     (): AiAssistantShellProps => ({
@@ -502,7 +755,7 @@ export function AiAssistantPageContent() {
       canRetry: Boolean(lastFailedMessage),
       showProviderBadge: providerBadge,
       providerLabel,
-      showContextIndicators: contextIndicators,
+      showContextIndicators: contextIndicators || showVoiceContextChips,
       contextChips,
       showShortcuts: shortcuts,
       streamStatusText,
@@ -515,6 +768,16 @@ export function AiAssistantPageContent() {
       onLoadMore,
       searchInputRef,
       composerRef,
+      showVoiceControls,
+      voiceMode,
+      onVoiceModeChange,
+      voicePhase,
+      showSpeechUi: speechUi,
+      onPushToTalkStart,
+      onPushToTalkEnd,
+      onVoiceInterrupt,
+      voiceCommandsHint,
+      voiceProviderWarning,
     }),
     [
       search,
@@ -550,6 +813,7 @@ export function AiAssistantPageContent() {
       providerBadge,
       providerLabel,
       contextIndicators,
+      showVoiceContextChips,
       contextChips,
       shortcuts,
       streamStatusText,
@@ -560,6 +824,16 @@ export function AiAssistantPageContent() {
       hasMore,
       isLoadingMore,
       onLoadMore,
+      showVoiceControls,
+      voiceMode,
+      onVoiceModeChange,
+      voicePhase,
+      speechUi,
+      onPushToTalkStart,
+      onPushToTalkEnd,
+      onVoiceInterrupt,
+      voiceCommandsHint,
+      voiceProviderWarning,
     ],
   );
 
@@ -571,7 +845,7 @@ export function AiAssistantPageContent() {
         <AiAssistantLegacyLayout {...shellProps} />
       )}
 
-      {enhancedFeedback ? (
+      {feedbackToasts ? (
         <>
           <AiUiToastViewport toasts={toasts} onDismiss={dismiss} />
           <Dialog

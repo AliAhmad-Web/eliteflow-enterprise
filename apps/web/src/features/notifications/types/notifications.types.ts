@@ -12,7 +12,10 @@ export const NOTIFICATIONS_QUERY_KEYS = {
   unread: () => ["notifications", "unread"] as const,
   preferences: () => ["notifications", "preferences"] as const,
   detail: (id: string) => ["notifications", "detail", id] as const,
-  history: () => ["notifications", "history"] as const,
+  history: (page = 1) => ["notifications", "history", page] as const,
+  templates: () => ["notifications", "templates"] as const,
+  queue: (query: Record<string, unknown>) =>
+    ["notifications", "queue", query] as const,
   replies: (id: string) => ["notifications", "replies", id] as const,
 };
 

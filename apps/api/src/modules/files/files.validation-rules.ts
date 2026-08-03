@@ -1,5 +1,6 @@
 import type { FileCategory } from "@enterprise/database";
 
+import { isApiSecurityUploadHardeningEnabled } from "../../config/security-flags.js";
 import { FilesError, FILES_ERROR_CODES } from "./files.errors.js";
 
 const DEFAULT_MAX_BYTES = 25 * 1024 * 1024;
@@ -149,16 +150,47 @@ export function validateUploadFile(input: {
   }
 
   // SVG can carry script payloads — reject embedded script / event handlers.
-  if (
-    extension === "svg" &&
-    input.buffer &&
-    /<script[\s>]|on\w+\s*=/i.test(input.buffer.toString("utf8").slice(0, 64_000))
-  ) {
-    throw new FilesError(
-      "SVG file contains potentially unsafe content",
-      400,
-      FILES_ERROR_CODES.VALIDATION,
-    );
+  if (extension === "svg" && input.buffer) {
+    const svgText = input.buffer.toString("utf8").slice(0, 64_000);
+    if (/<script[\s>]|on\w+\s*=/i.test(svgText)) {
+      throw new FilesError(
+        "SVG file contains potentially unsafe content",
+        400,
+        FILES_ERROR_CODES.VALIDATION,
+      );
+    }
+
+    if (isApiSecurityUploadHardeningEnabled()) {
+      // Harden: block common SVG XSS vectors beyond script/on*.
+      if (
+        /javascript\s*:/i.test(svgText) ||
+        /<foreignObject[\s>]/i.test(svgText) ||
+        /<iframe[\s>]/i.test(svgText) ||
+        /xlink:href\s*=\s*["']?\s*data:/i.test(svgText) ||
+        /href\s*=\s*["']?\s*data:text\/html/i.test(svgText) ||
+        /<animate[\s>]/i.test(svgText)
+      ) {
+        throw new FilesError(
+          "SVG file contains potentially unsafe content",
+          400,
+          FILES_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      // Reject double extensions (e.g. file.php.svg)
+      if (/\.(php|phtml|asp|aspx|js|exe|sh|bat)(\.|$)/i.test(input.originalName)) {
+        throw new FilesError(
+          "File name is not allowed",
+          400,
+          FILES_ERROR_CODES.VALIDATION,
+        );
+      }
+    }
+  }
+
+  // When upload hardening is ON, require MIME ↔ extension consistency for images.
+  if (isApiSecurityUploadHardeningEnabled()) {
+    assertMimeExtensionConsistency(extension, input.mimeType);
   }
 
   return {
@@ -268,6 +300,39 @@ function matchesSignature(buffer: Buffer, signatures: number[][]): boolean {
   return signatures.some((sig) =>
     sig.every((byte, index) => buffer[index] === byte),
   );
+}
+
+function assertMimeExtensionConsistency(
+  extension: string,
+  mimeType: string,
+): void {
+  const expectedByExt: Record<string, string[]> = {
+    jpg: ["image/jpeg"],
+    jpeg: ["image/jpeg"],
+    png: ["image/png"],
+    gif: ["image/gif"],
+    webp: ["image/webp"],
+    svg: ["image/svg+xml"],
+    pdf: ["application/pdf"],
+    txt: ["text/plain"],
+    md: ["text/markdown", "text/plain"],
+    csv: ["text/csv", "text/plain"],
+    mp4: ["video/mp4"],
+    webm: ["video/webm"],
+    mp3: ["audio/mpeg"],
+    wav: ["audio/wav"],
+    ogg: ["audio/ogg"],
+  };
+
+  const allowed = expectedByExt[extension];
+  if (!allowed) return;
+  if (!allowed.includes(mimeType)) {
+    throw new FilesError(
+      `MIME type ${mimeType} does not match file extension .${extension}`,
+      400,
+      FILES_ERROR_CODES.VALIDATION,
+    );
+  }
 }
 
 export function uniqueFileName(desired: string, existingNames: string[]): string {

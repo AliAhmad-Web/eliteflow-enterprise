@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { MAIN_NAVIGATION } from "@/config/navigation.config";
 import { ROUTES } from "@/constants/routes";
+import { filterNavigationByCommunicationFlags } from "@/features/communication/utils/filter-communication-nav";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
 import { filterNavigationByAccess } from "@/features/rbac/utils/filter-navigation";
 import { useUiStore } from "@/stores/ui.store";
@@ -19,7 +20,10 @@ export function MobileNav() {
   const { subject } = usePermissions();
 
   const sections = useMemo(
-    () => filterNavigationByAccess(MAIN_NAVIGATION, subject),
+    () =>
+      filterNavigationByCommunicationFlags(
+        filterNavigationByAccess(MAIN_NAVIGATION, subject),
+      ),
     [subject],
   );
 

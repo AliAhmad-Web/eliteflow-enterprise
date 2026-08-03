@@ -24,6 +24,7 @@ const COMMUNICATION_WARM_ROUTES = new Set<string>([
   ROUTES.MEETINGS,
   ROUTES.ANNOUNCEMENTS,
   ROUTES.ACTIVITY,
+  ROUTES.EMAIL_AUTOMATION,
 ]);
 
 function isCommunicationWarmPath(path: string): boolean {

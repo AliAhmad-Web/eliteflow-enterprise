@@ -7,6 +7,7 @@ import {
   AUTH_HEADERS,
 } from "@enterprise/shared";
 
+import { isApiSecuritySecureCookiesEnabled } from "../config/security-flags.js";
 import { AuthError } from "../modules/auth/auth.errors.js";
 import { SECURITY_MESSAGES } from "../modules/security/security.constants.js";
 
@@ -24,10 +25,14 @@ function csrfCookieName(): string {
 
 export function issueCsrfToken(res: Response): string {
   const token = randomBytes(32).toString("hex");
+  const hardenCookies = isApiSecuritySecureCookiesEnabled();
+  // Cross-site web→API needs SameSite=None; Secure (align with refresh cookie).
+  const crossSite = isProduction() && hardenCookies;
+
   res.cookie(csrfCookieName(), token, {
     httpOnly: false,
     secure: isProduction(),
-    sameSite: "strict",
+    sameSite: crossSite ? "none" : isProduction() ? "strict" : "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });

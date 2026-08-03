@@ -51,6 +51,7 @@ import {
 } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
+import { VirtualizedList } from "@/components/common/data/virtualized-list";
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
@@ -74,6 +75,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
+import {
+  isPerformanceAdvVirtualizationEnabled,
+  useAdvancedPerformanceProfiler,
+} from "@/features/performance";
 import {
   useHasPermission,
   useRole,
@@ -284,6 +289,8 @@ function TabButton({
 }
 
 export function TeamPageContent() {
+  useAdvancedPerformanceProfiler("TeamPageContent");
+
   const { isClient, isEmployee } = useRole();
   const canManage = useHasPermission(PERMISSIONS.TEAM_MANAGE) && !isClient;
   const currentUserId = useAuthStore((state) => state.user?.id);
@@ -1139,21 +1146,24 @@ function DirectoryPanel({
             />
           ) : null}
           {!isLoading && !isError && employees.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="pb-3 pr-4 font-medium">Employee</th>
-                    <th className="pb-3 pr-4 font-medium">Code</th>
-                    <th className="pb-3 pr-4 font-medium">Department</th>
-                    <th className="pb-3 pr-4 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map((employee) => (
-                    <tr key={employee.id} className="border-b border-border/50">
-                      <td className="py-3 pr-4">
+            isPerformanceAdvVirtualizationEnabled() ? (
+              <div className="overflow-x-auto">
+                <div className="grid min-w-[640px] grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-b border-border pb-3 text-left text-sm text-muted-foreground">
+                  <span className="font-medium">Employee</span>
+                  <span className="font-medium">Code</span>
+                  <span className="font-medium">Department</span>
+                  <span className="font-medium">Status</span>
+                  <span className="font-medium">Actions</span>
+                </div>
+                <VirtualizedList
+                  items={employees}
+                  estimateSize={72}
+                  overscan={6}
+                  heightClassName="max-h-[min(60vh,640px)]"
+                  getItemKey={(employee) => employee.id}
+                  renderItem={(employee) => (
+                    <div className="grid min-w-[640px] grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-b border-border/50 py-3 text-sm">
+                      <div>
                         <button
                           type="button"
                           className="font-medium text-foreground hover:underline"
@@ -1166,51 +1176,125 @@ function DirectoryPanel({
                             {employee.designation}
                           </p>
                         ) : null}
-                      </td>
-                      <td className="py-3 pr-4">{employee.employeeCode}</td>
-                      <td className="py-3 pr-4">
+                      </div>
+                      <div className="self-center">{employee.employeeCode}</div>
+                      <div className="self-center">
                         {employee.department?.name ?? "—"}
-                      </td>
-                      <td className="py-3 pr-4">
+                      </div>
+                      <div className="self-center">
                         <StatusPill
                           label={EMPLOYEE_STATUS_LABELS[employee.status]}
                           tone={employeeStatusTone(employee.status)}
                         />
-                      </td>
-                      <td className="py-3">
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
+                      </div>
+                      <div className="flex gap-2 self-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onViewProfile(employee.id)}
+                        >
+                          View
+                        </Button>
+                        {canManage ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onEditEmployee(employee)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => onDeleteEmployee(employee.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+                />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-muted-foreground">
+                      <th className="pb-3 pr-4 font-medium">Employee</th>
+                      <th className="pb-3 pr-4 font-medium">Code</th>
+                      <th className="pb-3 pr-4 font-medium">Department</th>
+                      <th className="pb-3 pr-4 font-medium">Status</th>
+                      <th className="pb-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employees.map((employee) => (
+                      <tr
+                        key={employee.id}
+                        className="border-b border-border/50"
+                      >
+                        <td className="py-3 pr-4">
+                          <button
+                            type="button"
+                            className="font-medium text-foreground hover:underline"
                             onClick={() => onViewProfile(employee.id)}
                           >
-                            View
-                          </Button>
-                          {canManage ? (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => onEditEmployee(employee)}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => onDeleteEmployee(employee.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
+                            {formatEmployeeName(employee)}
+                          </button>
+                          {employee.designation ? (
+                            <p className="text-xs text-muted-foreground">
+                              {employee.designation}
+                            </p>
                           ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </td>
+                        <td className="py-3 pr-4">{employee.employeeCode}</td>
+                        <td className="py-3 pr-4">
+                          {employee.department?.name ?? "—"}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <StatusPill
+                            label={EMPLOYEE_STATUS_LABELS[employee.status]}
+                            tone={employeeStatusTone(employee.status)}
+                          />
+                        </td>
+                        <td className="py-3">
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onViewProfile(employee.id)}
+                            >
+                              View
+                            </Button>
+                            {canManage ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => onEditEmployee(employee)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => onDeleteEmployee(employee.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           ) : null}
 
           {canManage && totalPages > 1 ? (

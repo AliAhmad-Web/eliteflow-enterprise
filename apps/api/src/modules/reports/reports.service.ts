@@ -14,6 +14,7 @@ import type {
 } from "@enterprise/shared";
 import { UserRole } from "@enterprise/shared";
 
+import { recordSaasReportGeneration } from "../../shared/services/saas-metrics.service.js";
 import { getAiProvider } from "../ai/providers/index.js";
 import {
   REPORTS_AUDIT_ACTIONS,
@@ -758,6 +759,7 @@ export class ReportsService {
     actor: ReportsActor,
   ): Promise<{ contentType: string; filename: string; body: string | Buffer }> {
     assertExport(actor);
+    recordSaasReportGeneration();
     const analytics = await this.getAnalytics(input, actor);
 
     await logReportsAuditEvent({

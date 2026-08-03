@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { ROUTES } from "@/constants/routes";
-import { getSessionHintCookieName } from "@/features/auth/utils/session-hint";
+import {
+  getSessionHintCookieName,
+  isValidSessionHintValue,
+} from "@/features/auth/utils/session-hint";
+import { isSecuritySessionHardeningEnabled } from "@/features/security/feature-flags";
 
 const PROTECTED_ROUTE_PREFIXES = [
   ROUTES.ADMIN,
@@ -36,9 +40,16 @@ function matchesRoute(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hasSessionHint = request.cookies.has(getSessionHintCookieName());
+  const hintName = getSessionHintCookieName();
+  const hintValue = request.cookies.get(hintName)?.value;
+
+  let hasSessionHint = Boolean(hintValue);
+
+  if (isSecuritySessionHardeningEnabled()) {
+    hasSessionHint = await isValidSessionHintValue(hintValue);
+  }
 
   const isProtectedRoute = PROTECTED_ROUTE_PREFIXES.some((route) =>
     matchesRoute(pathname, route),
@@ -108,6 +119,12 @@ export const config = {
     "/meetings/:path*",
     "/activity",
     "/activity/:path*",
+    "/voice-ai",
+    "/voice-ai/:path*",
+    "/whatsapp",
+    "/whatsapp/:path*",
+    "/email-automation",
+    "/email-automation/:path*",
     "/integrations",
     "/integrations/:path*",
     "/security",

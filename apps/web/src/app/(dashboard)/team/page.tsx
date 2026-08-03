@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 
-import { TeamPageContent } from "@/features/team/components/team-page-content";
+import { ProgressiveBoundary } from "@/features/performance";
+import { TeamPageContentGate } from "@/features/team/components/team-page-content-gate";
 
 export const metadata: Metadata = { title: "Team" };
 
 export default function TeamPage() {
-  return <TeamPageContent />;
+  return (
+    <ProgressiveBoundary label="Loading Team">
+      <TeamPageContentGate />
+    </ProgressiveBoundary>
+  );
 }

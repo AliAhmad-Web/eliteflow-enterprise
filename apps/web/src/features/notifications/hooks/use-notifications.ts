@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { ListNotificationsQueryInput } from "@enterprise/shared";
+import type {
+  ListNotificationsQueryInput,
+  ListQueueQueryInput,
+} from "@enterprise/shared";
 
 import { notificationsService } from "../services/notifications.service";
 import { NOTIFICATIONS_QUERY_KEYS } from "../types/notifications.types";
@@ -34,11 +37,31 @@ export function useNotificationPreferences(enabled = true) {
   });
 }
 
-export function useNotificationHistory(enabled = true) {
+export function useNotificationHistory(page = 1, enabled = true) {
   return useQuery({
-    queryKey: NOTIFICATIONS_QUERY_KEYS.history(),
-    queryFn: () => notificationsService.history(),
+    queryKey: NOTIFICATIONS_QUERY_KEYS.history(page),
+    queryFn: () => notificationsService.history(page, 30),
     enabled,
+  });
+}
+
+export function useNotificationTemplates(enabled = true) {
+  return useQuery({
+    queryKey: NOTIFICATIONS_QUERY_KEYS.templates(),
+    queryFn: () => notificationsService.listTemplates(),
+    enabled,
+  });
+}
+
+export function useNotificationQueue(
+  query: Partial<ListQueueQueryInput>,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: NOTIFICATIONS_QUERY_KEYS.queue(query as Record<string, unknown>),
+    queryFn: () => notificationsService.listQueue(query),
+    enabled,
+    refetchInterval: enabled ? 15_000 : false,
   });
 }
 

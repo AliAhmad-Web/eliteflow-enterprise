@@ -2,9 +2,11 @@
 
 import type { AiDocument } from "@enterprise/shared";
 
+import { VirtualizedList } from "@/components/common/data/virtualized-list";
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
+import { isPerformanceAdvVirtualizationEnabled } from "@/features/performance";
 
 import { AiDocumentCard } from "./ai-document-card";
 import { AiDocumentsListSkeleton } from "./ai-documents-skeletons";
@@ -55,6 +57,23 @@ export function AiDocumentsList({
         description="Generate a proposal, email, or technical document to get started."
         actionLabel="Generate document"
         onAction={onGenerate}
+      />
+    );
+  }
+
+  if (isPerformanceAdvVirtualizationEnabled()) {
+    return (
+      <VirtualizedList
+        items={documents}
+        estimateSize={140}
+        overscan={4}
+        heightClassName="max-h-[min(70vh,720px)]"
+        getItemKey={(document) => document.id}
+        renderItem={(document) => (
+          <div className="pb-3">
+            <AiDocumentCard document={document} onOpen={onOpen} />
+          </div>
+        )}
       />
     );
   }

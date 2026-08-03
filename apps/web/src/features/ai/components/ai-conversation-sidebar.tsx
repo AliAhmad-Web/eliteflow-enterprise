@@ -4,12 +4,14 @@ import type { AiConversation } from "@enterprise/shared";
 import { Plus, Search } from "lucide-react";
 import type { RefObject } from "react";
 
+import { VirtualizedList } from "@/components/common/data/virtualized-list";
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { isPerformanceAdvVirtualizationEnabled } from "@/features/performance";
 
 import { AiConversationListSkeleton } from "./ai-assistant-skeletons";
 import { AiConversationListItem } from "./ai-conversation-list-item";
@@ -57,6 +59,8 @@ export function AiConversationSidebar({
   className,
   asCard = true,
 }: AiConversationSidebarProps) {
+  const useVirtual = isPerformanceAdvVirtualizationEnabled();
+
   const body = (
     <div className="space-y-3 p-4">
       <div className="relative">
@@ -111,18 +115,40 @@ export function AiConversationSidebar({
         />
       ) : null}
 
-      <ul className="max-h-[60vh] space-y-1 overflow-y-auto scrollbar-thin">
-        {conversations.map((conversation) => (
-          <li key={conversation.id}>
-            <AiConversationListItem
-              conversation={conversation}
-              selected={selectedId === conversation.id}
-              onSelect={onSelect}
-              onDelete={onDelete}
-            />
-          </li>
-        ))}
-      </ul>
+      {useVirtual && !isLoading && !isError && conversations.length > 0 ? (
+        <VirtualizedList
+          items={conversations}
+          estimateSize={72}
+          overscan={6}
+          heightClassName="max-h-[60vh]"
+          getItemKey={(conversation) => conversation.id}
+          renderItem={(conversation) => (
+            <div className="pb-1">
+              <AiConversationListItem
+                conversation={conversation}
+                selected={selectedId === conversation.id}
+                onSelect={onSelect}
+                onDelete={onDelete}
+              />
+            </div>
+          )}
+        />
+      ) : null}
+
+      {!useVirtual ? (
+        <ul className="max-h-[60vh] space-y-1 overflow-y-auto scrollbar-thin">
+          {conversations.map((conversation) => (
+            <li key={conversation.id}>
+              <AiConversationListItem
+                conversation={conversation}
+                selected={selectedId === conversation.id}
+                onSelect={onSelect}
+                onDelete={onDelete}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {showPagination && hasMore ? (
         <Button

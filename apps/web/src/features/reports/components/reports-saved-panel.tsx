@@ -21,6 +21,7 @@ export interface ReportsSavedPanelProps {
   onLoadReport: (report: SavedReport) => void;
   onToggleFavorite: (report: SavedReport) => void;
   onDeleteReport: (report: SavedReport) => void;
+  enhancedPresentation?: boolean;
 }
 
 export function ReportsSavedPanel({
@@ -35,6 +36,7 @@ export function ReportsSavedPanel({
   onLoadReport,
   onToggleFavorite,
   onDeleteReport,
+  enhancedPresentation = false,
 }: ReportsSavedPanelProps) {
   if (isLoading) {
     return <LoadingState label="Loading saved reports" />;
@@ -52,7 +54,26 @@ export function ReportsSavedPanel({
   const favorites = savedReports.filter((item) => item.isFavorite);
   const others = savedReports.filter((item) => !item.isFavorite);
 
-  const renderReport = (report: SavedReport) => (
+  const renderReport = (report: SavedReport) => {
+    const filters = report.filters as Record<string, unknown>;
+    const filterPreview = enhancedPresentation
+      ? [
+          typeof filters.range === "string" ? String(filters.range) : null,
+          typeof filters.clientId === "string" && filters.clientId
+            ? "Client filter"
+            : null,
+          typeof filters.projectId === "string" && filters.projectId
+            ? "Project filter"
+            : null,
+          typeof filters.teamId === "string" && filters.teamId
+            ? "Team filter"
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
+
+    return (
     <Card key={report.id} className="border-border/50">
       <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
@@ -71,7 +92,13 @@ export function ReportsSavedPanel({
           <p className="text-xs text-muted-foreground">
             {report.category.replaceAll("_", " ")} · Updated{" "}
             {new Date(report.updatedAt).toLocaleDateString()}
+            {enhancedPresentation ? ` · ${report.visibility}` : ""}
           </p>
+          {filterPreview ? (
+            <p className="text-xs text-muted-foreground">
+              Filters: {filterPreview}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -101,7 +128,8 @@ export function ReportsSavedPanel({
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">

@@ -1,0 +1,53 @@
+import { ROUTES } from "@/constants/routes";
+
+/** Class A — public, indexable marketing surfaces (Phase 1 strategy). */
+export const SEO_PUBLIC_INDEXABLE_PATHS = [
+  ROUTES.DOWNLOADS,
+  ROUTES.DOWNLOADS_DESKTOP_GUIDE,
+  ROUTES.DOWNLOADS_EXTENSION_GUIDE,
+] as const;
+
+export type SeoPublicIndexablePath =
+  (typeof SEO_PUBLIC_INDEXABLE_PATHS)[number];
+
+/** Auth / technical paths to disallow when SEO_ROBOTS is ON. */
+export const SEO_AUTH_DISALLOW_PATHS = [
+  ROUTES.LOGIN,
+  ROUTES.SIGNUP,
+  ROUTES.FORGOT_PASSWORD,
+  ROUTES.RESET_PASSWORD,
+  ROUTES.VERIFY_EMAIL,
+  "/auth/",
+] as const;
+
+/**
+ * Authenticated app prefixes to disallow when SEO_ROBOTS is ON.
+ * Mirrors protected route prefixes (no SEO-only routes).
+ */
+export const SEO_APP_DISALLOW_PATHS = [
+  ROUTES.ADMIN,
+  ROUTES.PORTAL,
+  ROUTES.DASHBOARD,
+  ROUTES.WORKSPACE,
+  ROUTES.CLIENTS,
+  ROUTES.PROJECTS,
+  ROUTES.TASKS,
+  ROUTES.INVOICES,
+  ROUTES.REPORTS,
+  ROUTES.CALENDAR,
+  ROUTES.WHITEBOARD,
+  ROUTES.AI_ASSISTANT,
+  ROUTES.AI_DOCUMENTS,
+  ROUTES.FILE_MANAGER,
+  ROUTES.TEAM,
+  ROUTES.NOTIFICATIONS,
+  ROUTES.MESSAGES,
+  ROUTES.CHANNELS,
+  ROUTES.ANNOUNCEMENTS,
+  ROUTES.THREADS,
+  ROUTES.MEETINGS,
+  ROUTES.ACTIVITY,
+  ROUTES.INTEGRATIONS,
+  ROUTES.SECURITY,
+  ROUTES.SETTINGS,
+] as const;

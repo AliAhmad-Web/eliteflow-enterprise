@@ -1,7 +1,10 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { UpdatePreferencesBatchInput } from "@enterprise/shared";
+import type {
+  CreateNotificationInput,
+  UpdatePreferencesBatchInput,
+} from "@enterprise/shared";
 
 import { notificationsService } from "../services/notifications.service";
 import { NOTIFICATIONS_QUERY_KEYS } from "../types/notifications.types";
@@ -74,6 +77,31 @@ export function useUpdateNotificationPreferences() {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: NOTIFICATIONS_QUERY_KEYS.preferences(),
+      });
+    },
+  });
+}
+
+export function useProcessNotificationQueue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => notificationsService.processQueue(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: NOTIFICATIONS_QUERY_KEYS.all,
+      });
+    },
+  });
+}
+
+export function useCreateNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateNotificationInput) =>
+      notificationsService.create(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: NOTIFICATIONS_QUERY_KEYS.all,
       });
     },
   });

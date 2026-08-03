@@ -122,6 +122,9 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/threads": PERMISSIONS.COMMUNICATION_READ,
   "/meetings": PERMISSIONS.COMMUNICATION_READ,
   "/activity": PERMISSIONS.COMMUNICATION_READ,
+  "/voice-ai": PERMISSIONS.COMMUNICATION_READ,
+  "/whatsapp": PERMISSIONS.COMMUNICATION_READ,
+  "/email-automation": PERMISSIONS.COMMUNICATION_READ,
   // /integrations — all signed-in roles may open Integration Center;
   // visibility of individual integrations is enforced in the API service.
   // /security is available to every signed-in user (own sessions/password).

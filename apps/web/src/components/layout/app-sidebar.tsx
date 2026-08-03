@@ -15,6 +15,7 @@ import {
 import { MAIN_NAVIGATION } from "@/config/navigation.config";
 import { siteConfig } from "@/config/site.config";
 import { ROUTES } from "@/constants/routes";
+import { filterNavigationByCommunicationFlags } from "@/features/communication/utils/filter-communication-nav";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
 import { filterNavigationByAccess } from "@/features/rbac/utils/filter-navigation";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
@@ -45,7 +46,10 @@ function AppSidebarComponent({ className }: AppSidebarProps) {
   const { subject, role } = usePermissions();
 
   const sections = useMemo(
-    () => filterNavigationByAccess(MAIN_NAVIGATION, subject),
+    () =>
+      filterNavigationByCommunicationFlags(
+        filterNavigationByAccess(MAIN_NAVIGATION, subject),
+      ),
     [subject],
   );
 

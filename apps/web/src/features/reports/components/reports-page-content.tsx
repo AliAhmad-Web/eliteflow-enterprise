@@ -15,12 +15,14 @@ import { EmptyState } from "@/components/common/feedback/empty-state";
 import { AiUiToastViewport, useAiUiToasts } from "@/features/ai/components/ai-ui-toast";
 import {
   createMemoizedSelector,
+  useAdvancedPerformanceProfiler,
   usePerformanceMemo,
   usePerformanceStableCallback,
   useRenderProfiler,
 } from "@/features/performance";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { ApiClientError } from "@/services/api/api-error";
+
 
 import {
   isAiAnalyticsActivityTimelineEnabled,
@@ -34,6 +36,15 @@ import {
   isAiAnalyticsRefreshEnabled,
   isAiAnalyticsSkeletonsEnabled,
   isAiAnalyticsTrendEnhancementsEnabled,
+  isAiBiBusinessHealthEnabled,
+  isAiBiDepartmentIntelligenceEnabled,
+  isAiBiExecutiveSummaryEnabled,
+  isAiBiExportExperienceEnabled,
+  isAiBiHistoryCompareEnabled,
+  isAiBiPresentationEnabled,
+  isAiBiRecommendationsEnabled,
+  isAiBiReportLayoutEnabled,
+  isAiBiSavedReportsEnabled,
 } from "../feature-flags";
 import {
   useCreateSavedReport,
@@ -87,6 +98,7 @@ const selectSavedReportsOrEmpty = createMemoizedSelector(
  */
 export function ReportsPageContent() {
   useRenderProfiler("ReportsPageContent");
+  useAdvancedPerformanceProfiler("ReportsPageContent");
 
   const queryClient = useQueryClient();
   const canRead = useHasPermission(PERMISSIONS.REPORTS_READ);
@@ -104,6 +116,16 @@ export function ReportsPageContent() {
   const skeletons = isAiAnalyticsSkeletonsEnabled();
   const enhancedFeedback = isAiAnalyticsEnhancedFeedbackEnabled();
 
+  const biExecutiveSummary = isAiBiExecutiveSummaryEnabled();
+  const biBusinessHealth = isAiBiBusinessHealthEnabled();
+  const biDepartmentIntelligence = isAiBiDepartmentIntelligenceEnabled();
+  const biRecommendations = isAiBiRecommendationsEnabled();
+  const biHistoryCompare = isAiBiHistoryCompareEnabled();
+  const biReportLayout = isAiBiReportLayoutEnabled();
+  const biSavedReports = isAiBiSavedReportsEnabled();
+  const biExportExperience = isAiBiExportExperienceEnabled();
+  const biPresentation = isAiBiPresentationEnabled();
+
   const useModularShell =
     enterpriseShell ||
     enhancedKpis ||
@@ -115,7 +137,8 @@ export function ReportsPageContent() {
     advancedFilters ||
     refreshEnabled ||
     skeletons ||
-    enhancedFeedback;
+    enhancedFeedback ||
+    biPresentation;
 
   const { toasts, pushToast, dismiss } = useAiUiToasts();
 
@@ -176,13 +199,17 @@ export function ReportsPageContent() {
   ]);
 
   const needsAnalyticsOnInsights =
-    activeTab === "ai-insights" && (businessSummary || activityTimeline);
+    activeTab === "ai-insights" &&
+    (businessSummary || activityTimeline || biHistoryCompare);
 
   const analyticsEnabled =
     canRead &&
     ((activeTab !== "saved" && activeTab !== "ai-insights") ||
       needsAnalyticsOnInsights);
-  const insightsEnabled = canRead && activeTab === "ai-insights";
+  const insightsEnabled =
+    canRead &&
+    (activeTab === "ai-insights" ||
+      (biExecutiveSummary && activeTab !== "saved"));
   const savedEnabled = canRead && activeTab === "saved";
 
   const analyticsQueryResult = useAnalytics(analyticsQuery, analyticsEnabled);
@@ -461,6 +488,14 @@ export function ReportsPageContent() {
       isRefreshing,
       onRefresh,
       useSkeletons: skeletons,
+      biExecutiveSummary,
+      biBusinessHealth,
+      biDepartmentIntelligence,
+      biRecommendations,
+      biHistoryCompare,
+      biReportLayout,
+      biSavedReports,
+      biExportExperience,
     }),
     [
       activeTab,
@@ -523,6 +558,14 @@ export function ReportsPageContent() {
       isRefreshing,
       onRefresh,
       skeletons,
+      biExecutiveSummary,
+      biBusinessHealth,
+      biDepartmentIntelligence,
+      biRecommendations,
+      biHistoryCompare,
+      biReportLayout,
+      biSavedReports,
+      biExportExperience,
     ],
   );
 

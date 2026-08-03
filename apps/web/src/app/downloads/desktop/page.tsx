@@ -8,26 +8,45 @@ import {
   GuideSection,
 } from "@/features/downloads/components/downloads-guide-shell";
 import { discoverReleases } from "@/features/downloads/lib/discover-releases";
+import { PublicPageJsonLd } from "@/features/seo/json-ld/seo-json-ld-script";
+import { composePublicPageMetadata } from "@/features/seo/metadata/compose-public-page-metadata";
 
-export const metadata: Metadata = {
-  title: "Desktop Installation Guide",
-  description:
-    "Install EliteFlow Desktop on Windows using the official installer or portable build.",
+const TITLE = "Desktop Installation Guide";
+const DESCRIPTION =
+  "Install EliteFlow Desktop on Windows using the official installer or portable build.";
+
+const BASELINE: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
   openGraph: {
     title: "Desktop Installation Guide | EliteFlow",
-    description:
-      "Install EliteFlow Desktop on Windows using the official installer or portable build.",
-    url: `${siteConfig.url}/downloads/desktop`,
+    description: DESCRIPTION,
+    url: `${siteConfig.url}${ROUTES.DOWNLOADS_DESKTOP_GUIDE}`,
     siteName: siteConfig.name,
     type: "article",
   },
   twitter: {
     card: "summary",
     title: "Desktop Installation Guide | EliteFlow",
-    description:
-      "Install EliteFlow Desktop on Windows using the official installer or portable build.",
+    description: DESCRIPTION,
   },
 };
+
+export const metadata: Metadata = composePublicPageMetadata({
+  path: ROUTES.DOWNLOADS_DESKTOP_GUIDE,
+  title: TITLE,
+  description: DESCRIPTION,
+  keywords: [
+    "EliteFlow",
+    "desktop",
+    "Windows",
+    "installer",
+    "portable",
+  ],
+  openGraphType: "article",
+  twitterCard: "summary",
+  baseline: BASELINE,
+});
 
 export default function DesktopInstallGuidePage() {
   const catalog = discoverReleases();
@@ -36,98 +55,110 @@ export default function DesktopInstallGuidePage() {
   const version = catalog.desktop.version ?? "1.0.0";
 
   return (
-    <DownloadsGuideShell
-      title="Desktop Installation Guide"
-      description="Install the official EliteFlow Desktop client for Windows. The desktop shell loads the same EliteFlow web application — no separate backend or database."
-    >
-      <GuideSection title="Prerequisites">
-        <ul className="list-disc space-y-1.5 pl-5">
-          <li>Windows 10 or Windows 11 (x64)</li>
-          <li>An existing EliteFlow account</li>
-          <li>
-            Network access to the EliteFlow web app and API
-          </li>
-        </ul>
-      </GuideSection>
+    <>
+      <PublicPageJsonLd
+        name={TITLE}
+        path={ROUTES.DOWNLOADS_DESKTOP_GUIDE}
+        description={DESCRIPTION}
+        breadcrumbs={[
+          { name: "Downloads", path: ROUTES.DOWNLOADS },
+          { name: "Desktop", path: ROUTES.DOWNLOADS_DESKTOP_GUIDE },
+        ]}
+      />
+      <DownloadsGuideShell
+        title="Desktop Installation Guide"
+        description="Install the official EliteFlow Desktop client for Windows. The desktop shell loads the same EliteFlow web application — no separate backend or database."
+      >
+        <GuideSection title="Prerequisites">
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>Windows 10 or Windows 11 (x64)</li>
+            <li>An existing EliteFlow account</li>
+            <li>Network access to the EliteFlow web app and API</li>
+          </ul>
+        </GuideSection>
 
-      <GuideSection title="Option A — Installer (recommended)">
-        <ol className="list-decimal space-y-2 pl-5">
-          <li>
-            Download{" "}
-            {setupHref ? (
+        <GuideSection title="Option A — Installer (recommended)">
+          <ol className="list-decimal space-y-2 pl-5">
+            <li>
+              Download{" "}
+              {setupHref ? (
+                <a
+                  href={setupHref}
+                  download
+                  className="font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  EliteFlow Desktop Installer
+                </a>
+              ) : (
+                <span>
+                  the EliteFlow Desktop Installer from the Downloads page
+                </span>
+              )}
+              .
+            </li>
+            <li>Run the setup executable and follow the prompts.</li>
+            <li>Launch EliteFlow from the Start menu or desktop shortcut.</li>
+            <li>Sign in with your EliteFlow email and password.</li>
+          </ol>
+          <p>
+            Current version:{" "}
+            <strong className="text-foreground">{version}</strong>
+          </p>
+        </GuideSection>
+
+        <GuideSection title="Option B — Portable">
+          <ol className="list-decimal space-y-2 pl-5">
+            <li>
+              Download{" "}
+              {portableHref ? (
+                <a
+                  href={portableHref}
+                  download
+                  className="font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  EliteFlow Portable
+                </a>
+              ) : (
+                <span>the portable build from the Downloads page</span>
+              )}
+              .
+            </li>
+            <li>Place the executable in a folder you control.</li>
+            <li>Run it directly — no installer required.</li>
+            <li>Sign in with your EliteFlow credentials.</li>
+          </ol>
+        </GuideSection>
+
+        <GuideSection title="After install">
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>Session persistence keeps you signed in across restarts.</li>
+            <li>
+              Desktop uses the same roles, permissions, AI, files, and
+              notifications as the web app.
+            </li>
+            <li>
+              Prefer the browser?{" "}
               <a
-                href={setupHref}
-                download
+                href={siteConfig.webAppUrl}
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
-                EliteFlow Desktop Installer
+                Open the web application
               </a>
-            ) : (
-              <span>the EliteFlow Desktop Installer from the Downloads page</span>
-            )}
-            .
-          </li>
-          <li>Run the setup executable and follow the prompts.</li>
-          <li>Launch EliteFlow from the Start menu or desktop shortcut.</li>
-          <li>Sign in with your EliteFlow email and password.</li>
-        </ol>
-        <p>
-          Current version: <strong className="text-foreground">{version}</strong>
-        </p>
-      </GuideSection>
-
-      <GuideSection title="Option B — Portable">
-        <ol className="list-decimal space-y-2 pl-5">
-          <li>
-            Download{" "}
-            {portableHref ? (
-              <a
-                href={portableHref}
-                download
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                EliteFlow Portable
-              </a>
-            ) : (
-              <span>the portable build from the Downloads page</span>
-            )}
-            .
-          </li>
-          <li>Place the executable in a folder you control.</li>
-          <li>Run it directly — no installer required.</li>
-          <li>Sign in with your EliteFlow credentials.</li>
-        </ol>
-      </GuideSection>
-
-      <GuideSection title="After install">
-        <ul className="list-disc space-y-1.5 pl-5">
-          <li>Session persistence keeps you signed in across restarts.</li>
-          <li>
-            Desktop uses the same roles, permissions, AI, files, and notifications as
-            the web app.
-          </li>
-          <li>
-            Prefer the browser?{" "}
-            <a
-              href={siteConfig.webAppUrl}
+              .
+            </li>
+          </ul>
+          <p>
+            Need the package again? Return to the{" "}
+            <Link
+              href={ROUTES.DOWNLOADS}
               className="font-medium text-primary underline-offset-4 hover:underline"
             >
-              Open the web application
-            </a>
+              Download Center
+            </Link>
             .
-          </li>
-        </ul>
-        <p>
-          Need the package again? Return to the{" "}
-          <Link
-            href={ROUTES.DOWNLOADS}
-            className="font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Download Center
-          </Link>
-          .
-        </p>
-      </GuideSection>
-    </DownloadsGuideShell>
+          </p>
+        </GuideSection>
+      </DownloadsGuideShell>
+    </>
   );
 }

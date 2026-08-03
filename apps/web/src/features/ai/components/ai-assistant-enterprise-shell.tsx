@@ -18,6 +18,7 @@ import { AiComposer } from "./ai-composer";
 import { AiConversationSidebar } from "./ai-conversation-sidebar";
 import { AiMessageList } from "./ai-message-list";
 import { AiThreadHeader } from "./ai-thread-header";
+import type { VoiceSessionPhase } from "../utils/voice-session";
 
 export interface AiAssistantShellProps {
   search: string;
@@ -67,6 +68,17 @@ export interface AiAssistantShellProps {
   onLoadMore?: () => void;
   searchInputRef?: RefObject<HTMLInputElement | null>;
   composerRef?: RefObject<HTMLTextAreaElement | null>;
+  /** Phase 7 Voice AI */
+  showVoiceControls?: boolean;
+  voiceMode?: boolean;
+  onVoiceModeChange?: (enabled: boolean) => void;
+  voicePhase?: VoiceSessionPhase;
+  showSpeechUi?: boolean;
+  onPushToTalkStart?: () => void;
+  onPushToTalkEnd?: () => void;
+  onVoiceInterrupt?: () => void;
+  voiceCommandsHint?: string | null;
+  voiceProviderWarning?: string | null;
 }
 
 /** Extracted composition path (enterprise shell / Phase 2 UX). */
@@ -159,6 +171,16 @@ export function AiAssistantEnterpriseShell(props: AiAssistantShellProps) {
               onRetry={props.onRetry}
               canRetry={props.canRetry}
               composerRef={props.composerRef}
+              showVoiceControls={props.showVoiceControls}
+              voiceMode={props.voiceMode}
+              onVoiceModeChange={props.onVoiceModeChange}
+              voicePhase={props.voicePhase}
+              showSpeechUi={props.showSpeechUi}
+              onPushToTalkStart={props.onPushToTalkStart}
+              onPushToTalkEnd={props.onPushToTalkEnd}
+              onVoiceInterrupt={props.onVoiceInterrupt}
+              voiceCommandsHint={props.voiceCommandsHint}
+              voiceProviderWarning={props.voiceProviderWarning}
             />
           </CardContent>
         </Card>

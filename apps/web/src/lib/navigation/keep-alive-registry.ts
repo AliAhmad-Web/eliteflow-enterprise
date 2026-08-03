@@ -79,6 +79,18 @@ export const KEEP_ALIVE_LOADERS: Record<string, KeepAliveLoader> = {
     import(
       "@/features/communication/components/activity-feed-page-content"
     ).then((m) => ({ default: m.ActivityFeedPageContent })),
+  [ROUTES.VOICE_AI]: () =>
+    import("@/features/communication/components/voice-ai-page-content").then(
+      (m) => ({ default: m.VoiceAiPageContent }),
+    ),
+  [ROUTES.WHATSAPP]: () =>
+    import("@/features/communication/components/whatsapp-page-content").then(
+      (m) => ({ default: m.WhatsappPageContent }),
+    ),
+  [ROUTES.EMAIL_AUTOMATION]: () =>
+    import(
+      "@/features/communication/components/email-automation-workspace"
+    ).then((m) => ({ default: m.EmailAutomationPageContent })),
   [ROUTES.TEAM]: () =>
     import("@/features/team/components/team-page-content").then((m) => ({
       default: m.TeamPageContent,

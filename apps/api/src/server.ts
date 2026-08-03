@@ -10,8 +10,10 @@ import {
   getGoogleOAuthConfig,
 } from "./modules/integrations/oauth/oauth-config.js";
 import { storageProvider } from "./modules/files/storage/storage.provider.js";
+import { runSaasStartupValidation } from "./shared/services/saas-operational.helpers.js";
 
 assertAuthConfig();
+runSaasStartupValidation();
 
 const app = createApp();
 

@@ -1,10 +1,15 @@
 "use client";
 
-import type { AnalyticsDashboard } from "@enterprise/shared";
+import type { AiInsight, AnalyticsDashboard } from "@enterprise/shared";
+import type { ReactNode } from "react";
 
 import { formatCurrency } from "../types/reports.types";
 import type { ReportsTab } from "../types/reports.types";
 import { ReportsAnalyticsTables } from "./reports-analytics-tables";
+import { ReportsBiDepartmentIntelligence } from "./reports-bi-department-intelligence";
+import { ReportsBiExecutiveSummary } from "./reports-bi-executive-summary";
+import { ReportsBiHealth } from "./reports-bi-health";
+import { ReportsBiHistoryCompare } from "./reports-bi-history-compare";
 import { ReportsDataTable } from "./reports-data-table";
 import { ReportsKpiSection } from "./reports-kpi-section";
 import {
@@ -19,6 +24,12 @@ export interface ReportsChartsSectionProps {
   data: AnalyticsDashboard;
   enhancedKpis?: boolean;
   trendEnhancements?: boolean;
+  insight?: AiInsight;
+  biExecutiveSummary?: boolean;
+  biBusinessHealth?: boolean;
+  biDepartmentIntelligence?: boolean;
+  biHistoryCompare?: boolean;
+  biReportLayout?: boolean;
 }
 
 /** Category tab charts + KPI composition (reuses simple-charts). */
@@ -27,6 +38,12 @@ export function ReportsChartsSection({
   data,
   enhancedKpis = false,
   trendEnhancements = false,
+  insight,
+  biExecutiveSummary = false,
+  biBusinessHealth = false,
+  biDepartmentIntelligence = false,
+  biHistoryCompare = false,
+  biReportLayout = false,
 }: ReportsChartsSectionProps) {
   const kpi = (
     <ReportsKpiSection
@@ -39,6 +56,58 @@ export function ReportsChartsSection({
   const chartTitle = (title: string) =>
     trendEnhancements ? `${title}` : title;
 
+  const core = renderTabCore(tab, data, kpi, chartTitle);
+
+  const showBiLead =
+    biExecutiveSummary ||
+    biBusinessHealth ||
+    biHistoryCompare ||
+    biDepartmentIntelligence ||
+    biReportLayout;
+
+  if (!showBiLead) {
+    return core;
+  }
+
+  const lead: ReactNode[] = [];
+  if (biExecutiveSummary && (tab === "overview" || biReportLayout)) {
+    lead.push(
+      <ReportsBiExecutiveSummary
+        key="bi-exec"
+        data={data}
+        insight={insight}
+      />,
+    );
+  }
+  if (biBusinessHealth && (tab === "overview" || biReportLayout)) {
+    lead.push(<ReportsBiHealth key="bi-health" data={data} />);
+  }
+  if (biHistoryCompare) {
+    lead.push(
+      <ReportsBiHistoryCompare key="bi-history" kpis={data.kpis} />,
+    );
+  }
+
+  const trail =
+    biDepartmentIntelligence ? (
+      <ReportsBiDepartmentIntelligence key="bi-dept" data={data} tab={tab} />
+    ) : null;
+
+  return (
+    <div className="space-y-6">
+      {lead}
+      {core}
+      {trail}
+    </div>
+  );
+}
+
+function renderTabCore(
+  tab: Exclude<ReportsTab, "saved" | "ai-insights">,
+  data: AnalyticsDashboard,
+  kpi: ReactNode,
+  chartTitle: (title: string) => string,
+): ReactNode {
   switch (tab) {
     case "overview":
       return (

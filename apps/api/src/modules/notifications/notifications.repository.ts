@@ -9,6 +9,8 @@ import {
 
 import type { ListNotificationsQueryInput } from "@enterprise/shared";
 
+import { isApiCommunicationWhatsappQueueEnabled } from "../../config/communication-flags.js";
+
 export class NotificationsRepository {
   async findById(id: string) {
     return prisma.notification.findFirst({
@@ -322,10 +324,26 @@ export class NotificationsRepository {
     pageSize: number;
     status?: NotificationQueueStatus;
     channel?: NotificationChannel;
+    /** Recipient user id */
+    userId?: string;
+    /** Sender / creator of related notification */
+    createdById?: string;
   }) {
+    const ownership: Prisma.NotificationQueueWhereInput | undefined =
+      params.userId || params.createdById
+        ? {
+            OR: [
+              ...(params.userId ? [{ userId: params.userId }] : []),
+              ...(params.createdById
+                ? [{ notification: { createdById: params.createdById } }]
+                : []),
+            ],
+          }
+        : undefined;
     const where: Prisma.NotificationQueueWhereInput = {
       ...(params.status ? { status: params.status } : {}),
       ...(params.channel ? { channel: params.channel } : {}),
+      ...ownership,
     };
     const skip = (params.page - 1) * params.pageSize;
     const [items, total] = await Promise.all([
@@ -365,12 +383,19 @@ export class NotificationsRepository {
 
   async claimPendingQueue(limit = 20) {
     const now = new Date();
+    const channels: NotificationChannel[] = [
+      NotificationChannel.EMAIL,
+      NotificationChannel.IN_APP,
+    ];
+    if (isApiCommunicationWhatsappQueueEnabled()) {
+      channels.push(NotificationChannel.WHATSAPP);
+    }
     const pending = await prisma.notificationQueue.findMany({
       where: {
         status: NotificationQueueStatus.PENDING,
         scheduledFor: { lte: now },
         channel: {
-          in: [NotificationChannel.EMAIL, NotificationChannel.IN_APP],
+          in: channels,
         },
       },
       orderBy: { scheduledFor: "asc" },
@@ -413,6 +438,41 @@ export class NotificationsRepository {
         lastError: error.slice(0, 1000),
       },
     });
+  }
+
+  /**
+   * Re-queue FAILED EMAIL items as PENDING so existing POST /queue/process can retry.
+   * Same API surface — no new routes.
+   */
+  async requeueFailedEmail(limit = 25): Promise<number> {
+    const failed = await prisma.notificationQueue.findMany({
+      where: {
+        status: NotificationQueueStatus.FAILED,
+        channel: NotificationChannel.EMAIL,
+      },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
+      select: { id: true },
+    });
+
+    let count = 0;
+    for (const item of failed) {
+      const updated = await prisma.notificationQueue.updateMany({
+        where: {
+          id: item.id,
+          status: NotificationQueueStatus.FAILED,
+          channel: NotificationChannel.EMAIL,
+        },
+        data: {
+          status: NotificationQueueStatus.PENDING,
+          scheduledFor: new Date(),
+          lastError: null,
+          processedAt: null,
+        },
+      });
+      count += updated.count;
+    }
+    return count;
   }
 
   async listHistory(params: {

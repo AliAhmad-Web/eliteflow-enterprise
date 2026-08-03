@@ -94,6 +94,37 @@ export function getEmailTransportLabel():
   | "smtp"
   | "resend"
   | "none" {
+  const preferred = trimEnv(process.env.EMAIL_PROVIDER).toLowerCase();
+
+  const tryPreferred = ():
+    | "gmail_api"
+    | "github_relay"
+    | "smtp"
+    | "resend"
+    | null => {
+    switch (preferred) {
+      case "":
+      case "auto":
+        return null;
+      case "smtp":
+        return isSmtpConfigured() ? "smtp" : null;
+      case "resend":
+        return isResendConfigured() ? "resend" : null;
+      case "gmail":
+      case "gmail_api":
+        return isGmailApiConfigured() ? "gmail_api" : null;
+      case "github":
+      case "github_relay":
+        return isGithubEmailRelayConfigured() ? "github_relay" : null;
+      default:
+        return null;
+    }
+  };
+
+  const forced = tryPreferred();
+  if (forced) return forced;
+
+  // Auto priority: HTTPS-friendly first on hosts that block SMTP.
   if (isGmailApiConfigured()) {
     return "gmail_api";
   }

@@ -88,7 +88,7 @@ notificationsRouter.get(
 
 notificationsRouter.post(
   "/queue/process",
-  authorizePermissions(PERMISSIONS.NOTIFICATIONS_READ),
+  authorizePermissions(PERMISSIONS.COMMUNICATION_WRITE),
   writeLimit,
   asyncHandler((req, res) => notificationsController.processQueue(req, res)),
 );
@@ -166,7 +166,7 @@ notificationsRouter.post(
 
 notificationsRouter.post(
   "/",
-  authorizePermissions(PERMISSIONS.NOTIFICATIONS_READ),
+  authorizePermissions(PERMISSIONS.COMMUNICATION_WRITE),
   writeLimit,
   validate(createNotificationSchema),
   asyncHandler((req, res) => notificationsController.create(req, res)),

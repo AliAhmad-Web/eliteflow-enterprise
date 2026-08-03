@@ -90,6 +90,15 @@ export interface ReportsShellProps {
   isRefreshing?: boolean;
   onRefresh?: () => void;
   useSkeletons?: boolean;
+  /** Phase 6 BI presentation flags (default OFF). */
+  biExecutiveSummary?: boolean;
+  biBusinessHealth?: boolean;
+  biDepartmentIntelligence?: boolean;
+  biRecommendations?: boolean;
+  biHistoryCompare?: boolean;
+  biReportLayout?: boolean;
+  biSavedReports?: boolean;
+  biExportExperience?: boolean;
 }
 
 function ReportsMainBody(props: ReportsShellProps) {
@@ -107,6 +116,7 @@ function ReportsMainBody(props: ReportsShellProps) {
         onLoadReport={props.onLoadReport}
         onToggleFavorite={props.onToggleFavorite}
         onDeleteReport={props.onDeleteReport}
+        enhancedPresentation={props.biSavedReports}
       />
     );
   }
@@ -125,6 +135,8 @@ function ReportsMainBody(props: ReportsShellProps) {
         businessSummary={props.businessSummary}
         recommendationCards={props.recommendationCards}
         activityTimeline={props.activityTimeline}
+        biRecommendations={props.biRecommendations}
+        biHistoryCompare={props.biHistoryCompare}
       />
     );
   }
@@ -155,6 +167,12 @@ function ReportsMainBody(props: ReportsShellProps) {
         data={props.analyticsData}
         enhancedKpis={props.enhancedKpis}
         trendEnhancements={props.trendEnhancements}
+        insight={props.insight}
+        biExecutiveSummary={props.biExecutiveSummary}
+        biBusinessHealth={props.biBusinessHealth}
+        biDepartmentIntelligence={props.biDepartmentIntelligence}
+        biHistoryCompare={props.biHistoryCompare}
+        biReportLayout={props.biReportLayout}
       />
     );
   }
@@ -191,6 +209,7 @@ export function ReportsEnterpriseShell(props: ReportsShellProps) {
         showRefresh={props.showRefresh}
         isRefreshing={props.isRefreshing}
         onRefresh={props.onRefresh}
+        biExportExperience={props.biExportExperience}
       />
 
       {props.exportError ? (

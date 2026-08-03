@@ -12,6 +12,8 @@ import { LoadingState } from "@/components/common/feedback/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { ReportsActivityTimeline } from "./reports-activity-timeline";
+import { ReportsBiHistoryCompare } from "./reports-bi-history-compare";
+import { ReportsBiRecommendationGroups } from "./reports-bi-recommendation-groups";
 import { ReportsBusinessSummary } from "./reports-business-summary";
 import { ReportsInsightSkeleton } from "./reports-skeletons";
 import { ReportsRecommendationCards } from "./reports-recommendation-cards";
@@ -28,6 +30,8 @@ export interface ReportsAiInsightsPanelProps {
   businessSummary?: boolean;
   recommendationCards?: boolean;
   activityTimeline?: boolean;
+  biRecommendations?: boolean;
+  biHistoryCompare?: boolean;
 }
 
 export function ReportsAiInsightsPanel({
@@ -42,6 +46,8 @@ export function ReportsAiInsightsPanel({
   businessSummary = false,
   recommendationCards = false,
   activityTimeline = false,
+  biRecommendations = false,
+  biHistoryCompare = false,
 }: ReportsAiInsightsPanelProps) {
   if (isLoading) {
     return useSkeletons ? (
@@ -71,7 +77,12 @@ export function ReportsAiInsightsPanel({
   }
 
   const showEnhanced =
-    insightCards || businessSummary || recommendationCards || activityTimeline;
+    insightCards ||
+    businessSummary ||
+    recommendationCards ||
+    activityTimeline ||
+    biRecommendations ||
+    biHistoryCompare;
 
   if (!showEnhanced) {
     return (
@@ -168,7 +179,10 @@ export function ReportsAiInsightsPanel({
         </Card>
       ) : null}
 
-      {insightCards && !recommendationCards && insight.bullets.length > 0 ? (
+      {insightCards &&
+      !recommendationCards &&
+      !biRecommendations &&
+      insight.bullets.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {insight.bullets.map((bullet, index) => (
             <Card key={index} className="border-border/50">
@@ -183,16 +197,27 @@ export function ReportsAiInsightsPanel({
         </div>
       ) : null}
 
-      {recommendationCards ? (
+      {recommendationCards && !biRecommendations ? (
         <ReportsRecommendationCards bullets={insight.bullets} />
       ) : null}
 
-      {!insightCards && !recommendationCards && insight.bullets.length > 0 ? (
+      {biRecommendations ? (
+        <ReportsBiRecommendationGroups bullets={insight.bullets} prioritize />
+      ) : null}
+
+      {!insightCards &&
+      !recommendationCards &&
+      !biRecommendations &&
+      insight.bullets.length > 0 ? (
         <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
           {insight.bullets.map((bullet, index) => (
             <li key={index}>{bullet}</li>
           ))}
         </ul>
+      ) : null}
+
+      {biHistoryCompare && analyticsData ? (
+        <ReportsBiHistoryCompare kpis={analyticsData.kpis} />
       ) : null}
 
       {activityTimeline && analyticsData ? (

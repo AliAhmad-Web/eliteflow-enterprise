@@ -1,7 +1,8 @@
+import type { NextConfig } from "next";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { NextConfig } from "next";
+import { buildAllSecurityResponseHeaders } from "./src/features/security/hardening/build-security-headers";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.join(configDir, "../..");
@@ -27,6 +28,19 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 180,
     },
+  },
+  async headers() {
+    const securityHeaders = buildAllSecurityResponseHeaders();
+    if (securityHeaders.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeaders,
+      },
+    ];
   },
   webpack: (config, { isServer }) => {
     config.resolve.extensionAlias = {

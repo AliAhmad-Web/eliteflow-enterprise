@@ -30,6 +30,17 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  deliveryStatusLabel,
+  EmailAutomationNotificationsLink,
+  formatProviderStatusBadge,
+  getWhatsappProviderInfo,
+  isCommunicationEmailPresentationEnabled,
+  isCommunicationFeedbackEnabled,
+  isCommunicationOrchestrationEnabled,
+  isCommunicationStatusEnabled,
+  isCommunicationWhatsappPresentationEnabled,
+} from "@/features/communication";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { ApiClientError } from "@/services/api/api-error";
 import { cn } from "@/lib/utils";
@@ -77,6 +88,13 @@ const CATEGORY_TABS: Array<{ id: NotificationTab; label: string }> = [
 
 export function NotificationsPageContent() {
   const canRead = useHasPermission(PERMISSIONS.NOTIFICATIONS_READ);
+  const statusUx = isCommunicationStatusEnabled();
+  const feedbackUx = isCommunicationFeedbackEnabled();
+  const whatsappUx = isCommunicationWhatsappPresentationEnabled();
+  const orchestrationUx = isCommunicationOrchestrationEnabled();
+  const emailUx = isCommunicationEmailPresentationEnabled();
+  const whatsappProvider = getWhatsappProviderInfo();
+  const showChannelsPanel = statusUx || whatsappUx || orchestrationUx;
   const [tab, setTab] = useState<NotificationTab>("all");
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -179,6 +197,55 @@ export function NotificationsPageContent() {
           </Button>
         </div>
       </div>
+
+      {showChannelsPanel ? (
+        <div
+          className="space-y-2 rounded-lg border border-border/60 bg-card/50 px-3 py-3 text-xs text-muted-foreground"
+          role="status"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium text-foreground">
+              Delivery channels
+            </span>
+            {statusUx ? (
+              <>
+                <Badge variant="outline">{deliveryStatusLabel("queued")}</Badge>
+                <Badge variant="outline">{deliveryStatusLabel("sent")}</Badge>
+                <Badge variant="outline">{deliveryStatusLabel("failed")}</Badge>
+                <Badge variant="outline">
+                  {deliveryStatusLabel("provider_deferred")}
+                </Badge>
+                <Badge variant="outline">
+                  {deliveryStatusLabel("awaiting_approval")}
+                </Badge>
+                <Badge variant="outline">
+                  {deliveryStatusLabel("retry_prepared")}
+                </Badge>
+              </>
+            ) : null}
+          </div>
+          {whatsappUx ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-background/60 px-2 py-1.5">
+              <span className="font-medium text-foreground">WhatsApp</span>
+              <Badge
+                variant={
+                  whatsappProvider.status === "ready" ? "success" : "warning"
+                }
+              >
+                {formatProviderStatusBadge(whatsappProvider.status)}
+              </Badge>
+              <span>{whatsappProvider.message}</span>
+            </div>
+          ) : null}
+          {orchestrationUx ? (
+            <span>
+              Orchestration: NotificationDispatcher + Action Framework
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {emailUx ? <EmailAutomationNotificationsLink /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {CATEGORY_TABS.map((item) => (
@@ -420,7 +487,16 @@ export function NotificationsPageContent() {
             <SheetTitle>Notification preferences</SheetTitle>
             <p className="text-sm text-muted-foreground">
               Choose in-app and email delivery per category. Push, SMS, and
-              WhatsApp are prepared for future providers.
+              Email delivery uses the existing emailService and notification queue.
+              {whatsappUx
+                ? ` WhatsApp: ${formatProviderStatusBadge(whatsappProvider.status)} — queue-ready without Meta credentials.`
+                : ""}
+              {emailUx
+                ? " Open Email Automation under Communication for templates and queue ops."
+                : ""}
+              {statusUx
+                ? " Delivery statuses: queued, sent, failed, provider deferred, awaiting approval."
+                : ""}
             </p>
           </SheetHeader>
           <div className="mt-6 space-y-3">
@@ -448,7 +524,15 @@ export function NotificationsPageContent() {
                         ["emailEnabled", "Email", pref.emailEnabled],
                         ["pushEnabled", "Push", pref.pushEnabled],
                         ["smsEnabled", "SMS", pref.smsEnabled],
-                        ["whatsappEnabled", "WhatsApp", pref.whatsappEnabled],
+                        ...(whatsappUx
+                          ? ([
+                              [
+                                "whatsappEnabled",
+                                `WhatsApp (${formatProviderStatusBadge(whatsappProvider.status)})`,
+                                pref.whatsappEnabled,
+                              ],
+                            ] as const)
+                          : []),
                       ] as const
                     ).map(([key, label, value]) => (
                       <label
@@ -477,6 +561,16 @@ export function NotificationsPageContent() {
                 </div>
               ))
             )}
+            {feedbackUx && updatePrefs.isPending ? (
+              <p className="text-xs text-muted-foreground" role="status">
+                Saving preference…
+              </p>
+            ) : null}
+            {feedbackUx && updatePrefs.isError ? (
+              <p className="text-xs text-destructive" role="alert">
+                Could not save preference
+              </p>
+            ) : null}
           </div>
         </SheetContent>
       </Sheet>
