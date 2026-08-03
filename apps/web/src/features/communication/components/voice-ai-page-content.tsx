@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
-import { isCommunicationVoicePresentationEnabled } from "../feature-flags";
+import { isCommunicationVoiceAiPageEnabled } from "../feature-flags";
 import {
   formatProviderStatusBadge,
   getVoiceSttProviderInfo,
@@ -16,9 +16,10 @@ import {
 
 /**
  * Communication → Voice AI entry. Reuses AI Assistant (no second chat).
+ * Sidebar visibility is gated by COMMUNICATION_VOICE_AI_PAGE (default OFF).
  */
 export function VoiceAiPageContent() {
-  const enabled = isCommunicationVoicePresentationEnabled();
+  const enabled = isCommunicationVoiceAiPageEnabled();
   const stt = getVoiceSttProviderInfo();
   const tts = getVoiceTtsProviderInfo();
 
@@ -30,13 +31,17 @@ export function VoiceAiPageContent() {
       />
       {!enabled ? (
         <p className="text-sm text-muted-foreground">
-          Voice AI is temporarily hidden in production. Re-enable{" "}
-          <code className="text-xs">NEXT_PUBLIC_COMMUNICATION_VOICE_*</code>{" "}
-          flags when ready. Use{" "}
+          This standalone page is hidden. Voice AI remains available in{" "}
+          <Link href={ROUTES.AI_ASSISTANT} className="underline">
+            AI Assistant
+          </Link>{" "}
+          and{" "}
           <Link href={ROUTES.EMAIL_AUTOMATION} className="underline">
             Email Automation
-          </Link>{" "}
-          for AI email workflows.
+          </Link>
+          . Set{" "}
+          <code className="text-xs">NEXT_PUBLIC_COMMUNICATION_VOICE_AI_PAGE=true</code>{" "}
+          to show this page in the sidebar again.
         </p>
       ) : (
         <section className="space-y-3 rounded-lg border border-border/60 bg-card/50 px-3 py-3 text-sm">

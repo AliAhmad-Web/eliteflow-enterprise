@@ -34,12 +34,12 @@ function isCspEnabled(): boolean {
   return parseEnvFlag(process.env.NEXT_PUBLIC_SECURITY_CSP, false);
 }
 
-/** Allow mic when Phase 7 voice STT is active (defaults OFF — Voice AI hidden until re-enabled). */
+/** Allow mic when Phase 7 voice STT is active (AI Agent voice — default ON). */
 function isMicrophonePolicyAllowed(): boolean {
   return (
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_AI, false) ||
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_TO_TEXT, false) ||
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_UI, false)
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_AI, true) ||
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_TO_TEXT, true) ||
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_UI, true)
   );
 }
 

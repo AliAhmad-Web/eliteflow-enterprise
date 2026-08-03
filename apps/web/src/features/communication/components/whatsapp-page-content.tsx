@@ -11,7 +11,7 @@ import { useAuthStore } from "@/features/auth/stores/auth.store";
 import { useNotificationQueue } from "@/features/notifications/hooks/use-notifications";
 import { formatRelativeTime } from "@/features/notifications/types/notifications.types";
 
-import { isCommunicationWhatsappPresentationEnabled } from "../feature-flags";
+import { isCommunicationWhatsappPageEnabled } from "../feature-flags";
 import {
   formatProviderStatusBadge,
   getWhatsappProviderInfo,
@@ -19,9 +19,10 @@ import {
 
 /**
  * Communication → WhatsApp entry. Reuses NotificationQueue WHATSAPP channel.
+ * Sidebar visibility is gated by COMMUNICATION_WHATSAPP_PAGE (default OFF).
  */
 export function WhatsappPageContent() {
-  const enabled = isCommunicationWhatsappPresentationEnabled();
+  const enabled = isCommunicationWhatsappPageEnabled();
   const provider = getWhatsappProviderInfo();
   const role = useAuthStore((s) => s.user?.role?.code);
   const isAdmin =
@@ -39,13 +40,14 @@ export function WhatsappPageContent() {
       />
       {!enabled ? (
         <p className="text-sm text-muted-foreground">
-          WhatsApp is temporarily hidden in production. Re-enable{" "}
-          <code className="text-xs">NEXT_PUBLIC_COMMUNICATION_WHATSAPP_*</code>{" "}
-          flags when ready. Use{" "}
+          This standalone page is hidden. Set{" "}
+          <code className="text-xs">NEXT_PUBLIC_COMMUNICATION_WHATSAPP_PAGE=true</code>{" "}
+          to show it in the sidebar again. Email Automation remains the primary
+          outbound channel — see{" "}
           <Link href={ROUTES.EMAIL_AUTOMATION} className="underline">
             Email Automation
-          </Link>{" "}
-          for outbound messaging.
+          </Link>
+          .
         </p>
       ) : (
         <section className="space-y-3 rounded-lg border border-border/60 bg-card/50 px-3 py-3 text-sm">

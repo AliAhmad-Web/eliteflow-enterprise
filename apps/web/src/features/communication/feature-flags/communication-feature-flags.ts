@@ -41,10 +41,10 @@ export {
 /**
  * EliteFlow Communication / Voice AI / WhatsApp / Email Automation flags (Phase 7).
  *
- * Production defaults (temporary):
- * - Voice AI + WhatsApp UI: OFF (implementation kept; re-enable via env)
- * - Email Automation + AI Email Workspace: ON (primary communication platform)
- * - EMAIL_AI_* executive enhancements: OFF unless set (opt-in)
+ * Production defaults:
+ * - AI Agent (Voice in AI Assistant + Email Executive AI): ON
+ * - Standalone /voice-ai and /whatsapp sidebar pages: OFF (COMMUNICATION_*_PAGE)
+ * - WhatsApp channel capabilities: ON (page still hidden until *_PAGE=true)
  */
 
 const ON = true;
@@ -58,48 +58,48 @@ export function isCommunicationEnterpriseFoundationEnabled(): boolean {
 }
 
 export function isCommunicationVoiceAiEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_AI, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_AI, ON);
 }
 
 export function isCommunicationVoiceAssistantEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_ASSISTANT,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationVoiceCommandsEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_COMMANDS,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationSpeechToTextEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_TO_TEXT,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationTextToSpeechEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_TEXT_TO_SPEECH,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationWhatsappIntegrationEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP_INTEGRATION,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationWhatsappMessagingEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP_MESSAGING,
-    OFF,
+    ON,
   );
 }
 
@@ -132,43 +132,43 @@ export function isCommunicationEmailAiEnabled(): boolean {
 export function isCommunicationEmailThreadsEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_THREADS,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationEmailVoiceEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_VOICE, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_VOICE, ON);
 }
 
 export function isCommunicationEmailSearchEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_SEARCH, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_SEARCH, ON);
 }
 
 export function isCommunicationEmailSharedInboxEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_SHARED_INBOX,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationEmailSmartReplyEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_SMART_REPLY,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationEmailScheduleEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_SCHEDULE,
-    OFF,
+    ON,
   );
 }
 
 export function isCommunicationEmailEnterpriseUiEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_COMMUNICATION_EMAIL_ENTERPRISE_UI,
-    OFF,
+    ON,
   );
 }
 
@@ -179,35 +179,57 @@ export function isCommunicationAiAssistantEnabled(): boolean {
   );
 }
 
-/** Push-to-talk / speech UI (also honors SPEECH_TO_TEXT). Default OFF. */
+/** Push-to-talk / speech UI (also honors SPEECH_TO_TEXT). */
 export function isCommunicationSpeechUiEnabled(): boolean {
   return (
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_UI, OFF) ||
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_SPEECH_UI, ON) ||
     isCommunicationSpeechToTextEnabled()
   );
 }
 
-/** Voice → Action Framework (also honors VOICE_COMMANDS). Default OFF. */
+/** Voice → Action Framework (also honors VOICE_COMMANDS). */
 export function isCommunicationVoiceActionsEnabled(): boolean {
   return (
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_ACTIONS, OFF) ||
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_ACTIONS, ON) ||
     isCommunicationVoiceCommandsEnabled()
   );
 }
 
-/** WhatsApp channel (also honors WHATSAPP_INTEGRATION). Default OFF. */
+/** WhatsApp channel (also honors WHATSAPP_INTEGRATION). */
 export function isCommunicationWhatsappEnabled(): boolean {
   return (
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP, OFF) ||
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP, ON) ||
     isCommunicationWhatsappIntegrationEnabled()
   );
 }
 
-/** WhatsApp queue processing (also honors WHATSAPP_MESSAGING). Default OFF. */
+/** WhatsApp queue processing (also honors WHATSAPP_MESSAGING). */
 export function isCommunicationWhatsappQueueEnabled(): boolean {
   return (
-    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP_QUEUE, OFF) ||
+    parseEnvFlag(process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP_QUEUE, ON) ||
     isCommunicationWhatsappMessagingEnabled()
+  );
+}
+
+/**
+ * Standalone Communication → Voice AI page + sidebar item.
+ * Default OFF — does not disable AI Agent voice inside AI Assistant / Email.
+ */
+export function isCommunicationVoiceAiPageEnabled(): boolean {
+  return parseEnvFlag(
+    process.env.NEXT_PUBLIC_COMMUNICATION_VOICE_AI_PAGE,
+    OFF,
+  );
+}
+
+/**
+ * Standalone Communication → WhatsApp page + sidebar item.
+ * Default OFF — does not disable AI Agent or Email Automation.
+ */
+export function isCommunicationWhatsappPageEnabled(): boolean {
+  return parseEnvFlag(
+    process.env.NEXT_PUBLIC_COMMUNICATION_WHATSAPP_PAGE,
+    OFF,
   );
 }
 
@@ -351,6 +373,10 @@ export function isCommunicationFeatureEnabled(
       return isCommunicationWhatsappEnabled();
     case "COMMUNICATION_WHATSAPP_QUEUE":
       return isCommunicationWhatsappQueueEnabled();
+    case "COMMUNICATION_VOICE_AI_PAGE":
+      return isCommunicationVoiceAiPageEnabled();
+    case "COMMUNICATION_WHATSAPP_PAGE":
+      return isCommunicationWhatsappPageEnabled();
     case "COMMUNICATION_ORCHESTRATION":
       return isCommunicationOrchestrationEnabled();
     case "COMMUNICATION_STATUS":
@@ -404,6 +430,8 @@ export function getCommunicationFeatureFlags(): CommunicationFeatureFlags {
     COMMUNICATION_VOICE_ACTIONS: isCommunicationVoiceActionsEnabled(),
     COMMUNICATION_WHATSAPP: isCommunicationWhatsappEnabled(),
     COMMUNICATION_WHATSAPP_QUEUE: isCommunicationWhatsappQueueEnabled(),
+    COMMUNICATION_VOICE_AI_PAGE: isCommunicationVoiceAiPageEnabled(),
+    COMMUNICATION_WHATSAPP_PAGE: isCommunicationWhatsappPageEnabled(),
     COMMUNICATION_ORCHESTRATION: isCommunicationOrchestrationEnabled(),
     COMMUNICATION_STATUS: isCommunicationStatusEnabled(),
     COMMUNICATION_FEEDBACK: isCommunicationFeedbackEnabled(),

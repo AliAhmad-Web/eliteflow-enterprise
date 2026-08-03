@@ -1,62 +1,63 @@
 /**
- * Executive Assistant Email AI enhancements — independently toggleable (default OFF).
+ * Executive Assistant Email AI enhancements — independently toggleable.
+ * Production defaults ON for the Email Executive Assistant experience.
  * Turning any flag OFF restores prior behavior without code removal or API changes.
  * Env: NEXT_PUBLIC_EMAIL_AI_*
  */
 
 import { parseEnvFlag } from "@/features/ai/feature-flags";
 
-const OFF = false;
+const ON = true;
 
 export function isEmailAiContactResolutionEnabled(): boolean {
   return parseEnvFlag(
     process.env.NEXT_PUBLIC_EMAIL_AI_CONTACT_RESOLUTION,
-    OFF,
+    ON,
   );
 }
 
 export function isEmailAiSmartPreviewEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SMART_PREVIEW, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SMART_PREVIEW, ON);
 }
 
 export function isEmailAiSmartValidationEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SMART_VALIDATION, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SMART_VALIDATION, ON);
 }
 
 export function isEmailAiRewriteEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_REWRITE, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_REWRITE, ON);
 }
 
 export function isEmailAiScheduleEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SCHEDULE, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SCHEDULE, ON);
 }
 
 export function isEmailAiInsightsEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_INSIGHTS, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_INSIGHTS, ON);
 }
 
 export function isEmailAiThreadsEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_THREADS, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_THREADS, ON);
 }
 
 export function isEmailAiSearchEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SEARCH, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_SEARCH, ON);
 }
 
 export function isEmailAiVoiceEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_VOICE, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_VOICE, ON);
 }
 
 export function isEmailAiGroupsEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_GROUPS, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_GROUPS, ON);
 }
 
 export function isEmailAiExecutiveUiEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_EXECUTIVE_UI, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_EXECUTIVE_UI, ON);
 }
 
 export function isEmailAiCommandPaletteEnabled(): boolean {
-  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_COMMAND_PALETTE, OFF);
+  return parseEnvFlag(process.env.NEXT_PUBLIC_EMAIL_AI_COMMAND_PALETTE, ON);
 }
 
 /** Any executive EMAIL_AI_* enhancement is active. */

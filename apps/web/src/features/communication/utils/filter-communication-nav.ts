@@ -1,6 +1,6 @@
 /**
- * Hide Communication nav entries when their presentation flags are OFF.
- * Implementation and routes remain — only visibility is gated for rollback.
+ * Hide only standalone Communication nav pages (Voice AI / WhatsApp).
+ * Does NOT gate AI Agent capabilities in AI Assistant or Email Automation.
  */
 
 import type { NavigationSection } from "@/config/navigation.config";
@@ -8,16 +8,16 @@ import { ROUTES } from "@/constants/routes";
 
 import {
   isCommunicationEmailPresentationEnabled,
-  isCommunicationVoicePresentationEnabled,
-  isCommunicationWhatsappPresentationEnabled,
+  isCommunicationVoiceAiPageEnabled,
+  isCommunicationWhatsappPageEnabled,
 } from "../feature-flags";
 
 function isCommunicationNavItemVisible(href: string): boolean {
   if (href === ROUTES.VOICE_AI) {
-    return isCommunicationVoicePresentationEnabled();
+    return isCommunicationVoiceAiPageEnabled();
   }
   if (href === ROUTES.WHATSAPP) {
-    return isCommunicationWhatsappPresentationEnabled();
+    return isCommunicationWhatsappPageEnabled();
   }
   if (href === ROUTES.EMAIL_AUTOMATION) {
     return isCommunicationEmailPresentationEnabled();

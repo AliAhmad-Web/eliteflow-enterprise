@@ -1,8 +1,8 @@
 /**
  * Communication feature flag identifiers (Phase 7).
- * Env vars use the NEXT_PUBLIC_COMMUNICATION_* prefix (or NEXT_PUBLIC_EMAIL_AI_* for executive enhancements).
- * Production: Email Automation / Workspace / AI default ON; Voice AI + WhatsApp UI default OFF (hidden).
- * EMAIL_AI_* executive flags default OFF unless noted.
+ * Env vars use the NEXT_PUBLIC_COMMUNICATION_* / NEXT_PUBLIC_EMAIL_AI_* prefixes.
+ * Standalone /voice-ai and /whatsapp pages are gated by *_PAGE flags (default OFF).
+ * AI Agent capabilities (Voice in AI Assistant, Email Executive AI) default ON.
  */
 export const COMMUNICATION_FEATURE_FLAG_IDS = [
   "COMMUNICATION_ENTERPRISE_FOUNDATION",
@@ -24,7 +24,10 @@ export const COMMUNICATION_FEATURE_FLAG_IDS = [
   "COMMUNICATION_ORCHESTRATION",
   "COMMUNICATION_STATUS",
   "COMMUNICATION_FEEDBACK",
-  /** Task 7.3 — Enterprise AI Email Workspace (default OFF) */
+  /** Standalone Communication pages (sidebar) — default OFF */
+  "COMMUNICATION_VOICE_AI_PAGE",
+  "COMMUNICATION_WHATSAPP_PAGE",
+  /** Task 7.3 — Enterprise AI Email Workspace */
   "COMMUNICATION_EMAIL_WORKSPACE",
   "COMMUNICATION_EMAIL_AI",
   "COMMUNICATION_EMAIL_THREADS",
@@ -34,7 +37,7 @@ export const COMMUNICATION_FEATURE_FLAG_IDS = [
   "COMMUNICATION_EMAIL_SMART_REPLY",
   "COMMUNICATION_EMAIL_SCHEDULE",
   "COMMUNICATION_EMAIL_ENTERPRISE_UI",
-  /** Executive Assistant enhancements (default OFF — independent rollback) */
+  /** Executive Assistant enhancements */
   "EMAIL_AI_CONTACT_RESOLUTION",
   "EMAIL_AI_SMART_PREVIEW",
   "EMAIL_AI_SMART_VALIDATION",
