@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROUTES } from "@/constants/routes";
 import { executeRecaptcha } from "@/features/security/lib/recaptcha";
-import { ApiClientError } from "@/services/api/api-error";
+import { ApiClientError, getApiErrorMessage } from "@/services/api/api-error";
 import { RECAPTCHA } from "@enterprise/shared";
 
 import { useForgotPassword } from "../hooks/use-forgot-password";
@@ -43,17 +43,17 @@ export function ForgotPasswordForm() {
       await forgotPasswordMutation.mutateAsync({ ...values, captchaToken });
       setIsSuccess(true);
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        if (error.status === 404) {
-          setIsSuccess(true);
-          return;
-        }
-
-        setApiError(error.message);
+      if (error instanceof ApiClientError && error.status === 404) {
+        setIsSuccess(true);
         return;
       }
 
-      setApiError("Unable to process your request. Please try again.");
+      setApiError(
+        getApiErrorMessage(
+          error,
+          "Unable to process your request. Please try again.",
+        ),
+      );
     }
   });
 

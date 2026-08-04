@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ROUTES } from "@/constants/routes";
 import { executeRecaptcha } from "@/features/security/lib/recaptcha";
-import { ApiClientError } from "@/services/api/api-error";
+import { getApiErrorMessage } from "@/services/api/api-error";
 import { RECAPTCHA } from "@enterprise/shared";
 
 import { useResetPassword } from "../hooks/use-reset-password";
@@ -63,12 +63,9 @@ export function ResetPasswordForm() {
       });
       setIsSuccess(true);
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        setApiError(error.message);
-        return;
-      }
-
-      setApiError("Unable to reset password. Please try again.");
+      setApiError(
+        getApiErrorMessage(error, "Unable to reset password. Please try again."),
+      );
     }
   });
 

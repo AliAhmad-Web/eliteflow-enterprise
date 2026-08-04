@@ -41,7 +41,7 @@ import {
   usePerformanceStableCallback,
   useRenderProfiler,
 } from "@/features/performance";
-import { ApiClientError } from "@/services/api/api-error";
+import { ApiClientError, getApiErrorMessage } from "@/services/api/api-error";
 
 import {
   isAiUiContextIndicatorsEnabled,
@@ -744,7 +744,7 @@ export function AiAssistantPageContent() {
   const composerErrorMessage =
     chatMutation.error instanceof ApiClientError &&
     chatMutation.error.code !== "AI_STREAM_ABORTED"
-      ? chatMutation.error.message
+      ? getApiErrorMessage(chatMutation.error)
       : null;
   const canRegenerate =
     Boolean(selectedId) && messages.some((message) => message.role === "USER");

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROUTES } from "@/constants/routes";
 import { executeRecaptcha } from "@/features/security/lib/recaptcha";
-import { ApiClientError } from "@/services/api/api-error";
+import { getApiErrorMessage } from "@/services/api/api-error";
 import { RECAPTCHA } from "@enterprise/shared";
 
 import { useSignup } from "../hooks/use-signup";
@@ -72,12 +72,9 @@ export function SignupForm() {
 
       router.push(`${ROUTES.LOGIN}?${params.toString()}`);
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        setApiError(error.message);
-        return;
-      }
-
-      setApiError("Unable to create account. Please try again.");
+      setApiError(
+        getApiErrorMessage(error, "Unable to create account. Please try again."),
+      );
     }
   });
 

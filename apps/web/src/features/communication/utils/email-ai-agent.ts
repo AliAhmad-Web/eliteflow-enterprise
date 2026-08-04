@@ -250,48 +250,270 @@ function normalize(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** Default Dear-line when no specific recipient is resolved. */
 const GREETINGS: Record<EmailDraftStyle, string> = {
-  formal: "Dear team,",
-  professional: "Hello,",
-  executive: "Dear colleagues,",
-  friendly: "Hi everyone,",
-  sales: "Hello,",
-  support: "Hello,",
-  reminder: "Hello,",
-  meeting: "Hello team,",
-  invoice: "Dear Finance / Accounts,",
-  leave: "Dear HR,",
-  hr: "Dear team,",
-  customer_reply: "Hello,",
-  project_update: "Hello team,",
-  status_update: "Hello,",
+  formal: "Dear All,",
+  professional: "Dear Team,",
+  executive: "Dear Colleagues,",
+  friendly: "Dear Team,",
+  sales: "Dear Sales Team,",
+  support: "Dear Team,",
+  reminder: "Dear Team,",
+  meeting: "Dear Team,",
+  invoice: "Dear Finance Team,",
+  leave: "Dear HR Team,",
+  hr: "Dear HR Team,",
+  customer_reply: "Dear Valued Partner,",
+  project_update: "Dear Team,",
+  status_update: "Dear Team,",
 };
 
+/** Closing line only — signature block is appended separately. */
 const CLOSINGS: Record<EmailDraftStyle, string> = {
   formal: "Yours sincerely,",
-  professional: "Best regards,",
-  executive: "Kind regards,",
-  friendly: "Thanks,",
-  sales: "Looking forward to connecting,",
-  support: "Regards,\nSupport Team",
-  reminder: "Thank you,",
-  meeting: "See you there,\n",
-  invoice: "Thank you,\nFinance",
-  leave: "Regards,\nHR",
-  hr: "Warm regards,\nHR",
-  customer_reply: "Best regards,",
-  project_update: "Best regards,",
-  status_update: "Best regards,",
+  professional: "Best Regards,",
+  executive: "Kind Regards,",
+  friendly: "Warm regards,",
+  sales: "Best Regards,",
+  support: "Best Regards,",
+  reminder: "Best Regards,",
+  meeting: "Best Regards,",
+  invoice: "Best Regards,",
+  leave: "Best Regards,",
+  hr: "Best Regards,",
+  customer_reply: "Best Regards,",
+  project_update: "Best Regards,",
+  status_update: "Best Regards,",
 };
+
+const SIGNATURE_ORG = "EliteFlow Enterprise AI Platform";
+
+type MeetingDetails = {
+  date?: string;
+  time?: string;
+  location?: string;
+  platform?: string;
+};
+
+function stripRecipientCount(label: string): string {
+  return label.replace(/\s*\(\d+\)\s*$/u, "").trim();
+}
+
+/** Build a professional Dear-line from a resolved recipient label. */
+function formatDearGreeting(
+  recipientLabel: string | undefined,
+  style: EmailDraftStyle,
+): string {
+  if (!recipientLabel?.trim()) {
+    return GREETINGS[style];
+  }
+
+  const name = stripRecipientCount(recipientLabel);
+  if (/^all employees$/i.test(name) || /^everyone$/i.test(name)) {
+    return "Dear All,";
+  }
+  if (/^managers$/i.test(name)) {
+    return "Dear Managers,";
+  }
+  if (/^(hr|human resources)$/i.test(name)) {
+    return "Dear HR Team,";
+  }
+  if (/^(sales|finance|marketing|operations|support|it|engineering)$/i.test(name)) {
+    return `Dear ${titleCase(name)} Team,`;
+  }
+  if (/\b(team|department|group)$/i.test(name)) {
+    return `Dear ${name},`;
+  }
+  return `Dear ${name},`;
+}
+
+function extractMeetingDetails(prompt: string): MeetingDetails {
+  const p = prompt.replace(/\s+/g, " ").trim();
+  const details: MeetingDetails = {};
+
+  if (/\b(kal|tomorrow)\b/i.test(p)) {
+    details.date = "Tomorrow";
+  } else if (/\b(aaj|aj|today)\b/i.test(p)) {
+    details.date = "Today";
+  } else {
+    const day = p.match(
+      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+    );
+    if (day?.[1]) {
+      details.date = titleCase(day[1]);
+    }
+  }
+
+  const timeMatch = p.match(
+    /\b(\d{1,2})\s*(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.|baje)\b/i,
+  );
+  if (timeMatch?.[1]) {
+    const hourRaw = Number(timeMatch[1]);
+    const minute = timeMatch[2] ?? "00";
+    let meridiem = (timeMatch[3] ?? "").toLowerCase().replace(/\./g, "");
+    if (meridiem === "baje") {
+      // Roman-Urdu "2 baje" → assume PM for typical business hours 1–6
+      if (hourRaw >= 1 && hourRaw <= 6) meridiem = "PM";
+      else if (hourRaw >= 7 && hourRaw <= 11) meridiem = "AM";
+      else meridiem = "PM";
+    } else {
+      meridiem = meridiem.toUpperCase();
+    }
+    const hour12 =
+      hourRaw === 0 ? 12 : hourRaw > 12 ? hourRaw - 12 : hourRaw;
+    details.time = `${hour12}:${minute} ${meridiem}`;
+  } else {
+    // Accept "at 14:00" / "at 2" only when meeting context words are present
+    const looseTime = p.match(
+      /\b(?:at|@)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i,
+    );
+    if (looseTime?.[1] && /\b(meeting|zoom|call|sync|standup)\b/i.test(p)) {
+      const hourRaw = Number(looseTime[1]);
+      const minute = looseTime[2] ?? "00";
+      let meridiem = (looseTime[3] ?? "").toUpperCase();
+      if (!meridiem) {
+        meridiem =
+          hourRaw >= 1 && hourRaw <= 6 ? "PM" : hourRaw <= 11 ? "AM" : "PM";
+      }
+      const hour12 =
+        hourRaw === 0 ? 12 : hourRaw > 12 ? hourRaw - 12 : hourRaw;
+      details.time = `${hour12}:${minute} ${meridiem}`;
+    }
+  }
+
+  if (/\bzoom\b/i.test(p)) {
+    details.platform = "Zoom";
+  } else if (/\b(microsoft\s+)?teams\b/i.test(p)) {
+    details.platform = "Microsoft Teams";
+  } else if (/\b(google\s+)?meet\b/i.test(p)) {
+    details.platform = "Google Meet";
+  }
+
+  const locationMatch = p.match(
+    /\b(?:at|in)\s+((?:the\s+)?(?:conference|meeting|board)\s+room[^,.]{0,40}|[^,.]{0,40}(?:office|floor|building)[^,.]{0,20})/i,
+  );
+  if (locationMatch?.[1]) {
+    details.location = locationMatch[1].trim().replace(/\s+/g, " ");
+  } else if (/\boffice\b/i.test(p) && !details.platform) {
+    details.location = "Office";
+  }
+
+  return details;
+}
+
+function formatMeetingDetailsBlock(details: MeetingDetails): string {
+  const lines: string[] = ["Meeting Details"];
+  if (details.date) lines.push(`Date: ${details.date}`);
+  if (details.time) lines.push(`Time: ${details.time}`);
+  if (details.location) lines.push(`Location: ${details.location}`);
+  if (details.platform) lines.push(`Platform: ${details.platform}`);
+  if (lines.length === 1) return "";
+  return lines.join("\n");
+}
+
+function buildActionRequired(style: EmailDraftStyle, prompt: string): string {
+  const p = normalize(prompt);
+  const bullets: string[] = [];
+
+  switch (style) {
+    case "meeting":
+      bullets.push("Confirm your availability for the meeting.");
+      bullets.push("Join on time using the details provided below.");
+      if (/agenda|prep|prepare/i.test(p)) {
+        bullets.push("Review any related materials before the meeting.");
+      }
+      break;
+    case "leave":
+    case "hr":
+      bullets.push("Review the information shared in this email.");
+      bullets.push("Acknowledge receipt at your earliest convenience.");
+      if (/policy/i.test(p)) {
+        bullets.push("Share any questions with HR if clarification is needed.");
+      }
+      break;
+    case "reminder":
+      bullets.push("Complete the outstanding item referenced below.");
+      bullets.push("Reply to this email once the action has been completed.");
+      break;
+    case "invoice":
+      bullets.push("Review the finance update carefully.");
+      bullets.push("Confirm processing or raise discrepancies promptly.");
+      break;
+    case "project_update":
+    case "status_update":
+      bullets.push("Review the latest status update.");
+      bullets.push("Reply with blockers, risks, or ownership confirmations.");
+      break;
+    case "sales":
+      bullets.push("Review the opportunity details.");
+      bullets.push("Confirm next steps or request a follow-up discussion.");
+      break;
+    case "support":
+      bullets.push("Review the support update.");
+      bullets.push("Reply if additional information is required.");
+      break;
+    case "friendly":
+      // Thank-you notes typically need no action list.
+      if (!/thank|thanks|shukriya|شکریہ/i.test(p)) {
+        bullets.push("Please review the note below.");
+      }
+      break;
+    case "customer_reply":
+      bullets.push("Review the response and advise if further assistance is needed.");
+      break;
+    case "executive":
+    case "formal":
+    case "professional":
+    default:
+      bullets.push("Review the information provided in this email.");
+      bullets.push("Take the necessary next steps and reply if clarification is required.");
+      break;
+  }
+
+  if (bullets.length === 0) return "";
+  return ["Action Required", ...bullets.map((b) => `• ${b}`)].join("\n");
+}
+
+function buildSignature(authorName?: string): string {
+  const name = authorName?.trim() || "Super Admin";
+  return `Best Regards,\n\n${name}\n\n${SIGNATURE_ORG}`;
+}
+
+function buildClosingSentence(style: EmailDraftStyle): string {
+  switch (style) {
+    case "meeting":
+      return "Thank you for your cooperation. We look forward to a productive discussion.";
+    case "leave":
+    case "hr":
+      return "Thank you for your cooperation. Please let us know if you have any questions.";
+    case "reminder":
+      return "We appreciate your prompt attention to this matter.";
+    case "invoice":
+      return "Thank you for your cooperation and timely support.";
+    case "sales":
+      return "We appreciate your support and look forward to connecting soon.";
+    case "support":
+      return "Please let us know if you need any further assistance.";
+    case "friendly":
+      return "We appreciate your continued support and dedication.";
+    case "customer_reply":
+      return "We appreciate your partnership and look forward to assisting you further.";
+    case "executive":
+      return "Please let us know if any further clarification is required.";
+    default:
+      return "Please let us know if you have any questions. We appreciate your support.";
+  }
+}
 
 export function detectDraftStyle(prompt: string): EmailDraftStyle {
   const p = normalize(prompt);
   if (/\bthank|thanks|شکریہ|shukriya/.test(p)) return "friendly";
   if (/\binvoice\b|bill|payment|payroll|تنخواہ/.test(p)) return "invoice";
   if (/\bleave\b|pto|vacation|چھٹی|leave policy/.test(p)) return "leave";
+  // Meeting takes priority over department keywords (e.g. "HR ko meeting...").
+  if (/\bmeeting\b|standup|sync|zoom|میٹنگ|ملاقات/.test(p)) return "meeting";
   if (/\bhr\b|human resources|offer|onboard|welcome|خوش آمدید/.test(p))
     return "hr";
-  if (/\bmeeting\b|standup|sync|zoom|میٹنگ|ملاقات/.test(p)) return "meeting";
   if (/\bremind|یاد دہانی|reminder/.test(p)) return "reminder";
   if (/\bsales\b|proposal|quote/.test(p)) return "sales";
   if (/\bsupport\b|ticket|issue/.test(p)) return "support";
@@ -349,37 +571,68 @@ export function generateSubjectFromPrompt(
   style: EmailDraftStyle,
 ): string {
   const cleaned = prompt.replace(/\s+/g, " ").trim();
-  if (!cleaned) {
-    return EMAIL_DRAFT_STYLE_LABELS[style];
+  const details = extractMeetingDetails(cleaned);
+  const topic = professionalizeTopic(cleaned);
+  const shortTopic =
+    topic.length > 56 ? `${topic.slice(0, 53).trim()}…` : topic;
+
+  if (/thank|thanks|شکریہ|shukriya|appreciation|grateful/i.test(cleaned)) {
+    return "Thank You for Your Contribution";
   }
-  if (/thank|thanks|شکریہ|shukriya/i.test(cleaned)) {
-    return "Thank You";
-  }
-  const withoutCommands = cleaned
-    .replace(
-      /^(please\s+)?(send|email|write|draft|forward|reply)\s+(to\s+)?/i,
-      "",
-    )
-    .replace(/\s+to\s+[a-z0-9\s&.-]+$/i, "")
-    .trim();
-  const topic = withoutCommands || cleaned;
-  const short = topic.length > 72 ? `${topic.slice(0, 69)}…` : topic;
+
   switch (style) {
-    case "meeting":
-      return `Meeting update: ${titleCase(short)}`;
+    case "meeting": {
+      const whenParts = [details.date, details.time].filter(Boolean).join(" at ");
+      if (whenParts) {
+        return `Meeting Reminder – ${whenParts}`;
+      }
+      if (/executive/i.test(cleaned)) {
+        return "Meeting Reminder – Executive Team Meeting";
+      }
+      return `Meeting Reminder – ${titleCase(shortTopic)}`;
+    }
+    case "leave":
+      if (/policy/i.test(cleaned)) {
+        return "Updated Leave Policy – Please Review and Acknowledge";
+      }
+      return "Leave Update – Please Review and Acknowledge";
+    case "hr":
+      if (/performance\s*review/i.test(cleaned)) {
+        return "Upcoming Performance Review Schedule";
+      }
+      if (/welcome|onboard/i.test(cleaned)) {
+        return "Welcome to the Team – Onboarding Update";
+      }
+      return `HR Update – ${titleCase(shortTopic)}`;
     case "reminder":
-      return `Reminder: ${titleCase(short)}`;
+      if (/payroll/i.test(cleaned)) {
+        return "Payroll Reminder – Action Required";
+      }
+      return `Reminder – ${titleCase(shortTopic)}`;
     case "invoice":
-      return `Invoice: ${titleCase(short)}`;
+      return `Finance Update – ${titleCase(shortTopic)}`;
     case "project_update":
-      return `Project update: ${titleCase(short)}`;
+      if (/phase\s*2|completed|complete/i.test(cleaned)) {
+        return "Project Status Update – Phase 2 Completed";
+      }
+      return `Project Status Update – ${titleCase(shortTopic)}`;
     case "status_update":
-      return `Status update: ${titleCase(short)}`;
+      return `Status Update – ${titleCase(shortTopic)}`;
+    case "sales":
+      return `Sales Update – ${titleCase(shortTopic)}`;
+    case "support":
+      return `Support Update – ${titleCase(shortTopic)}`;
+    case "executive":
+      return `Executive Update – ${titleCase(shortTopic)}`;
+    case "formal":
+      return `Official Notice – ${titleCase(shortTopic)}`;
+    case "customer_reply":
+      return `Re: ${titleCase(shortTopic)}`;
     case "friendly":
-      if (/thank|thanks/i.test(cleaned)) return "Thank You";
-      return titleCase(short);
+      return titleCase(shortTopic);
+    case "professional":
     default:
-      return titleCase(short);
+      return `Business Update – ${titleCase(shortTopic)}`;
   }
 }
 
@@ -390,52 +643,117 @@ export function composeAiEmailDraft(input: {
   authorName?: string;
 }): AiEmailDraftResult {
   const style = input.style ?? detectDraftStyle(input.prompt);
-  const greeting = input.recipientLabel
-    ? `Hello ${input.recipientLabel},`
-    : GREETINGS[style];
-  const closing = input.authorName
-    ? `${CLOSINGS[style]}\n${input.authorName}`
-    : CLOSINGS[style];
+  const greeting = formatDearGreeting(input.recipientLabel, style);
   const topic = professionalizeTopic(input.prompt);
-  const bodyCore = (() => {
+  const isMeetingContext =
+    style === "meeting" ||
+    /\b(meeting|zoom|teams|meet|standup|sync|میٹنگ|ملاقات)\b/i.test(
+      input.prompt,
+    );
+  const meetingDetails = isMeetingContext
+    ? extractMeetingDetails(input.prompt)
+    : {};
+  const meetingBlock = formatMeetingDetailsBlock(meetingDetails);
+  const actionBlock = buildActionRequired(style, input.prompt);
+  const closingSentence = buildClosingSentence(style);
+  const signature = buildSignature(input.authorName);
+  // Keep closing field for smart-compose suggestions (line only).
+  const closing = CLOSINGS[style];
+
+  const introduction = (() => {
     switch (style) {
       case "meeting":
-        return `Please find the meeting announcement below.\n\n${topic}\n\nKindly confirm your attendance and join on time. Reach out if you have any questions.`;
-      case "reminder":
-        return `This is a friendly reminder regarding the following:\n\n${topic}\n\nPlease complete this at your earliest convenience.`;
-      case "invoice":
-        return `Please review the finance update related to:\n\n${topic}\n\nLet us know if any clarification is required.`;
+        return "I hope you are doing well.\n\nThis email is to notify you regarding an upcoming meeting.";
       case "leave":
-        return `Sharing an important leave / policy update:\n\n${topic}\n\nPlease review and acknowledge.`;
+        return "I hope you are doing well.\n\nPlease be informed that an important leave / policy update requires your attention.";
       case "hr":
-        return `Sharing an HR update:\n\n${topic}\n\nPlease reach out to HR if you need assistance.`;
-      case "executive":
-        return `Executive summary:\n\n${topic}\n\nRecommended next step: confirm ownership and timeline.`;
+        return "I hope you are doing well.\n\nWe would like to inform you of an important HR update.";
+      case "reminder":
+        return "I hope you are doing well.\n\nThis email is a professional reminder regarding an outstanding item.";
+      case "invoice":
+        return "I hope you are doing well.\n\nPlease be informed of the following finance update.";
       case "sales":
-        return `I wanted to share the following opportunity update:\n\n${topic}\n\nHappy to schedule a short call to discuss.`;
+        return "I hope you are doing well.\n\nWe would like to share the following sales update with you.";
       case "support":
-        return `Thank you for your message. Regarding your request:\n\n${topic}\n\nWe are actively working on this and will follow up shortly.`;
+        return "I hope you are doing well.\n\nThank you for your patience. Please find an update regarding your request below.";
       case "project_update":
-        return `Project update:\n\n${topic}\n\nNext steps and owners will be confirmed in the thread.`;
       case "status_update":
-        return `Current status:\n\n${topic}\n\nPlease reply with blockers if any.`;
-      case "customer_reply":
-        return `Thank you for reaching out.\n\n${topic}\n\nWe appreciate your partnership.`;
+        return "I hope you are doing well.\n\nPlease find below the latest project / status update for your review.";
+      case "executive":
+        return "I hope you are doing well.\n\nPlease find an executive summary of the matter below.";
       case "friendly":
-        if (/thank|thanks|appreciation|grateful/i.test(input.prompt + topic)) {
-          return `I wanted to personally thank you for your contribution and support.\n\n${topic}\n\nYour efforts are sincerely appreciated, and I look forward to continuing our work together.`;
+        if (/thank|thanks|shukriya|شکریہ|appreciation/i.test(input.prompt)) {
+          return "I hope you are doing well.\n\nI am writing to express sincere appreciation for your contribution and support.";
         }
-        return `Quick note:\n\n${topic}\n\nAppreciate you!`;
+        return "I hope you are doing well.\n\nI wanted to share a brief professional note with you.";
+      case "customer_reply":
+        return "I hope you are doing well.\n\nThank you for reaching out. Please find our response below.";
       case "formal":
-        return `I am writing to inform you of the following:\n\n${topic}\n\nPlease advise should further information be required.`;
+        return "I hope this message finds you well.\n\nI am writing to formally inform you of the following.";
       case "professional":
       default:
-        return `Sharing a professional update:\n\n${topic}\n\nPlease let me know if you need anything further.`;
+        return "I hope you are doing well.\n\nPlease be informed of the following business update.";
     }
   })();
 
-  const body = `${greeting}\n\n${bodyCore}\n\n${closing}`;
-  const subject = generateSubjectFromPrompt(topic, style);
+  const contextParagraph = (() => {
+    switch (style) {
+      case "meeting": {
+        const when = [meetingDetails.date, meetingDetails.time]
+          .filter(Boolean)
+          .join(" at ");
+        const platform = meetingDetails.platform
+          ? ` via ${meetingDetails.platform}`
+          : "";
+        if (when) {
+          return `The purpose of this communication is to confirm the scheduled meeting${platform} on ${when}. Your participation is important for alignment and timely decision-making.`;
+        }
+        return `The purpose of this communication is to share meeting arrangements related to: ${topic}. Your participation will help ensure alignment and clear next steps.`;
+      }
+      case "leave":
+        return `The purpose of this email is to ensure all relevant team members are informed about the leave / policy matter: ${topic}. Kindly review the details carefully so that compliance and planning remain consistent across the organization.`;
+      case "hr":
+        return `This update is being shared to keep you informed of the following HR matter: ${topic}. Please review the details so that the team remains aligned on expectations and next steps.`;
+      case "reminder":
+        return `This reminder concerns the following item: ${topic}. Timely completion will help avoid delays and support smooth business operations.`;
+      case "invoice":
+        return `The finance context for this message is as follows: ${topic}. Please review the details and take any required action to keep processing on schedule.`;
+      case "sales":
+        return `The sales update we would like to share is: ${topic}. Your review will help us move forward with the appropriate commercial next steps.`;
+      case "support":
+        return `Regarding your request, the current update is: ${topic}. Our team remains committed to resolving this efficiently and professionally.`;
+      case "project_update":
+      case "status_update":
+        return `The current business context is: ${topic}. Please review the progress notes and confirm ownership where applicable.`;
+      case "friendly":
+        if (/thank|thanks|shukriya|شکریہ/i.test(input.prompt)) {
+          return "Your hard work, professionalism, and continued support are sincerely valued. The dedication you bring to EliteFlow makes a meaningful difference to our collective success.";
+        }
+        return `I wanted to share the following with you: ${topic}.`;
+      case "customer_reply":
+        return `In response to your message, please note the following: ${topic}. We remain available should you require any further clarification.`;
+      case "executive":
+        return `Executive context: ${topic}. Please review the summary and confirm ownership, priorities, and timelines as needed.`;
+      case "formal":
+        return `The formal notice concerns: ${topic}. Please treat this communication as an official organizational update.`;
+      default:
+        return `The purpose of this email is to share the following update: ${topic}. Please review the details and proceed with any required follow-up.`;
+    }
+  })();
+
+  const sections = [
+    greeting,
+    introduction,
+    contextParagraph,
+    meetingBlock,
+    actionBlock,
+    closingSentence,
+    signature,
+  ].filter((section) => section.trim().length > 0);
+
+  const body = sections.join("\n\n");
+  const subject = generateSubjectFromPrompt(input.prompt, style);
+
   return {
     subject,
     body,
@@ -447,63 +765,92 @@ export function composeAiEmailDraft(input: {
   };
 }
 
-/** Turn roman-Urdu / mixed prompts into clean English topic lines. */
+/**
+ * Turn roman-Urdu / mixed prompts into clean English topic phrases.
+ * Output is always English — never Urdu email body text.
+ */
 function professionalizeTopic(prompt: string): string {
   let t = prompt.replace(/\s+/g, " ").trim();
-  if (!t) return "the latest update";
+  if (!t) return "the latest organizational update";
 
-  // Strip command tails
+  // Strip command phrasing (English + roman Urdu)
   t = t
     .replace(
       /,?\s*(tamam|sab|all)\s+employees?\s+ko\s+(inform|email|bhej|notify).*$/i,
       "",
     )
-    .replace(/\s*(kar\s+do|bhej\s+do|email\s+kar\s+do)\.?$/i, "")
-    .replace(/^(please\s+)?(send|email|write|draft|inform)\s+/i, "")
+    .replace(
+      /\b(hr|sales|finance|marketing|operations|support|it)(?:\s+department|\s+team)?\s+ko\b/gi,
+      "",
+    )
+    .replace(/\s*(kar\s*do|kardo|bhej\s*do|bhejdo|email\s+kar\s*do|bhej\s+do)\.?$/i, "")
+    .replace(/\b(ko|ki|ka|ke|se|mein|main)\b/gi, " ")
+    .replace(/^(please\s+)?(send|email|write|draft|inform|notify)\s+(an?\s+)?/i, "")
+    .replace(/\b(email|message)\s+(bhej|send).*$/i, "")
     .trim();
 
-  // Common roman-Urdu → English
+  // Roman-Urdu / Hindi → English
   t = t
-    .replace(/\bkal\b/gi, "Tomorrow")
-    .replace(/\baj\b/gi, "Today")
+    .replace(/\bkal\b/gi, "tomorrow")
+    .replace(/\b(aaj|aj)\b/gi, "today")
     .replace(/\bbaje\b/gi, "")
     .replace(/\bhai\b/gi, "")
-    .replace(/\bki\b/gi, "")
+    .replace(/\bhain\b/gi, "")
+    .replace(/\bshukriya\b/gi, "thank you")
+    .replace(/\bmeharbani\b/gi, "please")
+    .replace(/\btamam\b/gi, "all")
+    .replace(/\bsab\b/gi, "all")
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  // "Tomorrow 2 Zoom meeting" → "Zoom meeting tomorrow at 2:00"
+  // Remove Urdu script leftovers if any slipped through
+  t = t.replace(/[\u0600-\u06FF]+/g, " ").replace(/\s{2,}/g, " ").trim();
+
   const meetingTime = t.match(
     /(?:tomorrow|today)?\s*(\d{1,2})\s*(?::(\d{2}))?\s*(am|pm)?\s*(?:zoom\s+)?meeting/i,
   );
-  if (meetingTime) {
-    const hour = meetingTime[1];
-    const min = meetingTime[2] ?? "00";
-    const ampm = meetingTime[3] ?? "";
-    const when = /tomorrow/i.test(t)
-      ? "tomorrow"
-      : /today/i.test(t)
-        ? "today"
-        : "as scheduled";
-    return `There is a Zoom meeting ${when} at ${hour}:${min}${ampm ? ` ${ampm}` : ""}. Please join on time.`;
+  if (meetingTime || /\bmeeting\b/i.test(t)) {
+    const details = extractMeetingDetails(prompt);
+    const when = [details.date, details.time].filter(Boolean).join(" at ");
+    const platform = details.platform ? `${details.platform} ` : "";
+    if (when) {
+      return `${platform}meeting scheduled for ${when}`.replace(/\s+/g, " ").trim();
+    }
+    return "the scheduled meeting arrangement";
   }
 
-  if (/leave policy/i.test(t)) {
-    return "Please review the updated leave policy. Full details are available with HR.";
+  if (/leave\s*policy/i.test(t)) {
+    return "the updated leave policy";
   }
   if (/payroll/i.test(t)) {
-    return "This is a reminder regarding upcoming payroll processing. Please ensure all inputs are submitted on time.";
+    return "upcoming payroll processing";
   }
-  if (/welcome/i.test(t) && /employee|new/i.test(t)) {
-    return "We are pleased to welcome our new team member. Please join us in extending a warm welcome and supporting their onboarding.";
+  if (/welcome/i.test(t) && /employee|new|team/i.test(t)) {
+    return "welcoming a new team member and supporting onboarding";
   }
-  if (/thank|thanks|شکریہ|shukriya/i.test(t)) {
-    return "Thank you for your hard work, professionalism, and continued support. It is truly valued.";
+  if (/thank|thanks|appreciation|grateful/i.test(t)) {
+    return "your hard work, professionalism, and continued support";
+  }
+  if (/performance\s*review/i.test(t)) {
+    return "the upcoming performance review schedule";
+  }
+  if (/project|phase|milestone|sprint/i.test(t)) {
+    const cleanedProject = t
+      .replace(/^(regarding|about|for)\s+/i, "")
+      .trim();
+    return cleanedProject || "the latest project progress";
   }
 
-  // Title-case short leftovers
+  // Clean leftover fragments into a readable English phrase
+  t = t
+    .replace(/^(to|for|regarding|about)\s+/i, "")
+    .replace(/[^\w\s&.,'/-]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!t) return "the latest organizational update";
   if (t.length < 90 && !/[.!?]$/.test(t)) {
-    return titleCase(t);
+    return t.charAt(0).toLowerCase() + t.slice(1);
   }
   return t;
 }

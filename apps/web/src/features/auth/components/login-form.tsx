@@ -17,7 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROUTES } from "@/constants/routes";
 import { executeRecaptcha } from "@/features/security/lib/recaptcha";
-import { ApiClientError } from "@/services/api/api-error";
+import {
+  ApiClientError,
+  getApiErrorMessage,
+} from "@/services/api/api-error";
 
 import { useLogin } from "../hooks/use-login";
 import { useResendVerification } from "../hooks/use-resend-verification";
@@ -143,7 +146,7 @@ export function LoginForm() {
       }
     } catch (error) {
       if (error instanceof ApiClientError) {
-        setResendError(error.message);
+        setResendError(getApiErrorMessage(error));
         return;
       }
       setResendError("Unable to resend verification email. Please try again.");
@@ -189,15 +192,8 @@ export function LoginForm() {
       setSessionHintCookie();
       completeLogin(result.user.role.code);
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        setApiError(error.message);
-        return;
-      }
-
       setApiError(
-        error instanceof Error
-          ? error.message
-          : "Unable to sign in. Please try again.",
+        getApiErrorMessage(error, "Unable to sign in. Please try again."),
       );
     } finally {
       setIsSigningIn(false);
@@ -221,12 +217,9 @@ export function LoginForm() {
 
       completeLogin(result.user.role.code);
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        setApiError(error.message);
-        return;
-      }
-
-      setApiError("Unable to verify code. Please try again.");
+      setApiError(
+        getApiErrorMessage(error, "Unable to verify code. Please try again."),
+      );
     }
   };
 
@@ -242,12 +235,9 @@ export function LoginForm() {
       setOtpSessionId(result.otpSessionId);
       setOtpInfo("A new verification code has been sent.");
     } catch (error) {
-      if (error instanceof ApiClientError) {
-        setApiError(error.message);
-        return;
-      }
-
-      setApiError("Unable to resend code. Please try again.");
+      setApiError(
+        getApiErrorMessage(error, "Unable to resend code. Please try again."),
+      );
     }
   };
 

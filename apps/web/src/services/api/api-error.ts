@@ -28,6 +28,34 @@ export class ApiClientError extends Error {
   }
 }
 
+/**
+ * Prefer field-level Zod details over the generic "Validation failed" message.
+ */
+export function getApiErrorMessage(
+  error: unknown,
+  fallback = "Request failed. Please try again.",
+): string {
+  if (error instanceof ApiClientError) {
+    const fieldMessages = error.errors
+      .map((item) => item.message?.trim())
+      .filter((message): message is string => Boolean(message));
+    if (
+      fieldMessages.length > 0 &&
+      (error.code === "VALIDATION_ERROR" ||
+        error.message === "Validation failed")
+    ) {
+      return fieldMessages.slice(0, 3).join(" · ");
+    }
+    if (error.message.trim()) {
+      return error.message;
+    }
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export function getApiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
   if (configured) {
