@@ -1,16 +1,15 @@
 "use client";
 
 import {
-  EMPLOYEE_STATUSES,
   GOAL_STATUSES,
   LEAVE_REQUEST_STATUSES,
   LEAVE_TYPES,
   PERFORMANCE_RATINGS,
   PERMISSIONS,
   type Attendance,
+  type CreateAdminResult,
   type CreateDepartmentInput,
   type CreateEmployeeGoalInput,
-  type CreateEmployeeProfileInput,
   type CreateLeaveRequestInput,
   type CreatePerformanceReviewInput,
   type CreateTeamInput,
@@ -18,6 +17,7 @@ import {
   type EmployeeGoal,
   type EmployeeProfile,
   type EmployeeStatusValue,
+  type HireEmployeeResult,
   type LeaveRequest,
   type LeaveRequestStatusValue,
   type LeaveTypeValue,
@@ -26,7 +26,6 @@ import {
   type Team,
   type UpdateDepartmentInput,
   type UpdateEmployeeGoalInput,
-  type UpdateEmployeeProfileInput,
   type UpdatePerformanceReviewInput,
   type UpdateTeamInput,
 } from "@enterprise/shared";
@@ -37,11 +36,10 @@ import {
   Clock,
   LogIn,
   LogOut,
-  Search,
+  Shield,
   Target,
   Trash2,
   Users,
-  UsersRound,
 } from "lucide-react";
 import {
   useDeferredValue,
@@ -51,7 +49,6 @@ import {
 } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
-import { VirtualizedList } from "@/components/common/data/virtualized-list";
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
@@ -68,15 +65,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
 import {
-  isPerformanceAdvVirtualizationEnabled,
   useAdvancedPerformanceProfiler,
 } from "@/features/performance";
 import {
@@ -86,11 +76,27 @@ import {
 import { ApiClientError } from "@/services/api/api-error";
 import { cn } from "@/lib/utils";
 
+import { AdminCreateDialog } from "./admin-create-dialog";
+import { EmployeeProfileView } from "./employee-profile-view";
+import { EmployeeHireDialog } from "./employee-hire-dialog";
 import {
+  AdminsPanel,
+  DepartmentsPanel,
+  DirectoryPanel,
+  TeamsPanel,
+} from "./team-hrms-panels";
+import {
+  leaveStatusTone,
+  mutationError,
+  selectClassName,
+  StatusPill,
+} from "./team-shared";
+import {
+  useAddTeamMembers,
   useCheckIn,
   useCheckOut,
+  useCreateAdmin,
   useCreateDepartment,
-  useCreateEmployee,
   useCreateGoal,
   useCreateLeave,
   useCreatePerformance,
@@ -99,7 +105,11 @@ import {
   useDeleteEmployee,
   useDeleteGoal,
   useDeleteTeam,
+  useHireEmployee,
+  useRemoveTeamMember,
+  useResetEmployeeCredentials,
   useReviewLeave,
+  useTransferTeamMember,
   useUpdateDepartment,
   useUpdateEmployee,
   useUpdateGoal,
@@ -119,7 +129,6 @@ import {
 } from "../hooks/use-team";
 import {
   ATTENDANCE_STATUS_LABELS,
-  EMPLOYEE_STATUS_LABELS,
   GOAL_STATUS_LABELS,
   LEAVE_STATUS_LABELS,
   LEAVE_TYPE_LABELS,
@@ -131,14 +140,15 @@ import {
   monthRange,
   todayDateOnly,
 } from "../types/team.types";
-
-const selectClassName =
-  "flex h-10 w-full rounded-lg border border-input bg-background/80 px-3 py-2 text-sm text-foreground shadow-[var(--shadow-xs)] transition-all focus-visible:outline-none focus-visible:border-primary/40 focus-visible:ring-2 focus-visible:ring-ring/50";
+import { teamService } from "../services/team.service";
+import { PerformanceLiveDashboard } from "./performance-live-dashboard";
 
 type TeamTab =
   | "overview"
   | "directory"
+  | "departments"
   | "teams"
+  | "admins"
   | "attendance"
   | "leave"
   | "performance";
@@ -146,72 +156,13 @@ type TeamTab =
 const TAB_LABELS: Record<TeamTab, string> = {
   overview: "Overview",
   directory: "Directory",
+  departments: "Departments",
   teams: "Teams",
+  admins: "Admins",
   attendance: "Attendance",
   leave: "Leave",
   performance: "Performance",
 };
-
-function mutationError(error: unknown): string {
-  if (error instanceof ApiClientError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Please try again.";
-}
-
-function StatusPill({
-  label,
-  tone = "default",
-}: {
-  label: string;
-  tone?: "default" | "success" | "warning" | "danger";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
-        tone === "success" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-        tone === "warning" && "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-        tone === "danger" && "bg-red-500/10 text-red-700 dark:text-red-400",
-        tone === "default" && "bg-muted text-muted-foreground",
-      )}
-    >
-      {label}
-    </span>
-  );
-}
-
-function leaveStatusTone(status: LeaveRequestStatusValue) {
-  switch (status) {
-    case "APPROVED":
-      return "success" as const;
-    case "PENDING":
-      return "warning" as const;
-    case "REJECTED":
-      return "danger" as const;
-    case "CANCELLED":
-      return "default" as const;
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
-}
-
-function employeeStatusTone(status: EmployeeStatusValue) {
-  switch (status) {
-    case "ACTIVE":
-      return "success" as const;
-    case "ON_LEAVE":
-      return "warning" as const;
-    case "INACTIVE":
-    case "TERMINATED":
-      return "danger" as const;
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
-}
 
 function ProductivityBar({
   label,
@@ -250,7 +201,7 @@ function StatCard({
 }) {
   return (
     <Card className="border-border/50">
-      <CardContent className="flex items-center justify-between gap-4 p-6">
+      <CardContent className="flex items-center justify-between gap-4 p-6 pt-6 sm:p-6 sm:pt-6">
         <div>
           <p className="text-xs text-muted-foreground">{label}</p>
           <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
@@ -291,8 +242,9 @@ function TabButton({
 export function TeamPageContent() {
   useAdvancedPerformanceProfiler("TeamPageContent");
 
-  const { isClient, isEmployee } = useRole();
+  const { isClient, isEmployee, isSuperAdmin } = useRole();
   const canManage = useHasPermission(PERMISSIONS.TEAM_MANAGE) && !isClient;
+  const canManageOrg = isSuperAdmin;
   const currentUserId = useAuthStore((state) => state.user?.id);
 
   const [activeTab, setActiveTab] = useState<TeamTab>("overview");
@@ -303,11 +255,21 @@ export function TeamPageContent() {
     "ALL",
   );
   const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
+  const [teamFilter, setTeamFilter] = useState<string>("ALL");
+  const [roleFilter, setRoleFilter] = useState<"ALL" | "ADMIN" | "EMPLOYEE">(
+    "ALL",
+  );
+  const [managerFilter, setManagerFilter] = useState<string>("ALL");
+  const [sortBy, setSortBy] =
+    useState<ListEmployeesQueryInput["sortBy"]>("employeeCode");
+  const [sortDir, setSortDir] =
+    useState<ListEmployeesQueryInput["sortDir"]>("asc");
+  const [directoryView, setDirectoryView] = useState<"list" | "cards">("cards");
   const [leaveStatusFilter, setLeaveStatusFilter] = useState<
     LeaveRequestStatusValue | "ALL"
   >("ALL");
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const limit = 12;
 
   const [profileId, setProfileId] = useState<string | null>(null);
   const [departmentModal, setDepartmentModal] = useState<{
@@ -318,6 +280,12 @@ export function TeamPageContent() {
     open: boolean;
     editing: EmployeeProfile | null;
   }>({ open: false, editing: null });
+  const [adminModal, setAdminModal] = useState<{
+    open: boolean;
+    editing: EmployeeProfile | null;
+  }>({ open: false, editing: null });
+  const [hireResult, setHireResult] = useState<HireEmployeeResult | null>(null);
+  const [adminResult, setAdminResult] = useState<CreateAdminResult | null>(null);
   const [teamModal, setTeamModal] = useState<{
     open: boolean;
     editing: Team | null;
@@ -332,16 +300,41 @@ export function TeamPageContent() {
     open: boolean;
     editing: EmployeeGoal | null;
   }>({ open: false, editing: null });
+  const [exportCsvPending, setExportCsvPending] = useState(false);
 
   const employeeQueryInput = useMemo<ListEmployeesQueryInput>(
     () => ({
       search: debouncedSearch,
       status: statusFilter === "ALL" ? undefined : statusFilter,
       departmentId: departmentFilter === "ALL" ? undefined : departmentFilter,
+      teamId: teamFilter === "ALL" ? undefined : teamFilter,
+      role: roleFilter === "ALL" ? undefined : roleFilter,
+      managerId: managerFilter === "ALL" ? undefined : managerFilter,
+      sortBy,
+      sortDir,
       page,
       limit,
     }),
-    [debouncedSearch, statusFilter, departmentFilter, page, limit],
+    [
+      debouncedSearch,
+      statusFilter,
+      departmentFilter,
+      teamFilter,
+      roleFilter,
+      managerFilter,
+      sortBy,
+      sortDir,
+      page,
+      limit,
+    ],
+  );
+
+  const adminsQueryInput = useMemo<ListEmployeesQueryInput>(
+    () => ({
+      ...employeeQueryInput,
+      role: "ADMIN",
+    }),
+    [employeeQueryInput],
   );
 
   const { from: monthFrom, to: monthTo } = monthRange();
@@ -350,6 +343,8 @@ export function TeamPageContent() {
   const statsQuery = useTeamStatistics();
   const departmentsQuery = useDepartments();
   const employeesQuery = useEmployees(employeeQueryInput);
+  const managersQuery = useEmployees({ page: 1, limit: 100, search: "" });
+  const adminsQuery = useEmployees(adminsQueryInput);
   const teamsQuery = useTeams();
   const attendanceQuery = useAttendance({
     from: monthFrom,
@@ -369,12 +364,17 @@ export function TeamPageContent() {
   const createDepartment = useCreateDepartment();
   const updateDepartment = useUpdateDepartment();
   const deleteDepartment = useDeleteDepartment();
-  const createEmployee = useCreateEmployee();
+  const hireEmployee = useHireEmployee();
+  const createAdmin = useCreateAdmin();
+  const resetCredentials = useResetEmployeeCredentials();
   const updateEmployee = useUpdateEmployee();
   const deleteEmployee = useDeleteEmployee();
   const createTeam = useCreateTeam();
   const updateTeam = useUpdateTeam();
   const deleteTeam = useDeleteTeam();
+  const addTeamMembers = useAddTeamMembers();
+  const removeTeamMember = useRemoveTeamMember();
+  const transferTeamMember = useTransferTeamMember();
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
   const createLeave = useCreateLeave();
@@ -386,11 +386,19 @@ export function TeamPageContent() {
   const deleteGoal = useDeleteGoal();
 
   const departments = departmentsQuery.data?.items ?? [];
-  const employees = employeesQuery.data?.items ?? [];
+  const employees = useMemo(
+    () => employeesQuery.data?.items ?? [],
+    [employeesQuery.data?.items],
+  );
+  const managerOptions = managersQuery.data?.items ?? [];
+  const admins = adminsQuery.data?.items ?? [];
   const teams = teamsQuery.data?.items ?? [];
   const attendance = attendanceQuery.data?.items ?? [];
   const leaves = leavesQuery.data?.items ?? [];
-  const reviews = performanceQuery.data?.items ?? [];
+  const reviews = useMemo(
+    () => performanceQuery.data?.items ?? [],
+    [performanceQuery.data?.items],
+  );
   const goals = goalsQuery.data?.items ?? [];
   const stats = statsQuery.data;
 
@@ -437,14 +445,32 @@ export function TeamPageContent() {
     if (isClient) return {};
     if (activeTab === "directory" && canManage) {
       return {
-        actionLabel: "Add employee",
-        onAction: () => setEmployeeModal({ open: true, editing: null }),
+        actionLabel: "Add Employee",
+        onAction: () => {
+          setHireResult(null);
+          setEmployeeModal({ open: true, editing: null });
+        },
       };
     }
-    if (activeTab === "teams" && canManage) {
+    if (activeTab === "departments" && canManageOrg) {
+      return {
+        actionLabel: "Add department",
+        onAction: () => setDepartmentModal({ open: true, editing: null }),
+      };
+    }
+    if (activeTab === "teams" && canManageOrg) {
       return {
         actionLabel: "Create team",
         onAction: () => setTeamModal({ open: true, editing: null }),
+      };
+    }
+    if (activeTab === "admins" && canManageOrg) {
+      return {
+        actionLabel: "Add Admin",
+        onAction: () => {
+          setAdminResult(null);
+          setAdminModal({ open: true, editing: null });
+        },
       };
     }
     if (activeTab === "attendance" && !canManage) {
@@ -473,16 +499,11 @@ export function TeamPageContent() {
         onAction: () => setPerformanceModal({ open: true, editing: null }),
       };
     }
-    if (activeTab === "overview" && canManage) {
-      return {
-        actionLabel: "Add department",
-        onAction: () => setDepartmentModal({ open: true, editing: null }),
-      };
-    }
     return {};
   }, [
     activeTab,
     canManage,
+    canManageOrg,
     canCheckIn,
     canCheckOut,
     checkIn,
@@ -493,10 +514,18 @@ export function TeamPageContent() {
   const pageDescription = isClient
     ? "Team management is not available for client accounts."
     : canManage
-      ? "Manage departments, employees, attendance, leave, and performance across your organization."
+      ? "Enterprise employee & organization management — departments, teams, directory, attendance, leave, and performance."
       : isEmployee
         ? "Check in, request leave, and track your profile and performance."
         : "View team information and HR workflows.";
+
+  const visibleTabs = useMemo(() => {
+    const tabs = Object.keys(TAB_LABELS) as TeamTab[];
+    if (!canManage) {
+      return tabs.filter((tab) => tab !== "admins" && tab !== "departments");
+    }
+    return tabs;
+  }, [canManage]);
 
   if (isClient) {
     return (
@@ -510,31 +539,150 @@ export function TeamPageContent() {
     );
   }
 
+  const openProfileFromDirectory = (id: string) => {
+    setActiveTab("directory");
+    setProfileId(id);
+  };
+
+  const openProfile = (id: string) => {
+    setProfileId(id);
+  };
+
+  const profileAttendance = profileQuery.data
+    ? attendance.filter((a) => a.employeeId === profileQuery.data?.id)
+    : [];
+  const profileLeaves = profileQuery.data
+    ? leaves.filter((l) => l.employeeId === profileQuery.data?.id)
+    : [];
+  const profileReviews = profileQuery.data
+    ? reviews.filter((r) => r.employeeId === profileQuery.data?.id)
+    : [];
+  const profileGoals = profileQuery.data
+    ? goals.filter((g) => g.employeeId === profileQuery.data?.id)
+    : [];
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Team"
-        description={pageDescription}
-        actionLabel={headerAction.actionLabel}
-        onAction={headerAction.onAction}
-      />
+      {adminModal.open ? (
+        <AdminCreateDialog
+          open={adminModal.open}
+          editing={adminModal.editing}
+          departments={departments}
+          managers={managerOptions}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAdminModal({ open: false, editing: null });
+              setAdminResult(null);
+            } else {
+              setAdminModal((current) => ({ ...current, open }));
+            }
+          }}
+          onSubmit={(values) => {
+            createAdmin.mutate(values, {
+              onSuccess: (result) => setAdminResult(result),
+            });
+          }}
+          onUpdate={(values) => {
+            if (!adminModal.editing) return;
+            updateEmployee.mutate(
+              { id: adminModal.editing.id, input: values },
+              {
+                onSuccess: () =>
+                  setAdminModal({ open: false, editing: null }),
+              },
+            );
+          }}
+          isPending={createAdmin.isPending || updateEmployee.isPending}
+          error={createAdmin.error ?? updateEmployee.error ?? null}
+          result={adminResult}
+          onClearResult={() => setAdminResult(null)}
+        />
+      ) : employeeModal.open ? (
+        <EmployeeHireDialog
+          open={employeeModal.open}
+          editing={employeeModal.editing}
+          departments={departments}
+          teams={teams}
+          managers={managerOptions}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEmployeeModal({ open: false, editing: null });
+              setHireResult(null);
+            } else {
+              setEmployeeModal((current) => ({ ...current, open }));
+            }
+          }}
+          onHire={(values) => {
+            hireEmployee.mutate(values, {
+              onSuccess: (result) => setHireResult(result),
+            });
+          }}
+          onUpdate={(values) => {
+            if (!employeeModal.editing) return;
+            updateEmployee.mutate(
+              { id: employeeModal.editing.id, input: values },
+              {
+                onSuccess: () =>
+                  setEmployeeModal({ open: false, editing: null }),
+              },
+            );
+          }}
+          isPending={hireEmployee.isPending || updateEmployee.isPending}
+          error={hireEmployee.error ?? updateEmployee.error ?? null}
+          hireResult={hireResult}
+          onClearResult={() => setHireResult(null)}
+        />
+      ) : profileId ? (
+        <EmployeeProfileView
+          employee={profileQuery.data}
+          isLoading={profileQuery.isLoading}
+          canManage={canManage}
+          canManageOrg={canManageOrg}
+          departments={departments}
+          teams={teams}
+          attendance={profileAttendance}
+          leaves={profileLeaves}
+          reviews={profileReviews}
+          goals={profileGoals}
+          onBack={() => setProfileId(null)}
+          onEdit={() => {
+            if (profileQuery.data) {
+              setProfileId(null);
+              if (profileQuery.data.adminCode) {
+                setAdminResult(null);
+                setAdminModal({ open: true, editing: profileQuery.data });
+              } else {
+                setHireResult(null);
+                setEmployeeModal({ open: true, editing: profileQuery.data });
+              }
+            }
+          }}
+        />
+      ) : (
+        <>
+          <PageHeader
+            title="Team"
+            description={pageDescription}
+            actionLabel={headerAction.actionLabel}
+            onAction={headerAction.onAction}
+          />
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {(Object.keys(TAB_LABELS) as TeamTab[]).map((tab) => (
-          <TabButton
-            key={tab}
-            active={activeTab === tab}
-            onClick={() => {
-              setActiveTab(tab);
-              setPage(1);
-            }}
-          >
-            {TAB_LABELS[tab]}
-          </TabButton>
-        ))}
-      </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {visibleTabs.map((tab) => (
+              <TabButton
+                key={tab}
+                active={activeTab === tab}
+                onClick={() => {
+                  setActiveTab(tab);
+                  setPage(1);
+                }}
+              >
+                {TAB_LABELS[tab]}
+              </TabButton>
+            ))}
+          </div>
 
-      {activeTab === "overview" ? (
+          {activeTab === "overview" ? (
         <OverviewPanel
           stats={stats}
           isLoading={statsQuery.isLoading}
@@ -552,6 +700,7 @@ export function TeamPageContent() {
         <DirectoryPanel
           employees={canManage ? employees : scopedEmployees}
           departments={departments}
+          teams={teams}
           isLoading={employeesQuery.isLoading}
           isError={employeesQuery.isError}
           error={employeesQuery.error}
@@ -571,14 +720,41 @@ export function TeamPageContent() {
             setDepartmentFilter(value);
             setPage(1);
           }}
+          teamFilter={teamFilter}
+          onTeamFilterChange={(value) => {
+            setTeamFilter(value);
+            setPage(1);
+          }}
+          roleFilter={roleFilter}
+          onRoleFilterChange={(value) => {
+            setRoleFilter(value);
+            setPage(1);
+          }}
+          managerFilter={managerFilter}
+          onManagerFilterChange={(value) => {
+            setManagerFilter(value);
+            setPage(1);
+          }}
+          managers={managerOptions}
+          viewMode={directoryView}
+          onViewModeChange={setDirectoryView}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={(nextSortBy, nextSortDir) => {
+            setSortBy(nextSortBy);
+            setSortDir(nextSortDir);
+            setPage(1);
+          }}
           page={page}
           totalPages={employeesQuery.data?.pagination.totalPages ?? 1}
           onPageChange={setPage}
           canManage={canManage}
-          onViewProfile={setProfileId}
-          onEditEmployee={(employee) =>
-            setEmployeeModal({ open: true, editing: employee })
-          }
+          canManageOrg={canManageOrg}
+          onViewProfile={openProfileFromDirectory}
+          onEditEmployee={(employee) => {
+            setHireResult(null);
+            setEmployeeModal({ open: true, editing: employee });
+          }}
           onDeleteEmployee={(id) => {
             if (window.confirm("Remove this employee profile?")) {
               deleteEmployee.mutate(id);
@@ -587,10 +763,45 @@ export function TeamPageContent() {
           onAddDepartment={() =>
             setDepartmentModal({ open: true, editing: null })
           }
-          onAddEmployee={() =>
-            setEmployeeModal({ open: true, editing: null })
+          onExportCsv={
+            canManage
+              ? async () => {
+                  setExportCsvPending(true);
+                  try {
+                    const { blob, filename } =
+                      await teamService.exportDirectoryCsv();
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = filename;
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  } finally {
+                    setExportCsvPending(false);
+                  }
+                }
+              : undefined
           }
+          exportCsvPending={exportCsvPending}
           departmentsLoading={departmentsQuery.isLoading}
+        />
+      ) : null}
+
+      {activeTab === "departments" ? (
+        <DepartmentsPanel
+          departments={departments}
+          employees={managerOptions}
+          teams={teams}
+          isLoading={departmentsQuery.isLoading}
+          isError={departmentsQuery.isError}
+          error={departmentsQuery.error}
+          onRetry={() => departmentsQuery.refetch()}
+          canManageOrg={canManageOrg}
+          onEdit={(dept) => setDepartmentModal({ open: true, editing: dept })}
+          onViewMembers={(departmentId) => {
+            setDepartmentFilter(departmentId);
+            setActiveTab("directory");
+          }}
         />
       ) : null}
 
@@ -598,16 +809,134 @@ export function TeamPageContent() {
         <TeamsPanel
           teams={teams}
           departments={departments}
+          employees={managerOptions}
           isLoading={teamsQuery.isLoading}
           isError={teamsQuery.isError}
           error={teamsQuery.error}
           onRetry={() => teamsQuery.refetch()}
           canManage={canManage}
+          canManageOrg={canManageOrg}
           onEditTeam={(team) => setTeamModal({ open: true, editing: team })}
           onDeleteTeam={(id) => {
             if (window.confirm("Delete this team?")) deleteTeam.mutate(id);
           }}
-          onCreateTeam={() => setTeamModal({ open: true, editing: null })}
+          onAddMember={(teamId, userId) =>
+            addTeamMembers.mutate({ id: teamId, input: { userIds: [userId] } })
+          }
+          onRemoveMember={(teamId, userId) =>
+            removeTeamMember.mutate({ teamId, userId })
+          }
+          onTransferMember={(fromTeamId, userId, toTeamId) =>
+            transferTeamMember.mutate({
+              teamId: fromTeamId,
+              input: { userId, toTeamId },
+            })
+          }
+        />
+      ) : null}
+
+      {activeTab === "admins" ? (
+        <AdminsPanel
+          admins={admins}
+          departments={departments}
+          isLoading={adminsQuery.isLoading}
+          isError={adminsQuery.isError}
+          error={adminsQuery.error}
+          onRetry={() => adminsQuery.refetch()}
+          search={search}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(value) => {
+            setStatusFilter(value);
+            setPage(1);
+          }}
+          departmentFilter={departmentFilter}
+          onDepartmentFilterChange={(value) => {
+            setDepartmentFilter(value);
+            setPage(1);
+          }}
+          viewMode={directoryView}
+          onViewModeChange={setDirectoryView}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={(nextSortBy, nextSortDir) => {
+            setSortBy(nextSortBy);
+            setSortDir(nextSortDir);
+            setPage(1);
+          }}
+          page={page}
+          totalPages={adminsQuery.data?.pagination.totalPages ?? 1}
+          onPageChange={setPage}
+          canManageOrg={canManageOrg}
+          onViewProfile={openProfile}
+          onEditAdmin={(admin) => {
+            setAdminResult(null);
+            setAdminModal({ open: true, editing: admin });
+          }}
+          onSuspendAdmin={(admin) => {
+            if (
+              window.confirm(
+                `Suspend ${formatEmployeeName(admin)}? They will no longer be able to sign in.`,
+              )
+            ) {
+              updateEmployee.mutate({
+                id: admin.id,
+                input: { status: "INACTIVE" },
+              });
+            }
+          }}
+          onActivateAdmin={(admin) => {
+            updateEmployee.mutate({
+              id: admin.id,
+              input: { status: "ACTIVE" },
+            });
+          }}
+          onResetPassword={(admin) => {
+            if (
+              window.confirm(
+                `Reset password for ${formatEmployeeName(admin)}? A temporary password will be generated.`,
+              )
+            ) {
+              resetCredentials.mutate(
+                { id: admin.id, sendEmail: true },
+                {
+                  onSuccess: (result) => {
+                    window.alert(
+                      `Temporary password: ${result.temporaryPassword}\n\nShare it securely. The admin must change it on next login.`,
+                    );
+                  },
+                },
+              );
+            }
+          }}
+          onDeleteAdmin={(id) => {
+            if (window.confirm("Remove this admin profile?")) {
+              deleteEmployee.mutate(id);
+            }
+          }}
+          onExportCsv={
+            canManageOrg
+              ? async () => {
+                  setExportCsvPending(true);
+                  try {
+                    const { blob, filename } =
+                      await teamService.exportDirectoryCsv();
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = filename || "admins.csv";
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  } finally {
+                    setExportCsvPending(false);
+                  }
+                }
+              : undefined
+          }
+          exportCsvPending={exportCsvPending}
         />
       ) : null}
 
@@ -654,6 +983,7 @@ export function TeamPageContent() {
             void goalsQuery.refetch();
           }}
           canManage={canManage}
+          isSuperAdmin={isSuperAdmin}
           onEditReview={(review) =>
             setPerformanceModal({ open: true, editing: review })
           }
@@ -667,23 +997,13 @@ export function TeamPageContent() {
           }}
         />
       ) : null}
-
-      <EmployeeProfileSheet
-        open={Boolean(profileId)}
-        onOpenChange={(open) => !open && setProfileId(null)}
-        employee={profileQuery.data}
-        isLoading={profileQuery.isLoading}
-        canManage={canManage}
-        onEdit={() => {
-          if (profileQuery.data) {
-            setEmployeeModal({ open: true, editing: profileQuery.data });
-          }
-        }}
-      />
+        </>
+      )}
 
       <DepartmentDialog
         open={departmentModal.open}
         editing={departmentModal.editing}
+        employees={managerOptions}
         onOpenChange={(open) =>
           setDepartmentModal((current) => ({ ...current, open }))
         }
@@ -717,33 +1037,6 @@ export function TeamPageContent() {
               }
             : undefined
         }
-      />
-
-      <EmployeeDialog
-        open={employeeModal.open}
-        editing={employeeModal.editing}
-        departments={departments}
-        onOpenChange={(open) =>
-          setEmployeeModal((current) => ({ ...current, open }))
-        }
-        onSubmit={(values) => {
-          if (employeeModal.editing) {
-            updateEmployee.mutate(
-              { id: employeeModal.editing.id, input: values },
-              {
-                onSuccess: () =>
-                  setEmployeeModal({ open: false, editing: null }),
-              },
-            );
-          } else {
-            createEmployee.mutate(values as CreateEmployeeProfileInput, {
-              onSuccess: () =>
-                setEmployeeModal({ open: false, editing: null }),
-            });
-          }
-        }}
-        isPending={createEmployee.isPending || updateEmployee.isPending}
-        error={createEmployee.error ?? updateEmployee.error ?? null}
       />
 
       <TeamDialog
@@ -868,8 +1161,10 @@ function OverviewPanel({
   canManage: boolean;
   onReviewLeave: (leave: LeaveRequest) => void;
 }) {
-  if (isLoading) return <LoadingState label="Loading team statistics" />;
-  if (isError) {
+  if (isLoading && !stats) {
+    return <LoadingState label="Loading team statistics" />;
+  }
+  if (isError && !stats) {
     return (
       <ErrorState
         description={
@@ -883,8 +1178,8 @@ function OverviewPanel({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-6" aria-busy={isLoading}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="Total employees"
           value={stats?.totalEmployees ?? "—"}
@@ -908,6 +1203,16 @@ function OverviewPanel({
               : "—"
           }
           icon={Target}
+        />
+        <StatCard
+          label="Departments"
+          value={stats?.departments ?? "—"}
+          icon={Building2}
+        />
+        <StatCard
+          label="Admins"
+          value={stats?.admins ?? "—"}
+          icon={Shield}
         />
       </div>
 
@@ -989,434 +1294,7 @@ function OverviewPanel({
   );
 }
 
-function DirectoryPanel({
-  employees,
-  departments,
-  isLoading,
-  isError,
-  error,
-  onRetry,
-  search,
-  onSearchChange,
-  statusFilter,
-  onStatusFilterChange,
-  departmentFilter,
-  onDepartmentFilterChange,
-  page,
-  totalPages,
-  onPageChange,
-  canManage,
-  onViewProfile,
-  onEditEmployee,
-  onDeleteEmployee,
-  onAddDepartment,
-  onAddEmployee,
-  departmentsLoading,
-}: {
-  employees: EmployeeProfile[];
-  departments: Department[];
-  isLoading: boolean;
-  isError: boolean;
-  error: unknown;
-  onRetry: () => void;
-  search: string;
-  onSearchChange: (value: string) => void;
-  statusFilter: EmployeeStatusValue | "ALL";
-  onStatusFilterChange: (value: EmployeeStatusValue | "ALL") => void;
-  departmentFilter: string;
-  onDepartmentFilterChange: (value: string) => void;
-  page: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-  canManage: boolean;
-  onViewProfile: (id: string) => void;
-  onEditEmployee: (employee: EmployeeProfile) => void;
-  onDeleteEmployee: (id: string) => void;
-  onAddDepartment: () => void;
-  onAddEmployee: () => void;
-  departmentsLoading: boolean;
-}) {
-  return (
-    <div className="space-y-4">
-      {canManage ? (
-        <Card className="border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base">Departments</CardTitle>
-            <Button size="sm" variant="outline" onClick={onAddDepartment}>
-              <Building2 className="mr-2 h-4 w-4" />
-              Add department
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {departmentsLoading ? (
-              <LoadingState label="Loading departments" />
-            ) : departments.length === 0 ? (
-              <EmptyState
-                title="No departments"
-                description="Create departments to organize your workforce."
-                actionLabel="Add department"
-                onAction={onAddDepartment}
-              />
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {departments.map((dept) => (
-                  <span
-                    key={dept.id}
-                    className="rounded-lg border border-border/50 px-3 py-1.5 text-sm"
-                  >
-                    {dept.name}{" "}
-                    <span className="text-muted-foreground">({dept.code})</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
 
-      <Card className="border-border/50">
-        <CardContent className="space-y-4 p-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative w-full max-w-md">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search employees..."
-                className="pl-9"
-              />
-            </div>
-            {canManage ? (
-              <>
-                <select
-                  className={selectClassName}
-                  value={statusFilter}
-                  onChange={(e) =>
-                    onStatusFilterChange(e.target.value as EmployeeStatusValue | "ALL")
-                  }
-                >
-                  <option value="ALL">All statuses</option>
-                  {EMPLOYEE_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {EMPLOYEE_STATUS_LABELS[status]}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className={selectClassName}
-                  value={departmentFilter}
-                  onChange={(e) => onDepartmentFilterChange(e.target.value)}
-                >
-                  <option value="ALL">All departments</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : null}
-          </div>
-
-          {isLoading ? <LoadingState label="Loading employees" /> : null}
-          {isError ? (
-            <ErrorState
-              description={
-                error instanceof ApiClientError
-                  ? error.message
-                  : "Could not load employees."
-              }
-              onRetry={onRetry}
-            />
-          ) : null}
-          {!isLoading && !isError && employees.length === 0 ? (
-            <EmptyState
-              icon={UsersRound}
-              title="No employees found"
-              description={
-                canManage
-                  ? "Add employee profiles to build your company directory."
-                  : "Your employee profile is not available yet."
-              }
-              actionLabel={canManage ? "Add employee" : undefined}
-              onAction={canManage ? onAddEmployee : undefined}
-            />
-          ) : null}
-          {!isLoading && !isError && employees.length > 0 ? (
-            isPerformanceAdvVirtualizationEnabled() ? (
-              <div className="overflow-x-auto">
-                <div className="grid min-w-[640px] grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-b border-border pb-3 text-left text-sm text-muted-foreground">
-                  <span className="font-medium">Employee</span>
-                  <span className="font-medium">Code</span>
-                  <span className="font-medium">Department</span>
-                  <span className="font-medium">Status</span>
-                  <span className="font-medium">Actions</span>
-                </div>
-                <VirtualizedList
-                  items={employees}
-                  estimateSize={72}
-                  overscan={6}
-                  heightClassName="max-h-[min(60vh,640px)]"
-                  getItemKey={(employee) => employee.id}
-                  renderItem={(employee) => (
-                    <div className="grid min-w-[640px] grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)] gap-2 border-b border-border/50 py-3 text-sm">
-                      <div>
-                        <button
-                          type="button"
-                          className="font-medium text-foreground hover:underline"
-                          onClick={() => onViewProfile(employee.id)}
-                        >
-                          {formatEmployeeName(employee)}
-                        </button>
-                        {employee.designation ? (
-                          <p className="text-xs text-muted-foreground">
-                            {employee.designation}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="self-center">{employee.employeeCode}</div>
-                      <div className="self-center">
-                        {employee.department?.name ?? "—"}
-                      </div>
-                      <div className="self-center">
-                        <StatusPill
-                          label={EMPLOYEE_STATUS_LABELS[employee.status]}
-                          tone={employeeStatusTone(employee.status)}
-                        />
-                      </div>
-                      <div className="flex gap-2 self-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onViewProfile(employee.id)}
-                        >
-                          View
-                        </Button>
-                        {canManage ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onEditEmployee(employee)}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => onDeleteEmployee(employee.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
-                />
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="pb-3 pr-4 font-medium">Employee</th>
-                      <th className="pb-3 pr-4 font-medium">Code</th>
-                      <th className="pb-3 pr-4 font-medium">Department</th>
-                      <th className="pb-3 pr-4 font-medium">Status</th>
-                      <th className="pb-3 font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employees.map((employee) => (
-                      <tr
-                        key={employee.id}
-                        className="border-b border-border/50"
-                      >
-                        <td className="py-3 pr-4">
-                          <button
-                            type="button"
-                            className="font-medium text-foreground hover:underline"
-                            onClick={() => onViewProfile(employee.id)}
-                          >
-                            {formatEmployeeName(employee)}
-                          </button>
-                          {employee.designation ? (
-                            <p className="text-xs text-muted-foreground">
-                              {employee.designation}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="py-3 pr-4">{employee.employeeCode}</td>
-                        <td className="py-3 pr-4">
-                          {employee.department?.name ?? "—"}
-                        </td>
-                        <td className="py-3 pr-4">
-                          <StatusPill
-                            label={EMPLOYEE_STATUS_LABELS[employee.status]}
-                            tone={employeeStatusTone(employee.status)}
-                          />
-                        </td>
-                        <td className="py-3">
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onViewProfile(employee.id)}
-                            >
-                              View
-                            </Button>
-                            {canManage ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => onEditEmployee(employee)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => onDeleteEmployee(employee.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          ) : null}
-
-          {canManage && totalPages > 1 ? (
-            <div className="flex items-center justify-between pt-2">
-              <p className="text-sm text-muted-foreground">
-                Page {page} of {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1}
-                  onClick={() => onPageChange(page - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= totalPages}
-                  onClick={() => onPageChange(page + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function TeamsPanel({
-  teams,
-  departments,
-  isLoading,
-  isError,
-  error,
-  onRetry,
-  canManage,
-  onEditTeam,
-  onDeleteTeam,
-  onCreateTeam,
-}: {
-  teams: Team[];
-  departments: Department[];
-  isLoading: boolean;
-  isError: boolean;
-  error: unknown;
-  onRetry: () => void;
-  canManage: boolean;
-  onEditTeam: (team: Team) => void;
-  onDeleteTeam: (id: string) => void;
-  onCreateTeam: () => void;
-}) {
-  if (isLoading) return <LoadingState label="Loading teams" />;
-  if (isError) {
-    return (
-      <ErrorState
-        description={
-          error instanceof ApiClientError
-            ? error.message
-            : "Could not load teams."
-        }
-        onRetry={onRetry}
-      />
-    );
-  }
-  if (teams.length === 0) {
-    return (
-      <EmptyState
-        icon={Users}
-        title="No teams yet"
-        description="Create teams to group employees around projects or functions."
-        actionLabel={canManage ? "Create team" : undefined}
-        onAction={canManage ? onCreateTeam : undefined}
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {teams.map((team) => {
-        const dept = departments.find((d) => d.id === team.departmentId);
-        return (
-          <Card key={team.id} className="border-border/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">{team.name}</CardTitle>
-              {team.description ? (
-                <p className="text-sm text-muted-foreground">{team.description}</p>
-              ) : null}
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                <span>{team.memberCount ?? team.members?.length ?? 0} members</span>
-                {dept ? <span>· {dept.name}</span> : null}
-                {team.leader ? (
-                  <span>· Lead: {formatEmployeeName({ user: team.leader })}</span>
-                ) : null}
-              </div>
-              {canManage ? (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => onEditTeam(team)}>
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onDeleteTeam(team.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
 
 function AttendancePanel({
   records,
@@ -1678,6 +1556,7 @@ function PerformancePanel({
   error,
   onRetry,
   canManage,
+  isSuperAdmin,
   onEditReview,
   onAddReview,
   onAddGoal,
@@ -1691,6 +1570,7 @@ function PerformancePanel({
   error: unknown;
   onRetry: () => void;
   canManage: boolean;
+  isSuperAdmin: boolean;
   onEditReview: (review: PerformanceReview) => void;
   onAddReview: () => void;
   onAddGoal: () => void;
@@ -1712,13 +1592,19 @@ function PerformancePanel({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="space-y-6">
+      <PerformanceLiveDashboard
+        canManage={canManage}
+        isSuperAdmin={isSuperAdmin}
+      />
+
+      <div className="grid gap-4 lg:grid-cols-2">
       <Card className="border-border/50">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">Performance reviews</CardTitle>
           {canManage ? (
             <Button size="sm" variant="outline" onClick={onAddReview}>
-              Add
+              Add manual note
             </Button>
           ) : null}
         </CardHeader>
@@ -1818,110 +1704,16 @@ function PerformancePanel({
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
 
-function EmployeeProfileSheet({
-  open,
-  onOpenChange,
-  employee,
-  isLoading,
-  canManage,
-  onEdit,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  employee?: EmployeeProfile;
-  isLoading: boolean;
-  canManage: boolean;
-  onEdit: () => void;
-}) {
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Employee profile</SheetTitle>
-        </SheetHeader>
-        {isLoading ? (
-          <LoadingState label="Loading profile" />
-        ) : employee ? (
-          <div className="mt-6 space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold">
-                {formatEmployeeName(employee)}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {employee.designation ?? "No designation"} · {employee.employeeCode}
-              </p>
-              <div className="mt-2">
-                <StatusPill
-                  label={EMPLOYEE_STATUS_LABELS[employee.status]}
-                  tone={employeeStatusTone(employee.status)}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 text-sm">
-              {[
-                ["Department", employee.department?.name ?? "—"],
-                ["Work location", employee.workLocation ?? "—"],
-                ["Hire date", formatDate(employee.hireDate)],
-                ["Phone", employee.phone ?? "—"],
-                ["Annual leave", `${employee.annualLeaveBalance} days`],
-                ["Sick leave", `${employee.sickLeaveBalance} days`],
-                [
-                  "Manager",
-                  employee.manager
-                    ? `${employee.manager.firstName} ${employee.manager.lastName}`
-                    : "—",
-                ],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="text-right font-medium">{value}</span>
-                </div>
-              ))}
-            </div>
-
-            {employee.skills.length > 0 ? (
-              <div>
-                <p className="mb-2 text-sm font-medium">Skills</p>
-                <div className="flex flex-wrap gap-2">
-                  {employee.skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="rounded-full bg-muted px-2.5 py-0.5 text-xs"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {employee.bio ? (
-              <div>
-                <p className="mb-1 text-sm font-medium">Bio</p>
-                <p className="text-sm text-muted-foreground">{employee.bio}</p>
-              </div>
-            ) : null}
-
-            {canManage ? (
-              <Button onClick={onEdit}>Edit profile</Button>
-            ) : null}
-          </div>
-        ) : (
-          <ErrorState description="Employee profile could not be loaded." />
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-}
 
 function DepartmentDialog({
   open,
   editing,
+  employees = [],
   onOpenChange,
   onSubmit,
   isPending,
@@ -1930,6 +1722,7 @@ function DepartmentDialog({
 }: {
   open: boolean;
   editing: Department | null;
+  employees?: EmployeeProfile[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: CreateDepartmentInput | UpdateDepartmentInput) => void;
   isPending: boolean;
@@ -1939,11 +1732,13 @@ function DepartmentDialog({
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
+  const [headId, setHeadId] = useState("");
 
   const reset = () => {
     setName(editing?.name ?? "");
     setCode(editing?.code ?? "");
     setDescription(editing?.description ?? "");
+    setHeadId(editing?.headId ?? "");
   };
 
   return (
@@ -1981,6 +1776,22 @@ function DepartmentDialog({
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="dept-head">Head of department</Label>
+            <select
+              id="dept-head"
+              className={selectClassName}
+              value={headId}
+              onChange={(e) => setHeadId(e.target.value)}
+            >
+              <option value="">None</option>
+              {employees.map((employee) => (
+                <option key={employee.userId} value={employee.userId}>
+                  {formatEmployeeName(employee)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="dept-desc">Description</Label>
             <Input
               id="dept-desc"
@@ -2011,6 +1822,7 @@ function DepartmentDialog({
                   name: name.trim(),
                   code: code.trim(),
                   description: description.trim() || null,
+                  headId: headId || null,
                 })
               }
             >
@@ -2023,154 +1835,6 @@ function DepartmentDialog({
   );
 }
 
-function EmployeeDialog({
-  open,
-  editing,
-  departments,
-  onOpenChange,
-  onSubmit,
-  isPending,
-  error,
-}: {
-  open: boolean;
-  editing: EmployeeProfile | null;
-  departments: Department[];
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (
-    values: CreateEmployeeProfileInput | UpdateEmployeeProfileInput,
-  ) => void;
-  isPending: boolean;
-  error: unknown;
-}) {
-  const [userId, setUserId] = useState("");
-  const [employeeCode, setEmployeeCode] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
-  const [designation, setDesignation] = useState("");
-  const [status, setStatus] = useState<EmployeeStatusValue>("ACTIVE");
-
-  const reset = () => {
-    setUserId(editing?.userId ?? "");
-    setEmployeeCode(editing?.employeeCode ?? "");
-    setDepartmentId(editing?.departmentId ?? "");
-    setDesignation(editing?.designation ?? "");
-    setStatus(editing?.status ?? "ACTIVE");
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {editing ? "Edit employee" : "Add employee"}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          {!editing ? (
-            <div className="space-y-2">
-              <Label htmlFor="emp-user-id">User ID</Label>
-              <Input
-                id="emp-user-id"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                placeholder="Linked platform user UUID"
-              />
-            </div>
-          ) : null}
-          <div className="space-y-2">
-            <Label htmlFor="emp-code">Employee code</Label>
-            <Input
-              id="emp-code"
-              value={employeeCode}
-              onChange={(e) => setEmployeeCode(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="emp-dept">Department</Label>
-            <select
-              id="emp-dept"
-              className={selectClassName}
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-            >
-              <option value="">None</option>
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="emp-designation">Designation</Label>
-            <Input
-              id="emp-designation"
-              value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="emp-status">Status</Label>
-            <select
-              id="emp-status"
-              className={selectClassName}
-              value={status}
-              onChange={(e) =>
-                setStatus(e.target.value as EmployeeStatusValue)
-              }
-            >
-              {EMPLOYEE_STATUSES.map((value) => (
-                <option key={value} value={value}>
-                  {EMPLOYEE_STATUS_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </div>
-          {error ? (
-            <p className="text-sm text-destructive">{mutationError(error)}</p>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={
-              isPending ||
-              !employeeCode.trim() ||
-              (!editing && !userId.trim())
-            }
-            onClick={() => {
-              if (editing) {
-                onSubmit({
-                  employeeCode: employeeCode.trim(),
-                  departmentId: departmentId || null,
-                  designation: designation.trim() || null,
-                  status,
-                });
-              } else {
-                onSubmit({
-                  userId: userId.trim(),
-                  employeeCode: employeeCode.trim(),
-                  departmentId: departmentId || null,
-                  designation: designation.trim() || null,
-                  status,
-                });
-              }
-            }}
-          >
-            {editing ? "Save" : "Create"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function TeamDialog({
   open,

@@ -9,6 +9,7 @@ import { DashboardRouteWarmup } from "@/components/layout/dashboard-route-warmup
 import { KeepAliveOutlet } from "@/components/layout/keep-alive-outlet";
 import { NavigationProgress } from "@/components/layout/navigation-progress";
 import { RightPanel } from "@/components/layout/right-panel";
+import { MustChangePasswordGate } from "@/features/auth/components/must-change-password-gate";
 import { useUiStore } from "@/stores/ui.store";
 
 interface DashboardShellProps {
@@ -21,6 +22,7 @@ function DashboardShellComponent({ children }: DashboardShellProps) {
 
   return (
     <div className="flex min-h-svh bg-background">
+      <MustChangePasswordGate />
       <DashboardRouteWarmup />
       <Suspense fallback={null}>
         <NavigationProgress />

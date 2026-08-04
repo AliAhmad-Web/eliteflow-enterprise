@@ -193,7 +193,7 @@ function resolveLoader(route: string): KeepAliveLoader | null {
   return null;
 }
 
-const preloaded = new Map<string, Promise<ComponentType>>();
+const preloaded = new Map<string, Promise<ComponentType | null>>();
 
 export function preloadKeepAliveRoute(
   pathname: string,
@@ -213,7 +213,13 @@ export function preloadKeepAliveRoute(
     return Promise.resolve(null);
   }
 
-  const promise = loader().then((mod) => mod.default);
+  // Swallow ChunkLoadError (common after HMR / server restart) and allow retry.
+  const promise = loader()
+    .then((mod) => mod.default)
+    .catch(() => {
+      preloaded.delete(route);
+      return null;
+    });
   preloaded.set(route, promise);
   return promise;
 }

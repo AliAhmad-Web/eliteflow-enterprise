@@ -20,10 +20,14 @@ import type {
   TeamMemberDto,
 } from "@enterprise/shared";
 
+type RoleSummary = { code: string; name: string };
+
 type UserSummary = Pick<
   User,
   "id" | "firstName" | "lastName" | "email" | "avatarUrl"
->;
+> & {
+  role?: RoleSummary | null;
+};
 
 function toUser(user?: UserSummary | null) {
   if (!user) return null;
@@ -33,6 +37,8 @@ function toUser(user?: UserSummary | null) {
     lastName: user.lastName,
     email: user.email,
     avatarUrl: user.avatarUrl,
+    roleCode: user.role?.code,
+    roleName: user.role?.name,
   };
 }
 
@@ -44,7 +50,7 @@ function dateOnly(value: Date | null | undefined): string | null {
 export function toDepartmentDto(
   department: Department & {
     head?: UserSummary | null;
-    _count?: { employees?: number };
+    _count?: { employees?: number; teams?: number };
   },
 ): DepartmentDto {
   return {
@@ -54,6 +60,7 @@ export function toDepartmentDto(
     description: department.description,
     headId: department.headId,
     employeeCount: department._count?.employees,
+    teamCount: department._count?.teams,
     createdAt: department.createdAt.toISOString(),
     updatedAt: department.updatedAt.toISOString(),
     head: toUser(department.head),
@@ -64,20 +71,48 @@ export function toEmployeeDto(
   employee: EmployeeProfile & {
     user?: UserSummary;
     department?: (Department & { head?: UserSummary | null }) | null;
+    primaryTeam?: { id: string; name: string } | null;
     manager?: UserSummary | null;
+    createdBy?: UserSummary | null;
   },
 ): EmployeeProfileDto {
   return {
     id: employee.id,
     userId: employee.userId,
     employeeCode: employee.employeeCode,
+    adminCode: employee.adminCode,
+    badgeNumber: employee.badgeNumber,
+    qrToken: employee.qrToken,
     departmentId: employee.departmentId,
+    primaryTeamId: employee.primaryTeamId,
     designation: employee.designation,
     managerId: employee.managerId,
     status: employee.status,
+    lifecycleStage: employee.lifecycleStage,
+    employmentType: employee.employmentType,
+    shift: employee.shift,
+    gender: employee.gender,
+    maritalStatus: employee.maritalStatus,
+    bloodGroup: employee.bloodGroup,
+    fatherName: employee.fatherName,
+    dateOfBirth: dateOnly(employee.dateOfBirth),
+    nationalId: employee.nationalId,
     hireDate: dateOnly(employee.hireDate),
+    exitDate: dateOnly(employee.exitDate),
+    exitReason: employee.exitReason,
     phone: employee.phone,
+    personalEmail: employee.personalEmail,
+    companyEmail: employee.companyEmail,
     workLocation: employee.workLocation,
+    address: employee.address,
+    city: employee.city,
+    country: employee.country,
+    salary:
+      employee.salary === null || employee.salary === undefined
+        ? null
+        : Number(employee.salary),
+    notes: employee.notes,
+    photoUrl: employee.photoUrl,
     skills: employee.skills,
     experienceYears:
       employee.experienceYears === null || employee.experienceYears === undefined
@@ -89,14 +124,21 @@ export function toEmployeeDto(
     emergencyContactPhone: employee.emergencyContactPhone,
     emergencyContactRelation: employee.emergencyContactRelation,
     annualLeaveBalance: employee.annualLeaveBalance,
+    casualLeaveBalance: employee.casualLeaveBalance,
     sickLeaveBalance: employee.sickLeaveBalance,
+    medicalLeaveBalance: employee.medicalLeaveBalance,
+    createdById: employee.createdById,
     createdAt: employee.createdAt.toISOString(),
     updatedAt: employee.updatedAt.toISOString(),
     user: employee.user ? toUser(employee.user) ?? undefined : undefined,
     department: employee.department
       ? toDepartmentDto(employee.department)
       : null,
+    primaryTeam: employee.primaryTeam
+      ? { id: employee.primaryTeam.id, name: employee.primaryTeam.name }
+      : null,
     manager: toUser(employee.manager),
+    createdBy: toUser(employee.createdBy),
   };
 }
 
@@ -117,6 +159,7 @@ export function toTeamDto(
   team: Team & {
     leader?: UserSummary | null;
     members?: (TeamMember & { user?: UserSummary })[];
+    department?: (Department & { head?: UserSummary | null }) | null;
     _count?: { members?: number };
   },
 ): TeamDto {
@@ -131,6 +174,7 @@ export function toTeamDto(
     updatedAt: team.updatedAt.toISOString(),
     leader: toUser(team.leader),
     members: team.members?.map(toTeamMemberDto),
+    department: team.department ? toDepartmentDto(team.department) : null,
   };
 }
 
@@ -192,6 +236,16 @@ export function toPerformanceDto(
     periodEnd: dateOnly(review.periodEnd)!,
     rating: review.rating,
     productivityScore: review.productivityScore,
+    autoScore: review.autoScore ?? null,
+    source: review.source ?? "MANUAL",
+    componentScores: Array.isArray(review.componentScores)
+      ? (review.componentScores as PerformanceReviewDto["componentScores"])
+      : null,
+    insights: Array.isArray(review.insights)
+      ? (review.insights as PerformanceReviewDto["insights"])
+      : null,
+    managerAdjustment: review.managerAdjustment ?? null,
+    managerComment: review.managerComment ?? null,
     kpiSummary: review.kpiSummary,
     notes: review.notes,
     createdAt: review.createdAt.toISOString(),
@@ -215,6 +269,8 @@ export function toGoalDto(
     progress: goal.progress,
     status: goal.status,
     dueDate: dateOnly(goal.dueDate),
+    linkedTaskIds: goal.linkedTaskIds ?? [],
+    autoProgress: goal.autoProgress ?? true,
     createdAt: goal.createdAt.toISOString(),
     employee: goal.employee ? toEmployeeDto(goal.employee) : undefined,
   };

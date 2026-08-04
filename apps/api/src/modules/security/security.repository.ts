@@ -355,6 +355,7 @@ export const securityRepository = {
       data: {
         passwordHash,
         passwordChangedAt: new Date(),
+        mustChangePassword: false,
         failedLoginCount: 0,
         lockedUntil: null,
       },

@@ -29,13 +29,36 @@ model EmployeeProfile {
   id                 String         @id @default(uuid()) @db.Uuid
   userId             String         @unique @map("user_id") @db.Uuid
   employeeCode       String         @unique @map("employee_code") @db.VarChar(40)
+  adminCode          String?        @unique @map("admin_code") @db.VarChar(40)
+  badgeNumber        String?        @unique @map("badge_number") @db.VarChar(40)
+  qrToken            String?        @unique @map("qr_token") @db.VarChar(64)
   departmentId       String?        @map("department_id") @db.Uuid
+  primaryTeamId      String?        @map("primary_team_id") @db.Uuid
   designation        String?        @db.VarChar(120)
   managerId          String?        @map("manager_id") @db.Uuid
   status             EmployeeStatus @default(ACTIVE)
+  lifecycleStage     EmployeeLifecycleStage @default(ONBOARDING) @map("lifecycle_stage")
+  employmentType     EmploymentType @default(FULL_TIME) @map("employment_type")
+  shift              WorkShift      @default(MORNING)
+  gender             EmployeeGender?
+  maritalStatus      MaritalStatus? @map("marital_status")
+  bloodGroup         String?        @map("blood_group") @db.VarChar(8)
+  fatherName         String?        @map("father_name") @db.VarChar(120)
+  dateOfBirth        DateTime?      @map("date_of_birth") @db.Date
+  nationalId         String?        @map("national_id") @db.VarChar(40)
   hireDate           DateTime?      @map("hire_date") @db.Date
+  exitDate           DateTime?      @map("exit_date") @db.Date
+  exitReason         String?        @map("exit_reason") @db.VarChar(500)
   phone              String?        @db.VarChar(40)
+  personalEmail      String?        @map("personal_email") @db.VarChar(320)
+  companyEmail       String?        @map("company_email") @db.VarChar(320)
   workLocation       String?        @map("work_location") @db.VarChar(120)
+  address            String?        @db.VarChar(500)
+  city               String?        @db.VarChar(120)
+  country            String?        @db.VarChar(120)
+  salary             Decimal?       @db.Decimal(14, 2)
+  notes              String?        @db.Text
+  photoUrl           String?        @map("photo_url") @db.VarChar(2048)
   skills             String[]       @default([])
   experienceYears    Decimal?       @map("experience_years") @db.Decimal(4, 1)
   bio                String?        @db.Text
@@ -44,26 +67,40 @@ model EmployeeProfile {
   emergencyContactPhone String?     @map("emergency_contact_phone") @db.VarChar(40)
   emergencyContactRelation String?  @map("emergency_contact_relation") @db.VarChar(80)
   annualLeaveBalance Int            @default(20) @map("annual_leave_balance")
+  casualLeaveBalance Int            @default(10) @map("casual_leave_balance")
   sickLeaveBalance   Int            @default(10) @map("sick_leave_balance")
+  medicalLeaveBalance Int           @default(10) @map("medical_leave_balance")
+  onboardingCompletedAt DateTime?   @map("onboarding_completed_at")
   createdById        String?        @map("created_by_id") @db.Uuid
   updatedById        String?        @map("updated_by_id") @db.Uuid
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
   deletedAt          DateTime?      @map("deleted_at")
 
-  user       User             @relation("EmployeeProfileUser", fields: [userId], references: [id], onDelete: Cascade)
-  department Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  manager    User?            @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
-  createdBy  User?            @relation("EmployeeProfileCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy  User?            @relation("EmployeeProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  attendance Attendance[]
+  user        User             @relation("EmployeeProfileUser", fields: [userId], references: [id], onDelete: Cascade)
+  department  Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  primaryTeam Team?            @relation("EmployeePrimaryTeam", fields: [primaryTeamId], references: [id], onDelete: SetNull)
+  manager     User?            @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  createdBy   User?            @relation("EmployeeProfileCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?            @relation("EmployeeProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  attendance  Attendance[]
   leaveRequests LeaveRequest[]
   performanceReviews PerformanceReview[] @relation("PerformanceReviewee")
-  goals      EmployeeGoal[]
+  goals       EmployeeGoal[]
+  documents   EmployeeDocument[]
+  promotions  EmployeePromotion[]
+  transfers   EmployeeTransfer[]
+  timeline    EmployeeTimelineEvent[]
+  scoreSnapshots PerformanceScoreSnapshot[]
+  performanceInsights PerformanceInsight[]
+  monthlyReports PerformanceMonthlyReport[]
+  periodReports PerformancePeriodReport[]
 
   @@index([departmentId])
+  @@index([primaryTeamId])
   @@index([managerId])
   @@index([status])
+  @@index([lifecycleStage])
   @@index([deletedAt])
   @@map("employee_profiles")
 }
@@ -84,8 +121,9 @@ model Team {
   leader     User?        @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   createdBy  User?        @relation("TeamCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy  User?        @relation("TeamUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  members     TeamMember[]
-  whiteboards Whiteboard[]
+  members          TeamMember[]
+  primaryEmployees EmployeeProfile[] @relation("EmployeePrimaryTeam")
+  whiteboards      Whiteboard[]
 
   @@index([departmentId])
   @@index([leaderId])
@@ -174,6 +212,12 @@ model PerformanceReview {
   periodEnd     DateTime           @map("period_end") @db.Date
   rating        PerformanceRating  @default(AVERAGE)
   productivityScore Int            @default(70) @map("productivity_score")
+  autoScore     Int?               @map("auto_score")
+  source        PerformanceScoreSource @default(MANUAL)
+  componentScores Json?            @map("component_scores")
+  insights      Json?
+  managerAdjustment Int?           @map("manager_adjustment")
+  managerComment String?           @map("manager_comment") @db.Text
   kpiSummary    String?            @map("kpi_summary") @db.Text
   notes         String?            @db.Text
   createdById   String?            @map("created_by_id") @db.Uuid
@@ -189,25 +233,28 @@ model PerformanceReview {
 
   @@index([employeeId])
   @@index([periodStart, periodEnd])
+  @@index([source])
   @@index([deletedAt])
   @@map("performance_reviews")
 }
 
 model EmployeeGoal {
-  id          String     @id @default(uuid()) @db.Uuid
-  employeeId  String     @map("employee_id") @db.Uuid
-  title       String     @db.VarChar(200)
-  description String?    @db.Text
-  kpiMetric   String?    @map("kpi_metric") @db.VarChar(120)
-  targetValue String?    @map("target_value") @db.VarChar(80)
-  progress    Int        @default(0)
-  status      GoalStatus @default(NOT_STARTED)
-  dueDate     DateTime?  @map("due_date") @db.Date
-  createdById String?    @map("created_by_id") @db.Uuid
-  updatedById String?    @map("updated_by_id") @db.Uuid
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  deletedAt   DateTime?  @map("deleted_at")
+  id            String     @id @default(uuid()) @db.Uuid
+  employeeId    String     @map("employee_id") @db.Uuid
+  title         String     @db.VarChar(200)
+  description   String?    @db.Text
+  kpiMetric     String?    @map("kpi_metric") @db.VarChar(120)
+  targetValue   String?    @map("target_value") @db.VarChar(80)
+  progress      Int        @default(0)
+  status        GoalStatus @default(NOT_STARTED)
+  dueDate       DateTime?  @map("due_date") @db.Date
+  linkedTaskIds String[]   @default([]) @map("linked_task_ids")
+  autoProgress  Boolean    @default(true) @map("auto_progress")
+  createdById   String?    @map("created_by_id") @db.Uuid
+  updatedById   String?    @map("updated_by_id") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  deletedAt     DateTime?  @map("deleted_at")
 
   employee  EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   createdBy User?           @relation("GoalCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -216,4 +263,235 @@ model EmployeeGoal {
   @@index([employeeId, status])
   @@index([deletedAt])
   @@map("employee_goals")
+}
+
+/// Org-wide scoring weights and thresholds (singleton row key = default).
+model PerformanceScoringConfig {
+  id                    String   @id @default(uuid()) @db.Uuid
+  key                   String   @unique @default("default") @db.VarChar(40)
+  weights               Json
+  enabledMetrics        Json     @map("enabled_metrics")
+  minScoreThreshold     Int      @default(50) @map("min_score_threshold")
+  alertThreshold        Int      @default(45) @map("alert_threshold")
+  promotionMinScore     Int      @default(85) @map("promotion_min_score")
+  bonusMinScore         Int      @default(80) @map("bonus_min_score")
+  lookbackDays          Int      @default(30) @map("lookback_days")
+  updatedById           String?  @map("updated_by_id") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation("PerformanceConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("performance_scoring_configs")
+}
+
+/// Live computed performance snapshot per employee / period.
+model PerformanceScoreSnapshot {
+  id               String                  @id @default(uuid()) @db.Uuid
+  employeeId       String                  @map("employee_id") @db.Uuid
+  periodStart      DateTime                @map("period_start") @db.Date
+  periodEnd        DateTime                @map("period_end") @db.Date
+  overallScore     Int                     @map("overall_score")
+  componentScores  Json                    @map("component_scores")
+  /// Pillar scores: attendance, productivity, discipline, collaboration, leadership, quality, communication, innovation
+  scoreBreakdown   Json?                   @map("score_breakdown")
+  /// Full 360° raw metric catalog used for AI scoring
+  metrics          Json?
+  /// AI predictions: burnoutRisk, attritionRisk, engagement, consistency
+  predictions      Json?
+  /// AI recommendations: promotion, salary, bonus, training[]
+  recommendations  Json?
+  departmentRank   Int?                    @map("department_rank")
+  organizationRank Int?                    @map("organization_rank")
+  derivedRating    PerformanceRating       @map("derived_rating")
+  insights         Json                    @default("[]")
+  trendDelta       Int                     @default(0) @map("trend_delta")
+  source           PerformanceScoreSource  @default(AUTO)
+  computedAt       DateTime                @default(now()) @map("computed_at")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([overallScore])
+  @@index([computedAt])
+  @@index([organizationRank])
+  @@map("performance_score_snapshots")
+}
+
+model PerformanceInsight {
+  id          String    @id @default(uuid()) @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  severity    String    @db.VarChar(20)
+  category    String    @db.VarChar(40)
+  message     String    @db.VarChar(500)
+  metricKey   String?   @map("metric_key") @db.VarChar(60)
+  acknowledged Boolean  @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime? @map("expires_at")
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, createdAt])
+  @@index([acknowledged])
+  @@map("performance_insights")
+}
+
+model PerformanceMonthlyReport {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  employeeId            String                         @map("employee_id") @db.Uuid
+  year                  Int
+  month                 Int
+  overallScore          Int                            @map("overall_score")
+  summary               String                         @db.Text
+  strengths             Json                           @default("[]")
+  weaknesses            Json                           @default("[]")
+  improvements          Json                           @default("[]")
+  aiRecommendations     Json                           @map("ai_recommendations") @default("[]")
+  promotionReady        Boolean                        @default(false) @map("promotion_ready")
+  salaryReviewSuggested Boolean                        @default(false) @map("salary_review_suggested")
+  status                PerformanceMonthlyReportStatus @default(DRAFT)
+  managerNotes          String?                        @map("manager_notes") @db.Text
+  approvedById          String?                        @map("approved_by_id") @db.Uuid
+  approvedAt            DateTime?                      @map("approved_at")
+  componentScores       Json                           @map("component_scores")
+  createdAt             DateTime                       @default(now()) @map("created_at")
+  updatedAt             DateTime                       @updatedAt @map("updated_at")
+
+  employee   EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approvedBy User?           @relation("PerformanceMonthlyApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, year, month])
+  @@index([year, month])
+  @@index([status])
+  @@map("performance_monthly_reports")
+}
+
+/// Multi-period AI performance reports (weekly / monthly / quarterly / annual).
+model PerformancePeriodReport {
+  id                    String                         @id @default(uuid()) @db.Uuid
+  employeeId            String                         @map("employee_id") @db.Uuid
+  periodType            PerformanceReportPeriod        @map("period_type")
+  periodKey             String                         @map("period_key") @db.VarChar(20)
+  periodStart           DateTime                       @map("period_start") @db.Date
+  periodEnd             DateTime                       @map("period_end") @db.Date
+  overallScore          Int                            @map("overall_score")
+  scoreBreakdown        Json                           @map("score_breakdown")
+  metrics               Json                           @default("{}")
+  predictions           Json                           @default("{}")
+  summary               String                         @db.Text
+  strengths             Json                           @default("[]")
+  weaknesses            Json                           @default("[]")
+  improvements          Json                           @default("[]")
+  aiRecommendations     Json                           @map("ai_recommendations") @default("[]")
+  trainingSuggestions   Json                           @map("training_suggestions") @default("[]")
+  promotionReady        Boolean                        @default(false) @map("promotion_ready")
+  salaryReviewSuggested Boolean                        @default(false) @map("salary_review_suggested")
+  bonusSuggested        Boolean                        @default(false) @map("bonus_suggested")
+  burnoutRisk           Int                            @default(0) @map("burnout_risk")
+  attritionRisk         Int                            @default(0) @map("attrition_risk")
+  status                PerformanceMonthlyReportStatus @default(DRAFT)
+  managerNotes          String?                        @map("manager_notes") @db.Text
+  approvedById          String?                        @map("approved_by_id") @db.Uuid
+  approvedAt            DateTime?                      @map("approved_at")
+  componentScores       Json                           @map("component_scores")
+  createdAt             DateTime                       @default(now()) @map("created_at")
+  updatedAt             DateTime                       @updatedAt @map("updated_at")
+
+  employee   EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approvedBy User?           @relation("PerformancePeriodApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, periodType, periodKey])
+  @@index([periodType, periodKey])
+  @@index([status])
+  @@index([attritionRisk])
+  @@map("performance_period_reports")
+}
+
+model EmployeeDocument {
+  id           String               @id @default(uuid()) @db.Uuid
+  employeeId   String               @map("employee_id") @db.Uuid
+  type         EmployeeDocumentType @default(OTHER)
+  title        String               @db.VarChar(200)
+  fileUrl      String               @map("file_url") @db.VarChar(2048)
+  fileName     String?              @map("file_name") @db.VarChar(255)
+  mimeType     String?              @map("mime_type") @db.VarChar(120)
+  fileSize     Int?                 @map("file_size")
+  notes        String?              @db.VarChar(500)
+  uploadedById String?              @map("uploaded_by_id") @db.Uuid
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  deletedAt    DateTime?            @map("deleted_at")
+
+  employee   EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  uploadedBy User?           @relation("EmployeeDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, type])
+  @@index([deletedAt])
+  @@map("employee_documents")
+}
+
+model EmployeePromotion {
+  id              String    @id @default(uuid()) @db.Uuid
+  employeeId      String    @map("employee_id") @db.Uuid
+  effectiveDate   DateTime  @map("effective_date") @db.Date
+  oldDesignation  String?   @map("old_designation") @db.VarChar(120)
+  newDesignation  String    @map("new_designation") @db.VarChar(120)
+  oldSalary       Decimal?  @map("old_salary") @db.Decimal(14, 2)
+  newSalary       Decimal?  @map("new_salary") @db.Decimal(14, 2)
+  reason          String?   @db.VarChar(1000)
+  actedById       String?   @map("acted_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  actedBy  User?           @relation("EmployeePromotionActor", fields: [actedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([deletedAt])
+  @@map("employee_promotions")
+}
+
+model EmployeeTransfer {
+  id                String    @id @default(uuid()) @db.Uuid
+  employeeId        String    @map("employee_id") @db.Uuid
+  effectiveDate     DateTime  @map("effective_date") @db.Date
+  fromDepartmentId  String?   @map("from_department_id") @db.Uuid
+  toDepartmentId    String?   @map("to_department_id") @db.Uuid
+  fromTeamId        String?   @map("from_team_id") @db.Uuid
+  toTeamId          String?   @map("to_team_id") @db.Uuid
+  fromManagerId     String?   @map("from_manager_id") @db.Uuid
+  toManagerId       String?   @map("to_manager_id") @db.Uuid
+  reason            String?   @db.VarChar(1000)
+  actedById         String?   @map("acted_by_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  actedBy  User?           @relation("EmployeeTransferActor", fields: [actedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId])
+  @@index([deletedAt])
+  @@map("employee_transfers")
+}
+
+model EmployeeTimelineEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  employeeId  String    @map("employee_id") @db.Uuid
+  eventType   String    @map("event_type") @db.VarChar(80)
+  title       String    @db.VarChar(200)
+  description String?   @db.VarChar(2000)
+  metadata    Json?
+  actedById   String?   @map("acted_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  employee EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  actedBy  User?           @relation("EmployeeTimelineActor", fields: [actedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, createdAt])
+  @@index([eventType])
+  @@map("employee_timeline_events")
 }

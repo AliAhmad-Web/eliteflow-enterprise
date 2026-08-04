@@ -60,10 +60,10 @@ export function DashboardRouteWarmup() {
 
     void (async () => {
       try {
-        void preloadKeepAliveRoute(current);
+        await preloadKeepAliveRoute(current);
         router.prefetch(current);
       } catch {
-        // Best-effort
+        // Best-effort — ignore stale chunk / network failures
       }
     })();
 
@@ -86,11 +86,11 @@ export function DashboardRouteWarmup() {
           }
           targets.delete(current);
           for (const route of targets) {
-            void preloadKeepAliveRoute(route);
+            await preloadKeepAliveRoute(route);
             router.prefetch(route);
           }
         } catch {
-          // ignore
+          // ignore stale chunks after HMR / restart
         }
       })();
     });

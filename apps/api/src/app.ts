@@ -41,6 +41,12 @@ export function createApp() {
   app.use(cookieParser());
   app.use(csrfProtection);
 
+  // Browser-friendly: API has no UI at /. Send people to the Next.js app.
+  app.get("/", (_req, res) => {
+    const webUrl = process.env.WEB_APP_URL ?? "http://localhost:3000";
+    res.redirect(302, webUrl);
+  });
+
   app.use(API_PREFIX, apiRouter);
 
   app.use(errorHandler);

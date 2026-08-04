@@ -78,4 +78,42 @@ export const AI_TOOL_CATALOG: readonly AiToolDefinition[] = [
     surfaces: ["ASSISTANT", "COMMUNICATION"],
     requiresEntityTypes: ["client", "clients"],
   },
+  {
+    id: "hire_employee",
+    requiredPermissions: [PERMISSIONS.TEAM_MANAGE],
+    modules: ["team", "ai"],
+    surfaces: ["ASSISTANT"],
+  },
+  {
+    id: "transfer_employee",
+    requiredPermissions: [PERMISSIONS.TEAM_MANAGE],
+    modules: ["team", "ai"],
+    surfaces: ["ASSISTANT"],
+    requiresEntityTypes: ["employee", "employees"],
+  },
+  {
+    id: "list_team_directory",
+    requiredPermissions: [PERMISSIONS.TEAM_READ],
+    modules: ["team", "ai"],
+    surfaces: ["ASSISTANT"],
+  },
+  {
+    id: "generate_employee_id_card",
+    requiredPermissions: [PERMISSIONS.TEAM_READ],
+    modules: ["team", "ai"],
+    surfaces: ["ASSISTANT"],
+    requiresEntityTypes: ["employee", "employees"],
+  },
+  {
+    id: "list_employees_on_leave",
+    requiredPermissions: [PERMISSIONS.TEAM_READ],
+    modules: ["team", "ai"],
+    surfaces: ["ASSISTANT"],
+  },
+  {
+    id: "list_missing_attendance",
+    requiredPermissions: [PERMISSIONS.TEAM_READ],
+    modules: ["team", "ai"],
+    surfaces: ["ASSISTANT"],
+  },
 ] as const;

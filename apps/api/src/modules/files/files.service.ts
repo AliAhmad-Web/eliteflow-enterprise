@@ -27,6 +27,7 @@ import {
   toFolderDto,
   toManagedFileDto,
 } from "./files.types.js";
+import { queuePerformanceRecalcForUser } from "../team/performance-recalc.queue.js";
 import {
   uniqueFileName,
   validateUploadFile,
@@ -397,6 +398,7 @@ export class FilesService {
       created.push(toManagedFileDto(record));
     }
 
+    queuePerformanceRecalcForUser(actor.userId);
     return created;
   }
 

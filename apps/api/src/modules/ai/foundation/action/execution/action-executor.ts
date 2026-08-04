@@ -15,6 +15,7 @@ import { notificationsService } from "../../../../notifications/notifications.se
 import { filesService } from "../../../../files/files.service.js";
 import { settingsService } from "../../../../settings/settings.service.js";
 import { aiService } from "../../../ai.service.js";
+import { hireEmployeeSchema } from "@enterprise/shared";
 
 import type { AiActionCategory } from "../action-definition.js";
 import type { AiActionStep } from "../planning/action-step.js";
@@ -192,12 +193,136 @@ async function executeFinance(
 
 async function executeHr(
   context: AiActionExecutionContext,
+  input?: Readonly<Record<string, unknown>>,
 ): Promise<AiActionServiceCallResult> {
   const actor = toPrivilegedServiceActor(context);
   if (!actor) return missingActor("teamService");
+
+  const teamActor = {
+    userId: actor.userId,
+    role: actor.role,
+    email: actor.email,
+    permissions: actor.permissions,
+  };
+
+  const action =
+    (typeof input?.action === "string" ? input.action : undefined) ??
+    (typeof input?.hrAction === "string" ? input.hrAction : undefined);
+  const prompt = (context.prompt ?? "").toLowerCase();
+
+  if (
+    action === "hire" ||
+    action === "hire_employee" ||
+    prompt.includes("hire employee")
+  ) {
+    const required = ["firstName", "lastName", "email", "departmentId"] as const;
+    const missing = required.filter(
+      (key) =>
+        typeof input?.[key] !== "string" ||
+        !(input[key] as string).trim(),
+    );
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        service: "teamService",
+        summary: sanitize(
+          `HR hire needs input: ${missing.join(", ")}`,
+        ),
+      };
+    }
+    try {
+      const hireInput = hireEmployeeSchema.parse({
+        firstName: String(input!.firstName).trim(),
+        lastName: String(input!.lastName).trim(),
+        email: String(input!.email).trim(),
+        departmentId: String(input!.departmentId).trim(),
+        designation:
+          typeof input?.designation === "string"
+            ? input.designation.trim()
+            : null,
+        primaryTeamId:
+          typeof input?.primaryTeamId === "string"
+            ? input.primaryTeamId.trim()
+            : null,
+      });
+      const result = await teamService.hireEmployee(hireInput, teamActor);
+      return {
+        ok: true,
+        service: "teamService",
+        summary: sanitize(
+          `Hired ${result.employee.employeeCode} via teamService`,
+        ),
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Hire employee failed";
+      return {
+        ok: false,
+        service: "teamService",
+        summary: sanitize(message, 120),
+      };
+    }
+  }
+
+  if (
+    action === "transfer" ||
+    action === "transfer_employee" ||
+    prompt.includes("transfer employee")
+  ) {
+    const employeeId =
+      typeof input?.employeeId === "string" ? input.employeeId.trim() : "";
+    const effectiveDate =
+      typeof input?.effectiveDate === "string"
+        ? input.effectiveDate.trim()
+        : "";
+    if (!employeeId || !effectiveDate) {
+      return {
+        ok: false,
+        service: "teamService",
+        summary: sanitize(
+          "HR transfer needs employeeId and effectiveDate",
+        ),
+      };
+    }
+    try {
+      await teamService.createHrTransfer(
+        employeeId,
+        {
+          effectiveDate,
+          toDepartmentId:
+            typeof input?.toDepartmentId === "string"
+              ? input.toDepartmentId.trim()
+              : null,
+          toTeamId:
+            typeof input?.toTeamId === "string" ? input.toTeamId.trim() : null,
+          toManagerId:
+            typeof input?.toManagerId === "string"
+              ? input.toManagerId.trim()
+              : null,
+          reason:
+            typeof input?.reason === "string" ? input.reason.trim() : null,
+        },
+        teamActor,
+      );
+      return {
+        ok: true,
+        service: "teamService",
+        summary: sanitize("Employee transfer recorded via teamService"),
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Transfer employee failed";
+      return {
+        ok: false,
+        service: "teamService",
+        summary: sanitize(message, 120),
+      };
+    }
+  }
+
   const result = await teamService.listEmployees(
     { search: "", page: 1, limit: 1 },
-    actor,
+    teamActor,
   );
   return {
     ok: true,
@@ -299,8 +424,9 @@ export async function executeFinanceService(
 
 export async function executeHrService(
   context: AiActionExecutionContext,
+  input?: Readonly<Record<string, unknown>>,
 ): Promise<AiActionServiceCallResult> {
-  return executeHr(context);
+  return executeHr(context, input);
 }
 
 /**

@@ -3,6 +3,7 @@ import "./dns-bootstrap.js";
 import { createApp } from "./app.js";
 import { assertAuthConfig, authConfig } from "./config/auth.config.js";
 import { startSessionCleanupJob } from "./jobs/session-cleanup.job.js";
+import { startPerformanceRecalcJob } from "./jobs/performance-recalc.job.js";
 import { getAiProvider } from "./modules/ai/providers/index.js";
 import { warmIntegrationRuntimeCaches } from "./modules/integrations/warm-integration-runtime.js";
 import {
@@ -30,4 +31,5 @@ app.listen(authConfig.port, () => {
   });
   void storageProvider.name;
   startSessionCleanupJob();
+  startPerformanceRecalcJob();
 });

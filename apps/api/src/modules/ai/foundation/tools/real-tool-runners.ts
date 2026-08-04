@@ -3,7 +3,11 @@
  * Use existing repositories/services. Guarded by RBAC / privacy / context.
  */
 
-import { UserRole } from "@enterprise/shared";
+import {
+  hireEmployeeSchema,
+  UserRole,
+  type ListEmployeesQueryInput,
+} from "@enterprise/shared";
 
 import { aiRepository } from "../../ai.repository.js";
 import { calendarRepository } from "../../../calendar/calendar.repository.js";
@@ -13,6 +17,10 @@ import {
   type ProjectAccessScope,
 } from "../../../projects/projects.repository.js";
 import { tasksRepository } from "../../../tasks/tasks.repository.js";
+import {
+  teamService,
+  type TeamActor,
+} from "../../../team/team.service.js";
 import type { AiToolId } from "../contracts/ai-tool-execution.js";
 import { AI_TOOL_CATALOG } from "./tool-catalog.js";
 import {
@@ -31,6 +39,49 @@ function stringField(
 ): string | undefined {
   const value = input?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberField(
+  input: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = input?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function buildTeamActor(context: AiToolExecutionContext): TeamActor {
+  const userId = context.userId?.trim();
+  if (!userId) {
+    throw new ToolExecutionGuardError(
+      "Authenticated user required for HR tools",
+      "MISSING_USER",
+    );
+  }
+  return {
+    userId,
+    role: context.role ?? context.activeContext.user?.role ?? UserRole.EMPLOYEE,
+    email:
+      context.activeContext.user?.email?.trim() ?? "unknown@eliteflow.local",
+    permissions: [...(context.permissions ?? [])],
+  };
+}
+
+function needsInputResult(
+  tool: AiToolId,
+  missingFields: readonly string[],
+  message: string,
+): Readonly<Record<string, unknown>> {
+  return {
+    kind: "needs_input",
+    tool,
+    missingFields,
+    message,
+  };
 }
 
 function entityIdByType(
@@ -374,6 +425,285 @@ async function runLookupClient(
   };
 }
 
+const HIRE_REQUIRED_FIELDS = [
+  "firstName",
+  "lastName",
+  "email",
+  "departmentId",
+] as const;
+
+async function runHireEmployee(
+  context: AiToolExecutionContext,
+  input: Readonly<Record<string, unknown>> | undefined,
+  signal: AbortSignal,
+): Promise<Readonly<Record<string, unknown>>> {
+  throwIfAborted(signal);
+  const missing = HIRE_REQUIRED_FIELDS.filter((key) => !stringField(input, key));
+  if (missing.length > 0) {
+    return needsInputResult(
+      "hire_employee",
+      missing,
+      `Provide ${missing.join(", ")} before hiring an employee.`,
+    );
+  }
+
+  const actor = buildTeamActor(context);
+  const payload = hireEmployeeSchema.parse({
+    firstName: stringField(input, "firstName")!,
+    lastName: stringField(input, "lastName")!,
+    email: stringField(input, "email")!,
+    departmentId: stringField(input, "departmentId")!,
+    primaryTeamId: stringField(input, "primaryTeamId") ?? null,
+    designation: stringField(input, "designation") ?? null,
+    managerId: stringField(input, "managerId") ?? null,
+    phone: stringField(input, "phone") ?? null,
+    companyEmail: stringField(input, "companyEmail") ?? null,
+    personalEmail: stringField(input, "personalEmail") ?? null,
+    hireDate: stringField(input, "hireDate") ?? null,
+    workLocation: stringField(input, "workLocation") ?? null,
+    salary: numberField(input, "salary") ?? null,
+  });
+
+  const result = await teamService.hireEmployee(payload, actor);
+  throwIfAborted(signal);
+  return {
+    kind: "hire_employee",
+    employeeId: result.employee.id,
+    employeeCode: result.employee.employeeCode,
+    email: result.employee.user?.email ?? payload.email,
+    temporaryPassword: result.temporaryPassword,
+    invitationSent: result.invitationSent,
+    badgeNumber: result.badgeNumber ?? result.employee.badgeNumber ?? null,
+  };
+}
+
+async function runTransferEmployee(
+  context: AiToolExecutionContext,
+  input: Readonly<Record<string, unknown>> | undefined,
+  signal: AbortSignal,
+): Promise<Readonly<Record<string, unknown>>> {
+  throwIfAborted(signal);
+  const employeeId =
+    stringField(input, "employeeId") ??
+    entityIdByType(context, ["employee", "employees"]);
+  const effectiveDate = stringField(input, "effectiveDate");
+  const missing: string[] = [];
+  if (!employeeId) missing.push("employeeId");
+  if (!effectiveDate) missing.push("effectiveDate");
+  if (missing.length > 0) {
+    return needsInputResult(
+      "transfer_employee",
+      missing,
+      "Provide employeeId and effectiveDate to transfer an employee.",
+    );
+  }
+
+  const actor = buildTeamActor(context);
+  const transfer = await teamService.createHrTransfer(
+    employeeId!,
+    {
+      effectiveDate: effectiveDate!,
+      toDepartmentId: stringField(input, "toDepartmentId") ?? null,
+      toTeamId: stringField(input, "toTeamId") ?? null,
+      toManagerId: stringField(input, "toManagerId") ?? null,
+      reason: stringField(input, "reason") ?? null,
+    },
+    actor,
+  );
+  throwIfAborted(signal);
+  return {
+    kind: "transfer_employee",
+    transferId: transfer.id,
+    employeeId: transfer.employeeId,
+    effectiveDate:
+      transfer.effectiveDate instanceof Date
+        ? transfer.effectiveDate.toISOString().slice(0, 10)
+        : String(transfer.effectiveDate),
+    toDepartmentId: transfer.toDepartmentId,
+    toTeamId: transfer.toTeamId,
+  };
+}
+
+async function runListTeamDirectory(
+  context: AiToolExecutionContext,
+  input: Readonly<Record<string, unknown>> | undefined,
+  signal: AbortSignal,
+): Promise<Readonly<Record<string, unknown>>> {
+  throwIfAborted(signal);
+  const actor = buildTeamActor(context);
+  const page = numberField(input, "page") ?? 1;
+  const limit = Math.min(numberField(input, "limit") ?? 25, 100);
+  const status = stringField(input, "status") as
+    | ListEmployeesQueryInput["status"]
+    | undefined;
+  const result = await teamService.listEmployees(
+    {
+      search: stringField(input, "search") ?? "",
+      ...(status ? { status } : {}),
+      departmentId: stringField(input, "departmentId"),
+      teamId: stringField(input, "teamId"),
+      page,
+      limit,
+    },
+    actor,
+  );
+  throwIfAborted(signal);
+  return {
+    kind: "team_directory",
+    total: result.pagination.total,
+    page: result.pagination.page,
+    employees: result.items.map((employee) => ({
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      name: employee.user
+        ? `${employee.user.firstName} ${employee.user.lastName}`.trim()
+        : employee.employeeCode,
+      email: employee.user?.email ?? employee.companyEmail ?? null,
+      department: employee.department?.name ?? null,
+      team: employee.primaryTeam?.name ?? null,
+      status: employee.status,
+      designation: employee.designation,
+    })),
+  };
+}
+
+async function runGenerateEmployeeIdCard(
+  context: AiToolExecutionContext,
+  input: Readonly<Record<string, unknown>> | undefined,
+  signal: AbortSignal,
+): Promise<Readonly<Record<string, unknown>>> {
+  throwIfAborted(signal);
+  const employeeId =
+    stringField(input, "employeeId") ??
+    entityIdByType(context, ["employee", "employees"]);
+  if (!employeeId) {
+    return needsInputResult(
+      "generate_employee_id_card",
+      ["employeeId"],
+      "Provide employeeId or select an employee in context.",
+    );
+  }
+
+  const actor = buildTeamActor(context);
+  const card = await teamService.getIdCard(employeeId, actor);
+  throwIfAborted(signal);
+  return {
+    kind: "employee_id_card",
+    employeeId: card.employee.id,
+    employeeCode: card.employee.employeeCode,
+    qrPayload: card.qrPayload,
+    frontHtmlLength: card.frontHtml?.length ?? 0,
+    backHtmlLength: card.backHtml?.length ?? 0,
+    frontHtml: card.frontHtml ?? null,
+    backHtml: card.backHtml ?? null,
+  };
+}
+
+async function runListEmployeesOnLeave(
+  context: AiToolExecutionContext,
+  input: Readonly<Record<string, unknown>> | undefined,
+  signal: AbortSignal,
+): Promise<Readonly<Record<string, unknown>>> {
+  throwIfAborted(signal);
+  const actor = buildTeamActor(context);
+  const today = new Date().toISOString().slice(0, 10);
+  const [employees, approvedLeaves] = await Promise.all([
+    teamService.listEmployees(
+      {
+        search: stringField(input, "search") ?? "",
+        status: "ON_LEAVE",
+        page: 1,
+        limit: Math.min(numberField(input, "limit") ?? 50, 100),
+      },
+      actor,
+    ),
+    teamService.listLeaves(
+      {
+        status: "APPROVED",
+        from: stringField(input, "from") ?? today,
+        to: stringField(input, "to") ?? today,
+        page: 1,
+        limit: Math.min(numberField(input, "limit") ?? 50, 100),
+      },
+      actor,
+    ),
+  ]);
+  throwIfAborted(signal);
+  return {
+    kind: "employees_on_leave",
+    onLeaveStatusCount: employees.pagination.total,
+    approvedLeaveRequestsToday: approvedLeaves.pagination.total,
+    employees: employees.items.map((employee) => ({
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      name: employee.user
+        ? `${employee.user.firstName} ${employee.user.lastName}`.trim()
+        : employee.employeeCode,
+      department: employee.department?.name ?? null,
+      status: employee.status,
+    })),
+    leaveRequests: approvedLeaves.items.map((leave) => ({
+      id: leave.id,
+      employeeId: leave.employeeId,
+      type: leave.type,
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      days: leave.days,
+    })),
+  };
+}
+
+async function runListMissingAttendance(
+  context: AiToolExecutionContext,
+  input: Readonly<Record<string, unknown>> | undefined,
+  signal: AbortSignal,
+): Promise<Readonly<Record<string, unknown>>> {
+  throwIfAborted(signal);
+  const actor = buildTeamActor(context);
+  const date = stringField(input, "date") ?? new Date().toISOString().slice(0, 10);
+  const limit = Math.min(numberField(input, "limit") ?? 100, 200);
+  const [employees, attendance] = await Promise.all([
+    teamService.listEmployees(
+      { search: "", status: "ACTIVE", page: 1, limit },
+      actor,
+    ),
+    teamService.listAttendance({ from: date, to: date, page: 1, limit }, actor),
+  ]);
+
+  const presentStatuses = new Set(["PRESENT", "LATE", "REMOTE", "HALF_DAY"]);
+  const accountedEmployeeIds = new Set(
+    attendance.items
+      .filter((record) => presentStatuses.has(record.status))
+      .map((record) => record.employeeId),
+  );
+  const missing = employees.items.filter(
+    (employee) => !accountedEmployeeIds.has(employee.id),
+  );
+
+  throwIfAborted(signal);
+  return {
+    kind: "missing_attendance",
+    date,
+    activeEmployees: employees.pagination.total,
+    missingCount: missing.length,
+    employees: missing.map((employee) => ({
+      id: employee.id,
+      employeeCode: employee.employeeCode,
+      name: employee.user
+        ? `${employee.user.firstName} ${employee.user.lastName}`.trim()
+        : employee.employeeCode,
+      department: employee.department?.name ?? null,
+    })),
+    absentRecords: attendance.items
+      .filter((record) => record.status === "ABSENT")
+      .map((record) => ({
+        employeeId: record.employeeId,
+        date: record.date,
+        status: record.status,
+      })),
+  };
+}
+
 type RealRunner = (
   context: AiToolExecutionContext,
   input: Readonly<Record<string, unknown>> | undefined,
@@ -389,6 +719,12 @@ const REAL_RUNNERS: Readonly<Record<string, RealRunner>> = {
   analyze_project: runAnalyzeProject,
   analyze_report: runAnalyzeReport,
   lookup_client: runLookupClient,
+  hire_employee: runHireEmployee,
+  transfer_employee: runTransferEmployee,
+  list_team_directory: runListTeamDirectory,
+  generate_employee_id_card: runGenerateEmployeeIdCard,
+  list_employees_on_leave: runListEmployeesOnLeave,
+  list_missing_attendance: runListMissingAttendance,
 };
 
 /**

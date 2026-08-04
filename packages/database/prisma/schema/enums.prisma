@@ -267,6 +267,81 @@ enum EmployeeStatus {
   @@map("employee_status")
 }
 
+/// Employee gender for HR records.
+enum EmployeeGender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+
+  @@map("employee_gender")
+}
+
+/// Employment contract type.
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+  TEMPORARY
+
+  @@map("employment_type")
+}
+
+/// Marital status for HR records.
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+  PREFER_NOT_TO_SAY
+
+  @@map("marital_status")
+}
+
+/// Employee lifecycle stage in the HRMS.
+enum EmployeeLifecycleStage {
+  HIRING
+  ONBOARDING
+  ACTIVE
+  PROBATION
+  TRANSFERRED
+  PROMOTED
+  EXITING
+  EXITED
+
+  @@map("employee_lifecycle_stage")
+}
+
+/// Categorized HR document types.
+enum EmployeeDocumentType {
+  CV
+  CONTRACT
+  OFFER_LETTER
+  CNIC
+  PASSPORT
+  CERTIFICATE
+  DEGREE
+  EXPERIENCE_LETTER
+  NDA
+  MEDICAL
+  POLICY
+  OTHER
+
+  @@map("employee_document_type")
+}
+
+/// Work shift classification.
+enum WorkShift {
+  MORNING
+  EVENING
+  NIGHT
+  FLEXIBLE
+  REMOTE
+
+  @@map("work_shift")
+}
+
 /// Daily attendance classification.
 enum AttendanceStatus {
   PRESENT
@@ -311,6 +386,35 @@ enum PerformanceRating {
   EXCELLENT
 
   @@map("performance_rating")
+}
+
+/// Origin of a performance score / review.
+enum PerformanceScoreSource {
+  MANUAL
+  AUTO
+  HYBRID
+
+  @@map("performance_score_source")
+}
+
+/// Monthly AI review workflow status.
+enum PerformanceMonthlyReportStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ADJUSTED
+
+  @@map("performance_monthly_report_status")
+}
+
+/// AI performance report period granularity.
+enum PerformanceReportPeriod {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+
+  @@map("performance_report_period")
 }
 
 /// Employee goal progress.

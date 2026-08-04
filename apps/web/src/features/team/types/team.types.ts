@@ -1,13 +1,19 @@
 import type {
   AttendanceStatusValue,
+  DocumentTypeValue,
+  EmployeeGenderValue,
   EmployeeStatusValue,
+  EmploymentTypeValue,
   GoalStatusValue,
   LeaveRequestStatusValue,
   LeaveTypeValue,
+  LifecycleStageValue,
   ListAttendanceQueryInput,
   ListEmployeesQueryInput,
   ListLeavesQueryInput,
+  MaritalStatusValue,
   PerformanceRatingValue,
+  WorkShiftValue,
 } from "@enterprise/shared";
 
 export const TEAM_QUERY_KEYS = {
@@ -19,6 +25,10 @@ export const TEAM_QUERY_KEYS = {
     [...TEAM_QUERY_KEYS.employees(), query] as const,
   employeeDetail: (id: string) =>
     [...TEAM_QUERY_KEYS.employees(), "detail", id] as const,
+  documents: (employeeId: string) =>
+    [...TEAM_QUERY_KEYS.employees(), "documents", employeeId] as const,
+  timeline: (employeeId: string) =>
+    [...TEAM_QUERY_KEYS.employees(), "timeline", employeeId] as const,
   teams: () => [...TEAM_QUERY_KEYS.all, "teams"] as const,
   attendance: () => [...TEAM_QUERY_KEYS.all, "attendance"] as const,
   attendanceList: (query: ListAttendanceQueryInput) =>
@@ -29,6 +39,12 @@ export const TEAM_QUERY_KEYS = {
   performance: () => [...TEAM_QUERY_KEYS.all, "performance"] as const,
   performanceList: (query: ListPerformanceQueryInput) =>
     [...TEAM_QUERY_KEYS.performance(), query] as const,
+  performanceDashboard: () =>
+    [...TEAM_QUERY_KEYS.performance(), "dashboard"] as const,
+  performanceConfig: () =>
+    [...TEAM_QUERY_KEYS.performance(), "config"] as const,
+  performanceMonthly: () =>
+    [...TEAM_QUERY_KEYS.performance(), "monthly"] as const,
   goals: () => [...TEAM_QUERY_KEYS.all, "goals"] as const,
   goalList: (query: ListGoalsQueryInput) =>
     [...TEAM_QUERY_KEYS.goals(), query] as const,
@@ -47,6 +63,21 @@ export const EMPLOYEE_STATUS_LABELS: Record<EmployeeStatusValue, string> = {
   INACTIVE: "Inactive",
   ON_LEAVE: "On leave",
   TERMINATED: "Terminated",
+};
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentTypeValue, string> = {
+  FULL_TIME: "Full time",
+  PART_TIME: "Part time",
+  CONTRACT: "Contract",
+  INTERN: "Intern",
+  TEMPORARY: "Temporary",
+};
+
+export const EMPLOYEE_GENDER_LABELS: Record<EmployeeGenderValue, string> = {
+  MALE: "Male",
+  FEMALE: "Female",
+  OTHER: "Other",
+  PREFER_NOT_TO_SAY: "Prefer not to say",
 };
 
 export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatusValue, string> = {
@@ -90,6 +121,48 @@ export const GOAL_STATUS_LABELS: Record<GoalStatusValue, string> = {
   CANCELLED: "Cancelled",
 };
 
+export const MARITAL_STATUS_LABELS: Record<MaritalStatusValue, string> = {
+  SINGLE: "Single",
+  MARRIED: "Married",
+  DIVORCED: "Divorced",
+  WIDOWED: "Widowed",
+  PREFER_NOT_TO_SAY: "Prefer not to say",
+};
+
+export const LIFECYCLE_STAGE_LABELS: Record<LifecycleStageValue, string> = {
+  HIRING: "Hiring",
+  ONBOARDING: "Onboarding",
+  ACTIVE: "Active",
+  PROBATION: "Probation",
+  TRANSFERRED: "Transferred",
+  PROMOTED: "Promoted",
+  EXITING: "Exiting",
+  EXITED: "Exited",
+};
+
+export const WORK_SHIFT_LABELS: Record<WorkShiftValue, string> = {
+  MORNING: "Morning",
+  EVENING: "Evening",
+  NIGHT: "Night",
+  FLEXIBLE: "Flexible",
+  REMOTE: "Remote",
+};
+
+export const DOCUMENT_TYPE_LABELS: Record<DocumentTypeValue, string> = {
+  CV: "CV",
+  CONTRACT: "Contract",
+  OFFER_LETTER: "Offer letter",
+  CNIC: "CNIC / National ID",
+  PASSPORT: "Passport",
+  CERTIFICATE: "Certificate",
+  DEGREE: "Degree",
+  EXPERIENCE_LETTER: "Experience letter",
+  NDA: "NDA",
+  MEDICAL: "Medical",
+  POLICY: "Policy",
+  OTHER: "Other",
+};
+
 export function formatEmployeeName(
   employee: {
     user?: { firstName: string; lastName: string };
@@ -101,6 +174,21 @@ export function formatEmployeeName(
     return `${employee.user.firstName} ${employee.user.lastName}`.trim();
   }
   return employee.employeeCode ?? "Employee";
+}
+
+export function formatCreatedBy(
+  createdBy?: {
+    firstName: string;
+    lastName: string;
+    roleName?: string;
+    roleCode?: string;
+  } | null,
+): string {
+  if (!createdBy) return "System";
+  if (createdBy.roleCode === "SUPER_ADMIN") return "Super Admin";
+  const name = `${createdBy.firstName} ${createdBy.lastName}`.trim();
+  const role = createdBy.roleName ?? createdBy.roleCode;
+  return role ? `${name} (${role})` : name;
 }
 
 export function formatDate(value: string | null | undefined): string {

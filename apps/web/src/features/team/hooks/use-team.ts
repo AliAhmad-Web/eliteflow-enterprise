@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type {
   ListAttendanceQueryInput,
   ListEmployeesQueryInput,
@@ -32,6 +32,7 @@ export function useEmployees(query: ListEmployeesQueryInput) {
   return useQuery({
     queryKey: TEAM_QUERY_KEYS.employeeList(query),
     queryFn: () => teamService.listEmployees(query),
+    placeholderData: keepPreviousData,
   });
 }
 

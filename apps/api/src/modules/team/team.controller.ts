@@ -1,17 +1,23 @@
 import type { Request, Response } from "express";
 
 import type {
+  AssignDepartmentEmployeesInput,
   CheckInInput,
   CheckOutInput,
+  CreateAdminInput,
   CreateDepartmentInput,
+  CreateEmployeeDocumentInput,
   CreateEmployeeGoalInput,
   CreateEmployeeProfileInput,
   CreateLeaveRequestInput,
   CreatePerformanceReviewInput,
+  CreatePromotionInput,
   CreateTeamInput,
+  CreateTransferInput,
   DepartmentIdParamsInput,
   EmployeeIdParamsInput,
   GoalIdParamsInput,
+  HireEmployeeInput,
   LeaveIdParamsInput,
   ListAttendanceQueryInput,
   ListEmployeesQueryInput,
@@ -20,11 +26,15 @@ import type {
   ReviewLeaveInput,
   TeamIdParamsInput,
   TeamMembersInput,
+  TransferTeamMemberInput,
   UpdateDepartmentInput,
   UpdateEmployeeGoalInput,
   UpdateEmployeeProfileInput,
   UpdatePerformanceReviewInput,
   UpdateTeamInput,
+  ApproveMonthlyReportInput,
+  RecalculatePerformanceInput,
+  UpdatePerformanceScoringConfigInput,
 } from "@enterprise/shared";
 
 import { successResponse } from "../../shared/utils/api-response.js";
@@ -86,6 +96,16 @@ export class TeamController {
     res.json(successResponse(result, "Department deleted"));
   }
 
+  async assignDepartmentEmployees(req: Request, res: Response) {
+    const params = req.params as unknown as DepartmentIdParamsInput;
+    const result = await teamService.assignDepartmentEmployees(
+      params.id,
+      req.body as AssignDepartmentEmployeesInput,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Employees assigned to department"));
+  }
+
   async listEmployees(req: Request, res: Response) {
     const result = await teamService.listEmployees(
       req.query as unknown as ListEmployeesQueryInput,
@@ -108,6 +128,22 @@ export class TeamController {
     res.status(201).json(successResponse(result, "Employee created"));
   }
 
+  async hireEmployee(req: Request, res: Response) {
+    const result = await teamService.hireEmployee(
+      req.body as HireEmployeeInput,
+      getActor(req),
+    );
+    res.status(201).json(successResponse(result, "Employee hired"));
+  }
+
+  async createAdmin(req: Request, res: Response) {
+    const result = await teamService.createAdmin(
+      req.body as CreateAdminInput,
+      getActor(req),
+    );
+    res.status(201).json(successResponse(result, "Admin created"));
+  }
+
   async updateEmployee(req: Request, res: Response) {
     const params = req.params as unknown as EmployeeIdParamsInput;
     const result = await teamService.updateEmployee(
@@ -122,6 +158,16 @@ export class TeamController {
     const params = req.params as unknown as EmployeeIdParamsInput;
     const result = await teamService.deleteEmployee(params.id, getActor(req));
     res.json(successResponse(result, "Employee deleted"));
+  }
+
+  async resetEmployeeCredentials(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.resetEmployeeCredentials(
+      params.id,
+      req.body as { sendEmail?: boolean },
+      getActor(req),
+    );
+    res.json(successResponse(result, "Credentials reset"));
   }
 
   async listTeams(req: Request, res: Response) {
@@ -171,6 +217,16 @@ export class TeamController {
       getActor(req),
     );
     res.json(successResponse(result, "Member removed"));
+  }
+
+  async transferMember(req: Request, res: Response) {
+    const params = req.params as unknown as TeamIdParamsInput;
+    const result = await teamService.transferMember(
+      params.id,
+      req.body as TransferTeamMemberInput,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Member transferred"));
   }
 
   async listAttendance(req: Request, res: Response) {
@@ -246,6 +302,71 @@ export class TeamController {
     res.json(successResponse(result, "Performance review updated"));
   }
 
+  async getPerformanceDashboard(req: Request, res: Response) {
+    const result = await teamService.getPerformanceDashboard(getActor(req));
+    res.json(successResponse(result, "Performance dashboard retrieved"));
+  }
+
+  async getPerformanceConfig(req: Request, res: Response) {
+    const result = await teamService.getPerformanceConfig(getActor(req));
+    res.json(successResponse(result, "Performance scoring config retrieved"));
+  }
+
+  async updatePerformanceConfig(req: Request, res: Response) {
+    const result = await teamService.updatePerformanceConfig(
+      req.body as UpdatePerformanceScoringConfigInput,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Performance scoring config updated"));
+  }
+
+  async recalculatePerformance(req: Request, res: Response) {
+    const result = await teamService.recalculatePerformance(
+      req.body as RecalculatePerformanceInput,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Performance scores recalculated"));
+  }
+
+  async listPerformanceInsights(req: Request, res: Response) {
+    const employeeId =
+      typeof req.query.employeeId === "string" ? req.query.employeeId : undefined;
+    const result = await teamService.listPerformanceInsights(
+      getActor(req),
+      employeeId,
+    );
+    res.json(successResponse({ items: result }, "Performance insights retrieved"));
+  }
+
+  async listMonthlyPerformanceReports(req: Request, res: Response) {
+    const employeeId =
+      typeof req.query.employeeId === "string" ? req.query.employeeId : undefined;
+    const result = await teamService.listMonthlyPerformanceReports(
+      getActor(req),
+      employeeId,
+    );
+    res.json(successResponse(result, "Monthly performance reports retrieved"));
+  }
+
+  async generateMonthlyPerformanceReports(req: Request, res: Response) {
+    const result = await teamService.generateMonthlyPerformanceReports(
+      getActor(req),
+    );
+    res.status(201).json(
+      successResponse(result, "Monthly performance reports generated"),
+    );
+  }
+
+  async approveMonthlyPerformanceReport(req: Request, res: Response) {
+    const params = req.params as unknown as PerformanceIdParamsInput;
+    const result = await teamService.approveMonthlyPerformanceReport(
+      params.id,
+      req.body as ApproveMonthlyReportInput,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Monthly performance report approved"));
+  }
+
   async listGoals(req: Request, res: Response) {
     const result = await teamService.listGoals(getActor(req));
     res.json(successResponse(result, "Goals retrieved"));
@@ -273,6 +394,82 @@ export class TeamController {
     const params = req.params as unknown as GoalIdParamsInput;
     const result = await teamService.deleteGoal(params.id, getActor(req));
     res.json(successResponse(result, "Goal deleted"));
+  }
+
+  async listDocuments(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.listDocuments(params.id, getActor(req));
+    res.json(successResponse(result, "Documents retrieved"));
+  }
+
+  async addDocument(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.addDocument(
+      params.id,
+      req.body as CreateEmployeeDocumentInput,
+      getActor(req),
+    );
+    res.status(201).json(successResponse(result, "Document uploaded"));
+  }
+
+  async deleteDocument(req: Request, res: Response) {
+    const documentId = String(req.params.documentId ?? "");
+    const result = await teamService.deleteDocument(documentId, getActor(req));
+    res.json(successResponse(result, "Document deleted"));
+  }
+
+  async listTimeline(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.listTimeline(params.id, getActor(req));
+    res.json(successResponse(result, "Timeline retrieved"));
+  }
+
+  async listPromotions(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.listPromotions(params.id, getActor(req));
+    res.json(successResponse(result, "Promotions retrieved"));
+  }
+
+  async createPromotion(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.createPromotion(
+      params.id,
+      req.body as CreatePromotionInput,
+      getActor(req),
+    );
+    res.status(201).json(successResponse(result, "Promotion recorded"));
+  }
+
+  async listTransfers(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.listTransfers(params.id, getActor(req));
+    res.json(successResponse(result, "Transfers retrieved"));
+  }
+
+  async createHrTransfer(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.createHrTransfer(
+      params.id,
+      req.body as CreateTransferInput,
+      getActor(req),
+    );
+    res.status(201).json(successResponse(result, "Transfer recorded"));
+  }
+
+  async getIdCard(req: Request, res: Response) {
+    const params = req.params as unknown as EmployeeIdParamsInput;
+    const result = await teamService.getIdCard(params.id, getActor(req));
+    res.json(successResponse(result, "ID card generated"));
+  }
+
+  async exportDirectoryCsv(req: Request, res: Response) {
+    const result = await teamService.exportDirectoryCsv(getActor(req));
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.filename}"`,
+    );
+    res.send(result.csv);
   }
 }
 

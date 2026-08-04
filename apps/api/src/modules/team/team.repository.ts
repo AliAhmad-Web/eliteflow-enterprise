@@ -14,12 +14,15 @@ const userSelect = {
   lastName: true,
   email: true,
   avatarUrl: true,
+  role: { select: { code: true, name: true } },
 } as const;
 
 const employeeInclude = {
   user: { select: userSelect },
   department: true,
+  primaryTeam: { select: { id: true, name: true } },
   manager: { select: userSelect },
+  createdBy: { select: userSelect },
 } as const;
 
 export class TeamRepository {
@@ -28,7 +31,12 @@ export class TeamRepository {
       where: { deletedAt: null },
       include: {
         head: { select: userSelect },
-        _count: { select: { employees: { where: { deletedAt: null } } } },
+        _count: {
+          select: {
+            employees: { where: { deletedAt: null } },
+            teams: { where: { deletedAt: null } },
+          },
+        },
       },
       orderBy: { name: "asc" },
     });
@@ -39,7 +47,12 @@ export class TeamRepository {
       where: { id, deletedAt: null },
       include: {
         head: { select: userSelect },
-        _count: { select: { employees: { where: { deletedAt: null } } } },
+        _count: {
+          select: {
+            employees: { where: { deletedAt: null } },
+            teams: { where: { deletedAt: null } },
+          },
+        },
       },
     });
   }
@@ -62,7 +75,12 @@ export class TeamRepository {
       },
       include: {
         head: { select: userSelect },
-        _count: { select: { employees: true } },
+        _count: {
+          select: {
+            employees: true,
+            teams: true,
+          },
+        },
       },
     });
   }
@@ -104,12 +122,13 @@ export class TeamRepository {
     where: Prisma.EmployeeProfileWhereInput;
     skip: number;
     take: number;
+    orderBy?: Prisma.EmployeeProfileOrderByWithRelationInput;
   }) {
     const [items, total] = await Promise.all([
       prisma.employeeProfile.findMany({
         where: args.where,
         include: employeeInclude,
-        orderBy: { employeeCode: "asc" },
+        orderBy: args.orderBy ?? { employeeCode: "asc" },
         skip: args.skip,
         take: args.take,
       }),
@@ -159,6 +178,7 @@ export class TeamRepository {
       where: { deletedAt: null },
       include: {
         leader: { select: userSelect },
+        department: true,
         members: { include: { user: { select: userSelect } } },
         _count: { select: { members: true } },
       },
@@ -171,6 +191,7 @@ export class TeamRepository {
       where: { id, deletedAt: null },
       include: {
         leader: { select: userSelect },
+        department: true,
         members: { include: { user: { select: userSelect } } },
         _count: { select: { members: true } },
       },
@@ -498,6 +519,8 @@ export class TeamRepository {
     progress: number;
     status: GoalStatus;
     dueDate?: Date | null;
+    linkedTaskIds?: string[];
+    autoProgress?: boolean;
     createdById: string;
   }) {
     return prisma.employeeGoal.create({
@@ -510,6 +533,8 @@ export class TeamRepository {
         progress: data.progress,
         status: data.status,
         dueDate: data.dueDate ?? null,
+        linkedTaskIds: data.linkedTaskIds ?? [],
+        autoProgress: data.autoProgress ?? true,
         createdById: data.createdById,
         updatedById: data.createdById,
       },
@@ -558,6 +583,92 @@ export class TeamRepository {
     return prisma.performanceReview.aggregate({
       where: { deletedAt: null },
       _avg: { productivityScore: true },
+    });
+  }
+
+  async nextCode(prefix: "EMP" | "ADM", pad: number): Promise<string> {
+    const latest = await prisma.employeeProfile.findFirst({
+      where:
+        prefix === "ADM"
+          ? { adminCode: { startsWith: `${prefix}-` } }
+          : { employeeCode: { startsWith: `${prefix}-` } },
+      orderBy:
+        prefix === "ADM"
+          ? { adminCode: "desc" }
+          : { employeeCode: "desc" },
+      select: { employeeCode: true, adminCode: true },
+    });
+    const raw =
+      prefix === "ADM" ? latest?.adminCode ?? null : latest?.employeeCode ?? null;
+    let next = 1;
+    if (raw) {
+      const match = raw.match(/(\d+)$/);
+      if (match) next = Number(match[1]) + 1;
+    }
+    return `${prefix}-${String(next).padStart(pad, "0")}`;
+  }
+
+  findUserByEmail(email: string) {
+    return prisma.user.findFirst({
+      where: { email: email.toLowerCase().trim(), deletedAt: null },
+      select: { id: true, email: true },
+    });
+  }
+
+  findRoleByCode(code: string) {
+    return prisma.role.findUnique({ where: { code } });
+  }
+
+  assignEmployeesToDepartment(
+    departmentId: string,
+    employeeIds: string[],
+    updatedById: string,
+  ) {
+    return prisma.employeeProfile.updateMany({
+      where: { id: { in: employeeIds }, deletedAt: null },
+      data: { departmentId, updatedById },
+    });
+  }
+
+  transferTeamMember(input: {
+    fromTeamId: string;
+    toTeamId: string;
+    userId: string;
+    roleLabel?: string | null;
+  }) {
+    return prisma.$transaction(async (tx) => {
+      await tx.teamMember.deleteMany({
+        where: { teamId: input.fromTeamId, userId: input.userId },
+      });
+      await tx.teamMember.create({
+        data: {
+          teamId: input.toTeamId,
+          userId: input.userId,
+          roleLabel: input.roleLabel ?? null,
+        },
+      });
+      await tx.employeeProfile.updateMany({
+        where: { userId: input.userId, deletedAt: null },
+        data: { primaryTeamId: input.toTeamId },
+      });
+      return tx.team.findFirst({
+        where: { id: input.toTeamId, deletedAt: null },
+        include: {
+          leader: { select: userSelect },
+          department: true,
+          members: { include: { user: { select: userSelect } } },
+          _count: { select: { members: true } },
+        },
+      });
+    });
+  }
+
+  countAdmins() {
+    return prisma.user.count({
+      where: {
+        deletedAt: null,
+        role: { code: "ADMIN" },
+      },
     });
   }
 }

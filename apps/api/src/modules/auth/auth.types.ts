@@ -99,6 +99,9 @@ export function toSafeUser(user: SafeUserMapperInput): SafeUser {
     status: user.status,
     emailVerified: user.emailVerified,
     permissions: user.role.rolePermissions.map((rp) => rp.permission.key),
+    mustChangePassword: Boolean(
+      (user as { mustChangePassword?: boolean }).mustChangePassword,
+    ),
     createdAt: user.createdAt.toISOString(),
   };
 }

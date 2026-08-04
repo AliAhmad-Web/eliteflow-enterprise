@@ -56,6 +56,7 @@ export interface SafeUser {
   status: UserStatus;
   emailVerified: boolean;
   permissions: string[];
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 

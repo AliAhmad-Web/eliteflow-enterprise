@@ -26,6 +26,7 @@ import {
   toTaskCommentDto,
   toTaskDto,
 } from "./tasks.types.js";
+import { queuePerformanceRecalcForUser } from "../team/performance-recalc.queue.js";
 
 export interface TaskActor {
   userId: string;
@@ -132,6 +133,10 @@ export class TasksService {
         userAgent: actor.userAgent,
       });
 
+      if (updated.assignedToId) {
+        queuePerformanceRecalcForUser(updated.assignedToId);
+      }
+
       return toTaskDto(updated);
     }
 
@@ -176,6 +181,8 @@ export class TasksService {
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
       });
+
+      queuePerformanceRecalcForUser(actor.userId);
 
       return toTaskDto(updated);
     }
