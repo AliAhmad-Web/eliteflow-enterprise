@@ -61,11 +61,15 @@ import {
 import { useAiConversation, useAiConversations } from "../hooks/use-ai";
 import { AI_MODE_LABELS } from "../types/ai.types";
 import {
+  buildVoiceAcknowledgement,
+  detectVoiceDialogueLanguage,
   isVoiceSttReady,
   isVoiceTtsReady,
   speakBrowserText,
   startBrowserSpeechRecognition,
   stopBrowserSpeechSynthesis,
+  voiceLangToBcp47,
+  type VoiceDialogueLanguage,
 } from "../utils/speech-providers";
 import type { VoiceSessionPhase } from "../utils/voice-session";
 import {
@@ -150,16 +154,21 @@ export function AiAssistantPageContent() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const speechStopRef = useRef<(() => void) | null>(null);
+  const speechFinishRef = useRef<(() => void) | null>(null);
   const listeningTranscriptRef = useRef("");
+  const voiceLangRef = useRef<VoiceDialogueLanguage>("en");
+  const voiceTurnActiveRef = useRef(false);
   const ttsActiveRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
+  const autoListenAfterTurnRef = useRef(false);
 
   const { toasts, pushToast, dismiss } = useAiUiToasts();
 
   const stopSpeechListen = () => {
     speechStopRef.current?.();
     speechStopRef.current = null;
+    speechFinishRef.current = null;
   };
 
   const stopVoicePlayback = () => {
@@ -304,8 +313,8 @@ export function AiAssistantPageContent() {
     const message = (overrideMessage ?? draft).trim();
     if (!message || chatMutation.isPending) return;
 
-    const tempUserId = `temp-user-${Date.now()}`;
-    const tempAssistantId = `temp-assistant-${Date.now()}`;
+    const tempUserId = `temp-user-${crypto.randomUUID()}`;
+    const tempAssistantId = `temp-assistant-${crypto.randomUUID()}`;
     stoppedRef.current = false;
 
     const controller =
@@ -339,9 +348,11 @@ export function AiAssistantPageContent() {
     }
 
     setLastFailedMessage(null);
-    if (shortcuts) setStreamStatusText("Assistant is thinking");
-    if (showVoiceControls && voiceMode && voiceActions) {
-      setStreamStatusText("Voice turn → Action Framework");
+    if (showVoiceControls && voiceMode) {
+      setStreamStatusText("Thinking...");
+      setVoicePhase("thinking");
+    } else if (shortcuts) {
+      setStreamStatusText("Assistant is thinking");
     }
 
     try {
@@ -357,9 +368,11 @@ export function AiAssistantPageContent() {
           if (providerBadge || contextIndicators) {
             setProviderLabel(meta.provider);
           }
-          if (shortcuts) setStreamStatusText("Assistant is responding");
           if (showVoiceControls && voiceMode) {
+            setStreamStatusText("Thinking...");
             setVoicePhase(nextVoicePhaseOnStreamProgress(true));
+          } else if (shortcuts) {
+            setStreamStatusText("Assistant is responding");
           }
         },
         onDelta: (chunk) => {
@@ -374,47 +387,16 @@ export function AiAssistantPageContent() {
       });
       setSelectedId(result.conversation.id);
       setLocalMessages(result.conversation.messages ?? []);
-      if (shortcuts) setStreamStatusText("Response complete");
+      if (shortcuts && !(showVoiceControls && voiceMode)) {
+        setStreamStatusText("Response complete");
+      }
       if (showVoiceControls && voiceMode) {
-        const assistantReply = [...(result.conversation.messages ?? [])]
-          .reverse()
-          .find((item) => item.role === "ASSISTANT")
-          ?.content?.trim();
-
-        if (
-          textToSpeech &&
-          isVoiceTtsReady() &&
-          assistantReply &&
-          !stoppedRef.current
-        ) {
-          setVoicePhase("responding");
-          ttsActiveRef.current = true;
-          void speakBrowserText(assistantReply, {
-            onError: (msg) => {
-              if (feedbackToasts) pushToast(msg, "error");
-            },
-            onEnd: () => {
-              ttsActiveRef.current = false;
-              if (voiceAssistant) {
-                setVoicePhase("listening");
-                if (feedbackToasts) {
-                  pushToast("Ready for next voice turn", "info");
-                }
-              } else {
-                setVoicePhase(nextVoicePhaseOnIdle());
-              }
-            },
-          });
-        } else if (voiceAssistant) {
-          setVoicePhase("listening");
-          if (feedbackToasts) {
-            pushToast(
-              textToSpeech && !isVoiceTtsReady()
-                ? "Ready for next voice turn (TTS unavailable)"
-                : "Ready for next voice turn",
-              "info",
-            );
-          }
+        // Voice turns speak one acknowledgement only (before send).
+        // Do not TTS the generated business content or a second completion line.
+        voiceTurnActiveRef.current = false;
+        if (voiceAssistant && autoListenAfterTurnRef.current) {
+          autoListenAfterTurnRef.current = false;
+          startSilentListening();
         } else {
           setVoicePhase(nextVoicePhaseOnIdle());
         }
@@ -469,21 +451,64 @@ export function AiAssistantPageContent() {
   };
 
   const handleVoiceInterrupt = () => {
+    autoListenAfterTurnRef.current = false;
+    voiceTurnActiveRef.current = false;
     stopSpeechListen();
     stopVoicePlayback();
     handleStop();
     setVoicePhase(nextVoicePhaseOnInterrupt());
-    if (feedbackToasts) pushToast("Voice interrupted", "info");
   };
 
-  const handlePushToTalkStart = () => {
+  const processCompletedUtterance = async (spokenRaw: string) => {
+    const spoken = spokenRaw.trim();
+    if (!spoken) {
+      voiceTurnActiveRef.current = false;
+      setVoicePhase(nextVoicePhaseOnIdle());
+      return;
+    }
+
+    const lang = detectVoiceDialogueLanguage(spoken);
+    voiceLangRef.current = lang;
+    setDraft(spoken);
+    setVoicePhase("acknowledging");
+
+    if (textToSpeech && isVoiceTtsReady()) {
+      const acknowledgement = buildVoiceAcknowledgement(lang);
+      ttsActiveRef.current = true;
+      await speakBrowserText(acknowledgement, {
+        lang: voiceLangToBcp47(lang),
+        onEnd: () => {
+          ttsActiveRef.current = false;
+        },
+      });
+    }
+
+    if (stoppedRef.current) {
+      voiceTurnActiveRef.current = false;
+      setVoicePhase(nextVoicePhaseOnIdle());
+      return;
+    }
+
+    autoListenAfterTurnRef.current = voiceAssistant;
+    setVoicePhase("thinking");
+    if (shortcuts) setStreamStatusText("Thinking...");
+    await handleSend(spoken);
+  };
+
+  const startSilentListening = () => {
     if (!showVoiceControls || !voiceMode || chatMutation.isPending) return;
+    if (voiceTurnActiveRef.current && voicePhase === "listening") return;
+
+    // Silent listen — never greet or speak on mic press.
     stopVoicePlayback();
     stopSpeechListen();
     listeningTranscriptRef.current = "";
+    voiceTurnActiveRef.current = true;
     setVoicePhase("listening");
 
     if (!speechToText || !isVoiceSttReady()) {
+      voiceTurnActiveRef.current = false;
+      setVoicePhase(nextVoicePhaseOnIdle());
       if (feedbackToasts) {
         pushToast(
           speechToText
@@ -495,22 +520,42 @@ export function AiAssistantPageContent() {
       return;
     }
 
-    const session = startBrowserSpeechRecognition({
-      onInterim: (text) => {
-        listeningTranscriptRef.current = text;
-        setDraft(text);
+    const session = startBrowserSpeechRecognition(
+      {
+        onTranscript: (text) => {
+          listeningTranscriptRef.current = text;
+          setDraft(text);
+        },
+        onUtteranceComplete: (text) => {
+          speechStopRef.current = null;
+          speechFinishRef.current = null;
+          void processCompletedUtterance(text);
+        },
+        onNoSpeech: () => {
+          speechStopRef.current = null;
+          speechFinishRef.current = null;
+          voiceTurnActiveRef.current = false;
+          setVoicePhase(nextVoicePhaseOnIdle());
+          if (feedbackToasts) {
+            pushToast(
+              "No speech detected. Press the microphone when you are ready to speak.",
+              "info",
+            );
+          }
+        },
+        onError: (message) => {
+          speechStopRef.current = null;
+          speechFinishRef.current = null;
+          voiceTurnActiveRef.current = false;
+          if (feedbackToasts) pushToast(message, "error");
+          setVoicePhase(nextVoicePhaseOnIdle());
+        },
       },
-      onFinal: (text) => {
-        listeningTranscriptRef.current = text;
-        setDraft(text);
-      },
-      onError: (message) => {
-        if (feedbackToasts) pushToast(message, "error");
-        setVoicePhase(nextVoicePhaseOnIdle());
-      },
-    });
+      { silenceMs: 1800, maxWaitForSpeechMs: 60_000 },
+    );
 
     if (!session) {
+      voiceTurnActiveRef.current = false;
       if (feedbackToasts) {
         pushToast(
           "Could not start microphone / speech recognition. Check browser permissions.",
@@ -522,21 +567,30 @@ export function AiAssistantPageContent() {
     }
 
     speechStopRef.current = session.stop;
+    speechFinishRef.current = session.finish;
+  };
+
+  const handlePushToTalkStart = () => {
+    startSilentListening();
   };
 
   const handlePushToTalkEnd = () => {
     if (!showVoiceControls || !voiceMode) return;
+    // Manual stop / release — finalize current utterance (same as silence).
+    if (speechFinishRef.current) {
+      speechFinishRef.current();
+      speechFinishRef.current = null;
+      speechStopRef.current = null;
+      return;
+    }
     stopSpeechListen();
     const spoken = listeningTranscriptRef.current.trim() || draft.trim();
     if (spoken) {
-      setDraft(spoken);
-      void handleSend(spoken);
+      void processCompletedUtterance(spoken);
       return;
     }
+    voiceTurnActiveRef.current = false;
     setVoicePhase(nextVoicePhaseOnIdle());
-    if (feedbackToasts) {
-      pushToast("No speech captured — try again or type your message", "info");
-    }
   };
 
   const handleRetry = async () => {

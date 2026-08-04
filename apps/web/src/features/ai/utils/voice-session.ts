@@ -6,6 +6,8 @@
 export const VOICE_SESSION_PHASES = [
   "idle",
   "listening",
+  "thinking",
+  "acknowledging",
   "sending",
   "responding",
   "interrupted",
@@ -18,9 +20,13 @@ export function voiceStatusLabel(phase: VoiceSessionPhase): string {
     case "idle":
       return "Idle";
     case "listening":
-      return "Listening";
+      return "Listening...";
+    case "thinking":
+      return "Thinking...";
+    case "acknowledging":
+      return "Speaking";
     case "sending":
-      return "Sending";
+      return "Thinking...";
     case "responding":
       return "Speaking";
     case "interrupted":
@@ -35,13 +41,14 @@ export function voiceStatusLabel(phase: VoiceSessionPhase): string {
 export function nextVoicePhaseOnStreamStart(
   voiceMode: boolean,
 ): VoiceSessionPhase {
-  return voiceMode ? "sending" : "idle";
+  return voiceMode ? "thinking" : "idle";
 }
 
 export function nextVoicePhaseOnStreamProgress(
   voiceMode: boolean,
 ): VoiceSessionPhase {
-  return voiceMode ? "responding" : "idle";
+  // Stay on Thinking while the model streams — do not speak the full reply.
+  return voiceMode ? "thinking" : "idle";
 }
 
 export function nextVoicePhaseOnInterrupt(): VoiceSessionPhase {

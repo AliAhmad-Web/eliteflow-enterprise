@@ -61,7 +61,17 @@ export function AiComposer({
   voiceProviderWarning = null,
 }: AiComposerProps) {
   const listening = voicePhase === "listening";
-  const speaking = voicePhase === "responding" || isPending;
+  const thinking =
+    voicePhase === "thinking" || voicePhase === "sending" || isPending;
+  const speaking =
+    voicePhase === "responding" || voicePhase === "acknowledging";
+  const statusHighlight = listening
+    ? "listening"
+    : thinking
+      ? "thinking"
+      : speaking
+        ? "speaking"
+        : "idle";
 
   return (
     <div className="space-y-3 border-t border-border/60 bg-card/70 p-4 backdrop-blur-sm">
@@ -93,15 +103,21 @@ export function AiComposer({
               <span
                 className={cn(
                   "rounded-md border px-2 py-0.5 text-[11px]",
-                  listening
+                  statusHighlight === "listening"
                     ? "border-primary/40 bg-primary/10 text-primary"
-                    : speaking
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                      : "border-border/60 bg-background/70 text-muted-foreground",
+                    : statusHighlight === "thinking"
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                      : statusHighlight === "speaking"
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-border/60 bg-background/70 text-muted-foreground",
                 )}
                 role="status"
               >
-                {voiceStatusLabel(voicePhase)}
+                {listening
+                  ? "Listening..."
+                  : thinking
+                    ? "Thinking..."
+                    : voiceStatusLabel(voicePhase)}
               </span>
             ) : null}
             {voiceMode && voiceCommandsHint ? (
@@ -167,56 +183,30 @@ export function AiComposer({
             </Button>
           ) : null}
           {showVoiceControls && showSpeechUi && voiceMode ? (
-            <>
-              <Button
-                type="button"
-                variant={listening ? "default" : "outline"}
-                size="sm"
-                disabled={isPending}
-                aria-pressed={listening}
-                aria-label={listening ? "Stop recording" : "Start recording"}
-                onClick={() => {
-                  if (listening) {
-                    onPushToTalkEnd?.();
-                  } else {
-                    onPushToTalkStart?.();
-                  }
-                }}
-              >
-                <Mic className="h-4 w-4" aria-hidden="true" />
-                {listening ? "Stop recording" : "Start recording"}
-              </Button>
-              <Button
-                type="button"
-                variant={listening ? "default" : "outline"}
-                size="sm"
-                disabled={isPending}
-                aria-pressed={listening}
-                aria-label="Push to talk"
-                onMouseDown={(event) => {
-                  event.preventDefault();
+            <Button
+              type="button"
+              variant={listening ? "default" : "outline"}
+              size="sm"
+              disabled={isPending}
+              aria-pressed={listening}
+              aria-label={listening ? "Stop listening" : "Start listening"}
+              onClick={() => {
+                if (listening) {
+                  onPushToTalkEnd?.();
+                } else {
                   onPushToTalkStart?.();
-                }}
-                onMouseUp={() => onPushToTalkEnd?.()}
-                onMouseLeave={() => {
-                  if (listening) onPushToTalkEnd?.();
-                }}
-                onTouchStart={(event) => {
-                  event.preventDefault();
-                  onPushToTalkStart?.();
-                }}
-                onTouchEnd={() => onPushToTalkEnd?.()}
-              >
-                <Mic className="h-4 w-4" aria-hidden="true" />
-                {listening ? "Release" : "Hold to talk"}
-              </Button>
-            </>
+                }
+              }}
+            >
+              <Mic className="h-4 w-4" aria-hidden="true" />
+              {listening ? "Stop" : "Speak"}
+            </Button>
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {showVoiceControls &&
           voiceMode &&
-          (isPending || voicePhase === "responding" || listening) ? (
+          (thinking || speaking || listening) ? (
             <Button
               type="button"
               variant="outline"

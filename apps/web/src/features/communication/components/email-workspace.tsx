@@ -118,6 +118,14 @@ import {
   type SmartSendFinding,
 } from "../utils/email-ai-agent";
 import {
+  buildVoiceAcknowledgement,
+  detectVoiceDialogueLanguage,
+  speakBrowserText,
+  startBrowserSpeechRecognition,
+  stopBrowserSpeechSynthesis,
+  voiceLangToBcp47,
+} from "@/features/ai/utils/speech-providers";
+import {
   applyEmailSearch,
   createEmptyComposeDraft,
   DEFAULT_EMAIL_SEARCH_FILTERS,
@@ -280,8 +288,7 @@ function EmailWorkspaceInner() {
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognitionRef = useRef<{
     stop: () => void;
-    start: () => void;
-    abort?: () => void;
+    finish: () => void;
   } | null>(null);
 
   const employeesQuery = useEmployees({ page: 1, limit: 100, search: "" });
@@ -559,17 +566,21 @@ function EmailWorkspaceInner() {
     setPreviewMode(false);
     setAiIntent(null);
     setMobilePane("viewer");
-    const listeningMsg = buildVoiceAssistantMessage({ phase: "listening" });
-    setAssistantSpeech(listeningMsg);
+    // Do not speak or show Listening until the microphone is pressed.
+    setAssistantSpeech("");
   };
 
-  const applyAiIntentToDraft = (result: AiEmailIntentResult) => {
+  const applyAiIntentToDraft = (
+    result: AiEmailIntentResult,
+    options?: { speakPreview?: boolean },
+  ) => {
     setAskAiPrompt(result.originalPrompt);
     setDeliveryStatus(null);
 
     const speech = result.spokenPreview || result.assistantMessage;
     setAssistantSpeech(speech);
-    if (executiveVoiceSpeak || voiceEnabled) {
+    const shouldSpeakPreview = options?.speakPreview !== false;
+    if (shouldSpeakPreview && (executiveVoiceSpeak || voiceEnabled)) {
       speakAssistantMessage(speech);
     }
     setActionMessage(result.assistantMessage);
@@ -1050,97 +1061,89 @@ function EmailWorkspaceInner() {
     setActionMessage("Send cancelled — draft restored");
   };
 
-  const handleVoiceCommand = (transcript: string) => {
+  const handleVoiceCommand = async (transcript: string) => {
     if (!voiceEnabled && !aiEnabled) return;
+    const spoken = transcript.trim();
+    if (!spoken) return;
+
+    const lang = detectVoiceDialogueLanguage(spoken);
+    setVoiceTranscript(spoken);
+    setAssistantSpeech("Thinking...");
+    setActionMessage("Thinking...");
+
+    // One short acknowledgement only — never speak the generated email body.
+    if (executiveVoiceSpeak || voiceEnabled) {
+      const acknowledgement = buildVoiceAcknowledgement(lang);
+      setAssistantSpeech(acknowledgement);
+      await speakBrowserText(acknowledgement, {
+        lang: voiceLangToBcp47(lang),
+      });
+    }
+
     const result = composeAiEmailIntent({
-      prompt: transcript,
+      prompt: spoken,
       catalog: recipientCatalog,
       authorName: displayName,
       contactResolution,
       groupsEnabled,
     });
-    applyAiIntentToDraft(result);
-    setVoiceTranscript(transcript);
+    // Email draft stays professional English; do not TTS preview/body.
+    applyAiIntentToDraft(result, { speakPreview: false });
+    setAssistantSpeech("Your email is ready.");
+    setActionMessage(result.assistantMessage);
   };
 
   const toggleVoiceListen = () => {
     if (!voiceEnabled) return;
-    type SpeechResultRow = ArrayLike<{ transcript: string }> & {
-      isFinal?: boolean;
-    };
-    type SpeechRec = {
-      continuous: boolean;
-      interimResults: boolean;
-      lang: string;
-      onresult:
-        | ((ev: { results: ArrayLike<SpeechResultRow> }) => void)
-        | null;
-      onerror: (() => void) | null;
-      onend: (() => void) | null;
-      start: () => void;
-      stop: () => void;
-      abort?: () => void;
-    };
-    const SpeechRecognitionCtor =
-      typeof window !== "undefined"
-        ? (
-            window as unknown as {
-              SpeechRecognition?: new () => SpeechRec;
-              webkitSpeechRecognition?: new () => SpeechRec;
-            }
-          ).SpeechRecognition ??
-          (
-            window as unknown as {
-              webkitSpeechRecognition?: new () => SpeechRec;
-            }
-          ).webkitSpeechRecognition
-        : undefined;
 
-    if (!SpeechRecognitionCtor) {
+    if (voiceListening && recognitionRef.current) {
+      recognitionRef.current.finish();
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      return;
+    }
+
+    // Silent listen — no greeting / no TTS on mic press.
+    stopBrowserSpeechSynthesis();
+    setVoiceTranscript("");
+    setAssistantSpeech("Listening...");
+    setVoiceListening(true);
+    clearFeedback();
+
+    const session = startBrowserSpeechRecognition(
+      {
+        onTranscript: (text) => {
+          setVoiceTranscript(text);
+        },
+        onUtteranceComplete: (text) => {
+          recognitionRef.current = null;
+          setVoiceListening(false);
+          void handleVoiceCommand(text);
+        },
+        onNoSpeech: () => {
+          recognitionRef.current = null;
+          setVoiceListening(false);
+          setAssistantSpeech("");
+          setActionError(
+            "No speech detected. Press Voice when you are ready to speak.",
+          );
+        },
+        onError: () => {
+          recognitionRef.current = null;
+          setVoiceListening(false);
+          setActionError("Voice recognition failed");
+        },
+      },
+      { silenceMs: 1800, maxWaitForSpeechMs: 60_000 },
+    );
+
+    if (!session) {
+      setVoiceListening(false);
       setActionError("Speech recognition is not available in this browser.");
       return;
     }
 
-    if (voiceListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setVoiceListening(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang =
-      /[\u0600-\u06FF]/.test(askAiPrompt) ||
-      /\b(ko|bhej|kar do|tamam|sab|shukriya)\b/i.test(askAiPrompt)
-        ? "ur-PK"
-        : "en-US";
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((r) => r[0]?.transcript ?? "")
-        .join(" ")
-        .trim();
-      setVoiceTranscript(transcript);
-      const last = event.results[event.results.length - 1] as unknown as {
-        isFinal?: boolean;
-      };
-      if (last?.isFinal) {
-        handleVoiceCommand(transcript);
-        setVoiceListening(false);
-      }
-    };
-    recognition.onerror = () => {
-      setVoiceListening(false);
-      setActionError("Voice recognition failed");
-    };
-    recognition.onend = () => setVoiceListening(false);
-    recognitionRef.current = recognition;
-    recognition.start();
-    setVoiceListening(true);
-    const msg = buildVoiceAssistantMessage({ phase: "listening" });
-    setAssistantSpeech(msg);
-    speakAssistantMessage(msg);
-    clearFeedback();
+    recognitionRef.current = session;
   };
 
   const confirmAiSend = () => {

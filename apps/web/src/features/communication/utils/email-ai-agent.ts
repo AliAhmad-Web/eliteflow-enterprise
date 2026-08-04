@@ -1477,7 +1477,7 @@ export function buildVoiceAssistantMessage(input: {
 }): string {
   switch (input.phase) {
     case "listening":
-      return "I'm listening. Tell me who to email and what to say.";
+      return "Listening...";
     case "disambiguation":
       if (input.matchCount && input.matchName) {
         return `I found ${input.matchCount} users named ${input.matchName}. Which one should receive the email?`;
