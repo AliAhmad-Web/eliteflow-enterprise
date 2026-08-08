@@ -38,6 +38,9 @@ export const dashboardDensitySchema = z.enum(DASHBOARD_DENSITIES);
 export const appLanguageSchema = z.enum(APP_LANGUAGES);
 export const integrationProviderSchema = z.enum(INTEGRATION_PROVIDERS);
 
+const optionalNullableString = (max: number) =>
+  z.string().trim().max(max).nullable().optional();
+
 export const updateSettingsProfileSchema = z.object({
   firstName: firstNameSchema,
   lastName: lastNameSchema,
@@ -61,11 +64,72 @@ export const updateSettingsProfileSchema = z.object({
     .optional(),
   bio: z.string().trim().max(1000).nullable().optional(),
   designation: z.string().trim().max(120).nullable().optional(),
+  address: optionalNullableString(500),
+  city: optionalNullableString(120),
+  country: optionalNullableString(120),
+  dateOfBirth: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be YYYY-MM-DD")
+    .nullable()
+    .optional(),
+  personalEmail: z
+    .string()
+    .trim()
+    .email("Invalid personal email")
+    .max(320)
+    .nullable()
+    .optional(),
+  workLocation: optionalNullableString(120),
 });
 
 export type UpdateSettingsProfileInput = z.infer<
   typeof updateSettingsProfileSchema
 >;
+
+export const PROFILE_DOCUMENT_TYPES = [
+  "CNIC",
+  "PASSPORT",
+  "CV",
+  "CERTIFICATE",
+  "DEGREE",
+  "CONTRACT",
+  "OTHER",
+] as const;
+
+export const profileDocumentTypeSchema = z.enum(PROFILE_DOCUMENT_TYPES);
+export type ProfileDocumentType = z.infer<typeof profileDocumentTypeSchema>;
+
+export const profileDocumentIdParamsSchema = z.object({
+  id: uuidSchema,
+});
+export type ProfileDocumentIdParamsInput = z.infer<
+  typeof profileDocumentIdParamsSchema
+>;
+
+export const createProfileDocumentMetaSchema = z.object({
+  type: profileDocumentTypeSchema.default("OTHER"),
+  title: z.string().trim().min(1).max(200).optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+export type CreateProfileDocumentMetaInput = z.infer<
+  typeof createProfileDocumentMetaSchema
+>;
+
+export const profileDocumentDtoSchema = z.object({
+  id: z.string().uuid(),
+  type: profileDocumentTypeSchema,
+  title: z.string(),
+  fileName: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  fileSize: z.number().nullable(),
+  fileUrl: z.string(),
+  managedFileId: z.string().uuid(),
+  notes: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProfileDocumentDto = z.infer<typeof profileDocumentDtoSchema>;
 
 export const requestAccountDeletionSchema = z.object({
   reason: z.string().trim().max(500).optional(),
@@ -231,6 +295,20 @@ export const settingsProfileDtoSchema = z.object({
   bio: z.string().nullable(),
   designation: z.string().nullable(),
   department: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  dateOfBirth: z.string().nullable().optional(),
+  personalEmail: z.string().nullable().optional(),
+  workLocation: z.string().nullable().optional(),
+  employeeProfileId: z.string().uuid().nullable().optional(),
+  role: z
+    .object({
+      id: z.string().uuid(),
+      code: z.string(),
+      name: z.string(),
+    })
+    .optional(),
   twoFactorEnabled: z.boolean(),
   lastLoginAt: z.string().nullable(),
   emailVerified: z.boolean(),

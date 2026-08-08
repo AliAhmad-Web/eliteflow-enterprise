@@ -18,6 +18,7 @@ export const settingsRepository = {
     return prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
       include: {
+        role: { select: { id: true, code: true, name: true } },
         employeeProfile: {
           include: { department: { select: { name: true } } },
         },
@@ -46,6 +47,10 @@ export const settingsRepository = {
       phone?: string | null;
       bio?: string | null;
       designation?: string | null;
+      address?: string | null;
+      city?: string | null;
+      country?: string | null;
+      dateOfBirth?: Date | null;
     },
   ) {
     return prisma.user.update({
@@ -59,12 +64,133 @@ export const settingsRepository = {
         bio: data.bio === undefined ? undefined : data.bio,
         designation:
           data.designation === undefined ? undefined : data.designation,
+        address: data.address === undefined ? undefined : data.address,
+        city: data.city === undefined ? undefined : data.city,
+        country: data.country === undefined ? undefined : data.country,
+        dateOfBirth:
+          data.dateOfBirth === undefined ? undefined : data.dateOfBirth,
       },
       include: {
+        role: { select: { id: true, code: true, name: true } },
         employeeProfile: {
           include: { department: { select: { name: true } } },
         },
       },
+    });
+  },
+
+  async syncEmployeePersonalFields(
+    userId: string,
+    data: {
+      phone?: string | null;
+      designation?: string | null;
+      address?: string | null;
+      city?: string | null;
+      country?: string | null;
+      dateOfBirth?: Date | null;
+      personalEmail?: string | null;
+      workLocation?: string | null;
+      photoUrl?: string | null;
+    },
+  ) {
+    const profile = await prisma.employeeProfile.findFirst({
+      where: { userId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!profile) return null;
+
+    return prisma.employeeProfile.update({
+      where: { id: profile.id },
+      data: {
+        ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        ...(data.designation !== undefined
+          ? { designation: data.designation }
+          : {}),
+        ...(data.address !== undefined ? { address: data.address } : {}),
+        ...(data.city !== undefined ? { city: data.city } : {}),
+        ...(data.country !== undefined ? { country: data.country } : {}),
+        ...(data.dateOfBirth !== undefined
+          ? { dateOfBirth: data.dateOfBirth }
+          : {}),
+        ...(data.personalEmail !== undefined
+          ? { personalEmail: data.personalEmail }
+          : {}),
+        ...(data.workLocation !== undefined
+          ? { workLocation: data.workLocation }
+          : {}),
+        ...(data.photoUrl !== undefined ? { photoUrl: data.photoUrl } : {}),
+        updatedById: userId,
+      },
+    });
+  },
+
+  async listProfileManagedFiles(userId: string, tag: string) {
+    return prisma.managedFile.findMany({
+      where: {
+        createdById: userId,
+        deletedAt: null,
+        tags: { has: tag },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+
+  async findOwnedManagedFile(userId: string, fileId: string) {
+    return prisma.managedFile.findFirst({
+      where: {
+        id: fileId,
+        createdById: userId,
+        deletedAt: null,
+      },
+    });
+  },
+
+  async softDeleteManagedFile(fileId: string, userId: string) {
+    return prisma.managedFile.update({
+      where: { id: fileId },
+      data: { deletedAt: new Date(), updatedById: userId },
+    });
+  },
+
+  async createEmployeeDocumentForSelf(input: {
+    employeeId: string;
+    type: string;
+    title: string;
+    fileUrl: string;
+    fileName: string | null;
+    mimeType: string | null;
+    fileSize: number | null;
+    notes: string | null;
+    uploadedById: string;
+  }) {
+    return prisma.employeeDocument.create({
+      data: {
+        employeeId: input.employeeId,
+        type: input.type as never,
+        title: input.title,
+        fileUrl: input.fileUrl,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        fileSize: input.fileSize,
+        notes: input.notes,
+        uploadedById: input.uploadedById,
+      },
+    });
+  },
+
+  async softDeleteEmployeeDocumentByFileUrl(fileUrl: string, userId: string) {
+    const docs = await prisma.employeeDocument.findMany({
+      where: {
+        fileUrl,
+        deletedAt: null,
+        employee: { userId, deletedAt: null },
+      },
+      select: { id: true },
+    });
+    if (!docs.length) return;
+    await prisma.employeeDocument.updateMany({
+      where: { id: { in: docs.map((d) => d.id) } },
+      data: { deletedAt: new Date() },
     });
   },
 

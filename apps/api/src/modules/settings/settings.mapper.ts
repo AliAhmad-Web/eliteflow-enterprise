@@ -24,17 +24,34 @@ export function toSettingsProfileDto(user: {
   phone: string | null;
   bio: string | null;
   designation: string | null;
+  address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  dateOfBirth?: Date | null;
   twoFactorEnabled: boolean;
   lastLoginAt: Date | null;
   emailVerified: boolean;
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  role?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
   employeeProfile?: {
+    id?: string;
     designation?: string | null;
+    address?: string | null;
+    city?: string | null;
+    country?: string | null;
+    dateOfBirth?: Date | null;
+    personalEmail?: string | null;
+    workLocation?: string | null;
     department?: { name: string } | null;
   } | null;
 }): SettingsProfileDto {
+  const employee = user.employeeProfile;
   return {
     id: user.id,
     email: user.email,
@@ -44,8 +61,24 @@ export function toSettingsProfileDto(user: {
     avatarUrl: user.avatarUrl,
     phone: user.phone,
     bio: user.bio,
-    designation: user.designation ?? user.employeeProfile?.designation ?? null,
-    department: user.employeeProfile?.department?.name ?? null,
+    designation: user.designation ?? employee?.designation ?? null,
+    department: employee?.department?.name ?? null,
+    address: user.address ?? employee?.address ?? null,
+    city: user.city ?? employee?.city ?? null,
+    country: user.country ?? employee?.country ?? null,
+    dateOfBirth:
+      (user.dateOfBirth ?? employee?.dateOfBirth)?.toISOString().slice(0, 10) ??
+      null,
+    personalEmail: employee?.personalEmail ?? null,
+    workLocation: employee?.workLocation ?? null,
+    employeeProfileId: employee?.id ?? null,
+    role: user.role
+      ? {
+          id: user.role.id,
+          code: user.role.code,
+          name: user.role.name,
+        }
+      : undefined,
     twoFactorEnabled: user.twoFactorEnabled,
     lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
     emailVerified: user.emailVerified,
@@ -288,7 +321,7 @@ export function toBillingDto(
     history: [
       {
         id: "inv_demo_001",
-        description: `${row.planName} plan ù current period`,
+        description: `${row.planName} plan ÔøΩ current period`,
         amount: 99,
         currency: "USD",
         status: "paid",

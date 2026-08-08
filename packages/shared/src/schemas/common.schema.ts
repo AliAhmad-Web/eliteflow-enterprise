@@ -71,11 +71,24 @@ export const tokenSchema = z
   .min(1, "Token is required")
   .max(512, "Token is invalid");
 
+/** Absolute HTTPS URL or internal File Manager download/preview path. */
 export const avatarUrlSchema = z
   .string()
   .trim()
-  .url("Please enter a valid URL")
   .max(2048, "Avatar URL must not exceed 2048 characters")
+  .refine(
+    (value) => {
+      if (!value) return true;
+      if (value.startsWith("/api/v1/files/")) return true;
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "Please enter a valid URL or File Manager path" },
+  )
   .nullable()
   .optional();
 

@@ -3,6 +3,8 @@ import type { Request, Response } from "express";
 import type {
   CreateBackupInput,
   CreateIntegrationCredentialInput,
+  CreateProfileDocumentMetaInput,
+  ProfileDocumentIdParamsInput,
   RequestAccountDeletionInput,
   UpdateAiSettingsInput,
   UpdateAppearanceSettingsInput,
@@ -16,6 +18,11 @@ import type {
 } from "@enterprise/shared";
 
 import { successResponse } from "../../shared/utils/api-response.js";
+import {
+  applyFileDeliveryHeaders,
+  resolveFileDeliveryHeaders,
+} from "../files/files.preview-security.js";
+import { cleanupRequestTempUploads } from "../files/files.upload-middleware.js";
 import { SETTINGS_ERROR_CODES, SettingsError } from "./settings.errors.js";
 import { settingsService } from "./settings.service.js";
 import type { SettingsActor, SettingsRequestContext } from "./settings.types.js";
@@ -45,6 +52,15 @@ function getContext(req: Request): SettingsRequestContext {
   };
 }
 
+function mapUploadFile(file: Express.Multer.File) {
+  return {
+    originalname: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size,
+    tempPath: file.path,
+  };
+}
+
 export class SettingsController {
   async overview(req: Request, res: Response) {
     const result = await settingsService.getOverview(getActor(req));
@@ -58,6 +74,102 @@ export class SettingsController {
       getContext(req),
     );
     res.json(successResponse(result, result.message));
+  }
+
+  async uploadAvatar(req: Request, res: Response) {
+    try {
+      const uploaded = req.files as Express.Multer.File[] | undefined;
+      const file = uploaded?.[0];
+      if (!file) {
+        throw new SettingsError(
+          "Profile picture file is required",
+          400,
+          SETTINGS_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      const result = await settingsService.uploadAvatar(
+        mapUploadFile(file),
+        getActor(req),
+        getContext(req),
+      );
+      res.json(successResponse(result, result.message));
+    } finally {
+      await cleanupRequestTempUploads(req);
+    }
+  }
+
+  async removeAvatar(req: Request, res: Response) {
+    const result = await settingsService.removeAvatar(
+      getActor(req),
+      getContext(req),
+    );
+    res.json(successResponse(result, result.message));
+  }
+
+  async listProfileDocuments(req: Request, res: Response) {
+    const result = await settingsService.listProfileDocuments(getActor(req));
+    res.json(successResponse(result, "Profile documents retrieved"));
+  }
+
+  async uploadProfileDocument(req: Request, res: Response) {
+    try {
+      const uploaded = req.files as Express.Multer.File[] | undefined;
+      const file = uploaded?.[0];
+      if (!file) {
+        throw new SettingsError(
+          "Document file is required",
+          400,
+          SETTINGS_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      const meta: CreateProfileDocumentMetaInput = {
+        type: (typeof req.body?.type === "string"
+          ? req.body.type
+          : "OTHER") as CreateProfileDocumentMetaInput["type"],
+        title:
+          typeof req.body?.title === "string" ? req.body.title : undefined,
+        notes:
+          typeof req.body?.notes === "string" ? req.body.notes : undefined,
+      };
+
+      const result = await settingsService.uploadProfileDocument(
+        mapUploadFile(file),
+        meta,
+        getActor(req),
+        getContext(req),
+      );
+      res.status(201).json(successResponse(result, result.message));
+    } finally {
+      await cleanupRequestTempUploads(req);
+    }
+  }
+
+  async deleteProfileDocument(req: Request, res: Response) {
+    const params = req.params as unknown as ProfileDocumentIdParamsInput;
+    const result = await settingsService.deleteProfileDocument(
+      params.id,
+      getActor(req),
+      getContext(req),
+    );
+    res.json(successResponse(result, result.message));
+  }
+
+  async downloadProfileDocument(req: Request, res: Response) {
+    const params = req.params as unknown as ProfileDocumentIdParamsInput;
+    const result = await settingsService.downloadOwnedProfileFile(
+      params.id,
+      getActor(req),
+    );
+
+    const headers = resolveFileDeliveryHeaders({
+      mode: "download",
+      extension: result.file.extension,
+      fileName: result.file.originalName || result.file.name,
+    });
+    applyFileDeliveryHeaders(res, headers, result.sizeBytes);
+    result.stream.pipe(res);
   }
 
   async requestDeletion(req: Request, res: Response) {

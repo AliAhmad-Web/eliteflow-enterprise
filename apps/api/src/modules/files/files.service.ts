@@ -76,10 +76,13 @@ export class FilesService {
 
     if (isClient(actor)) {
       if (!actor.companyId) {
-        return { id: "__none__" };
+        return {
+          OR: [{ createdById: actor.userId }],
+        };
       }
       return {
         OR: [
+          { createdById: actor.userId },
           { clientId: actor.companyId },
           {
             shares: {

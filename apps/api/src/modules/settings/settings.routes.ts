@@ -12,11 +12,13 @@ import {
 } from "../../middleware/rate-limit.middleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { handleMultipartUpload } from "../files/files.upload-middleware.js";
 import { settingsController } from "./settings.controller.js";
 import {
   createBackupSchema,
   createIntegrationCredentialSchema,
   integrationCredentialIdParamsSchema,
+  profileDocumentIdParamsSchema,
   requestAccountDeletionSchema,
   updateAiSettingsSchema,
   updateAppearanceSettingsSchema,
@@ -56,6 +58,50 @@ settingsRouter.patch(
   writeLimit,
   validate(updateSettingsProfileSchema),
   asyncHandler((req, res) => settingsController.updateProfile(req, res)),
+);
+
+settingsRouter.post(
+  "/profile/avatar",
+  writeLimit,
+  handleMultipartUpload("file", 1),
+  asyncHandler((req, res) => settingsController.uploadAvatar(req, res)),
+);
+
+settingsRouter.delete(
+  "/profile/avatar",
+  writeLimit,
+  asyncHandler((req, res) => settingsController.removeAvatar(req, res)),
+);
+
+settingsRouter.get(
+  "/profile/documents",
+  readLimit,
+  asyncHandler((req, res) => settingsController.listProfileDocuments(req, res)),
+);
+
+settingsRouter.post(
+  "/profile/documents",
+  writeLimit,
+  handleMultipartUpload("file", 1),
+  asyncHandler((req, res) => settingsController.uploadProfileDocument(req, res)),
+);
+
+settingsRouter.get(
+  "/profile/documents/:id/download",
+  readLimit,
+  validate(profileDocumentIdParamsSchema, "params"),
+  asyncHandler((req, res) =>
+    settingsController.downloadProfileDocument(req, res),
+  ),
+);
+
+settingsRouter.delete(
+  "/profile/documents/:id",
+  writeLimit,
+  validate(profileDocumentIdParamsSchema, "params"),
+  asyncHandler((req, res) =>
+    settingsController.deleteProfileDocument(req, res),
+  ),
 );
 
 settingsRouter.post(

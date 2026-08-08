@@ -1,10 +1,17 @@
 import { createHash } from "node:crypto";
 
+import { readFile, unlink } from "node:fs/promises";
+
 import {
   PERMISSIONS,
   UserRole,
+  buildInternalManagedFileDownloadPath,
+  parseInternalManagedFileId,
   type CreateBackupInput,
   type CreateIntegrationCredentialInput,
+  type CreateProfileDocumentMetaInput,
+  type ProfileDocumentDto,
+  type ProfileDocumentType,
   type RequestAccountDeletionInput,
   type SettingsOverviewDto,
   type UpdateAiSettingsInput,
@@ -17,15 +24,24 @@ import {
   type UpdateSecurityPreferencesInput,
   type UpdateSettingsProfileInput,
 } from "@enterprise/shared";
+import { prisma } from "@enterprise/database";
 
 import { setAiPreferredProvider, setAiProviderModel } from "../ai/providers/ai-runtime-config.js";
 import { encryptionService } from "../../shared/security/encryption.service.js";
+import { runVirusScanHook } from "../files/antivirus/antivirus.service.js";
+import { filesRepository } from "../files/files.repository.js";
+import { validateUploadFile } from "../files/files.validation-rules.js";
+import { storageProvider } from "../files/storage/storage.provider.js";
 import { encryptSecret } from "./settings.crypto.js";
 import {
   logSettingsAuditEvent,
   SETTINGS_AUDIT_ACTIONS,
 } from "./settings.audit.js";
-import { SETTINGS_MESSAGES } from "./settings.constants.js";
+import {
+  PROFILE_AVATAR_TAG,
+  PROFILE_DOCUMENT_TAG,
+  SETTINGS_MESSAGES,
+} from "./settings.constants.js";
 import { SETTINGS_ERROR_CODES, SettingsError } from "./settings.errors.js";
 import {
   toAiDto,
@@ -142,6 +158,13 @@ export class SettingsService {
       }
     }
 
+    const dateOfBirth =
+      input.dateOfBirth === undefined
+        ? undefined
+        : input.dateOfBirth
+          ? new Date(`${input.dateOfBirth}T00:00:00.000Z`)
+          : null;
+
     const updated = await settingsRepository.updateUserProfile(actor.userId, {
       firstName: input.firstName,
       lastName: input.lastName,
@@ -150,6 +173,22 @@ export class SettingsService {
       phone: input.phone,
       bio: input.bio,
       designation: input.designation,
+      address: input.address,
+      city: input.city,
+      country: input.country,
+      dateOfBirth,
+    });
+
+    await settingsRepository.syncEmployeePersonalFields(actor.userId, {
+      phone: input.phone,
+      designation: input.designation,
+      address: input.address,
+      city: input.city,
+      country: input.country,
+      dateOfBirth,
+      personalEmail: input.personalEmail,
+      workLocation: input.workLocation,
+      photoUrl: input.avatarUrl,
     });
 
     await logSettingsAuditEvent({
@@ -158,10 +197,410 @@ export class SettingsService {
       context,
     });
 
+    const refreshed =
+      (await settingsRepository.findUserProfile(actor.userId)) ?? updated;
+
     return {
       message: SETTINGS_MESSAGES.PROFILE_UPDATED,
-      profile: toSettingsProfileDto(updated),
+      profile: toSettingsProfileDto(refreshed),
     };
+  }
+
+  async uploadAvatar(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      tempPath?: string;
+      buffer?: Buffer;
+    },
+    actor: SettingsActor,
+    context: SettingsRequestContext,
+  ) {
+    const managed = await this.uploadPersonalManagedFile(file, actor, {
+      tags: [PROFILE_AVATAR_TAG],
+      folderKey: `profile/${actor.userId}/avatar`,
+      imageOnly: true,
+    });
+
+    const previous = await settingsRepository.findUserProfile(actor.userId);
+    const previousFileId = previous?.avatarUrl
+      ? parseInternalManagedFileId(previous.avatarUrl)
+      : null;
+
+    const fileUrl = buildInternalManagedFileDownloadPath(managed.id);
+    const updated = await settingsRepository.updateUserProfile(actor.userId, {
+      firstName: previous?.firstName ?? "User",
+      lastName: previous?.lastName ?? "",
+      avatarUrl: fileUrl,
+    });
+    await settingsRepository.syncEmployeePersonalFields(actor.userId, {
+      photoUrl: fileUrl,
+    });
+
+    if (previousFileId && previousFileId !== managed.id) {
+      await settingsRepository.softDeleteManagedFile(
+        previousFileId,
+        actor.userId,
+      );
+    }
+
+    await logSettingsAuditEvent({
+      userId: actor.userId,
+      action: SETTINGS_AUDIT_ACTIONS.PROFILE_AVATAR_UPDATED,
+      resourceId: managed.id,
+      context,
+    });
+
+    const refreshed =
+      (await settingsRepository.findUserProfile(actor.userId)) ?? updated;
+
+    return {
+      message: SETTINGS_MESSAGES.AVATAR_UPDATED,
+      profile: toSettingsProfileDto(refreshed),
+      managedFileId: managed.id,
+    };
+  }
+
+  async removeAvatar(
+    actor: SettingsActor,
+    context: SettingsRequestContext,
+  ) {
+    const previous = await settingsRepository.findUserProfile(actor.userId);
+    if (!previous) {
+      throw new SettingsError(
+        SETTINGS_MESSAGES.NOT_FOUND,
+        404,
+        SETTINGS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const previousFileId = previous.avatarUrl
+      ? parseInternalManagedFileId(previous.avatarUrl)
+      : null;
+
+    const updated = await settingsRepository.updateUserProfile(actor.userId, {
+      firstName: previous.firstName,
+      lastName: previous.lastName,
+      avatarUrl: null,
+    });
+    await settingsRepository.syncEmployeePersonalFields(actor.userId, {
+      photoUrl: null,
+    });
+
+    if (previousFileId) {
+      const owned = await settingsRepository.findOwnedManagedFile(
+        actor.userId,
+        previousFileId,
+      );
+      if (owned) {
+        await settingsRepository.softDeleteManagedFile(
+          previousFileId,
+          actor.userId,
+        );
+      }
+    }
+
+    await logSettingsAuditEvent({
+      userId: actor.userId,
+      action: SETTINGS_AUDIT_ACTIONS.PROFILE_AVATAR_REMOVED,
+      context,
+    });
+
+    const refreshed =
+      (await settingsRepository.findUserProfile(actor.userId)) ?? updated;
+
+    return {
+      message: SETTINGS_MESSAGES.AVATAR_REMOVED,
+      profile: toSettingsProfileDto(refreshed),
+    };
+  }
+
+  async listProfileDocuments(
+    actor: SettingsActor,
+  ): Promise<{ items: ProfileDocumentDto[] }> {
+    const files = await settingsRepository.listProfileManagedFiles(
+      actor.userId,
+      PROFILE_DOCUMENT_TAG,
+    );
+
+    return {
+      items: files.map((file) => this.toProfileDocumentDto(file)),
+    };
+  }
+
+  async uploadProfileDocument(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      tempPath?: string;
+      buffer?: Buffer;
+    },
+    meta: CreateProfileDocumentMetaInput,
+    actor: SettingsActor,
+    context: SettingsRequestContext,
+  ) {
+    const type = (meta.type ?? "OTHER") as ProfileDocumentType;
+    const managed = await this.uploadPersonalManagedFile(file, actor, {
+      tags: [PROFILE_DOCUMENT_TAG, `doc-type:${type}`],
+      folderKey: `profile/${actor.userId}/documents`,
+      imageOnly: false,
+    });
+
+    const fileUrl = buildInternalManagedFileDownloadPath(managed.id);
+    const title =
+      meta.title?.trim() ||
+      managed.originalName ||
+      managed.name ||
+      "Personal document";
+
+    const employee = await prisma.employeeProfile.findFirst({
+      where: { userId: actor.userId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (employee) {
+      await settingsRepository.createEmployeeDocumentForSelf({
+        employeeId: employee.id,
+        type,
+        title,
+        fileUrl,
+        fileName: managed.originalName,
+        mimeType: managed.mimeType,
+        fileSize: Number(managed.sizeBytes),
+        notes: meta.notes ?? null,
+        uploadedById: actor.userId,
+      });
+    }
+
+    await logSettingsAuditEvent({
+      userId: actor.userId,
+      action: SETTINGS_AUDIT_ACTIONS.PROFILE_DOCUMENT_UPLOADED,
+      resourceId: managed.id,
+      context,
+      metadata: { type, title },
+    });
+
+    return {
+      message: SETTINGS_MESSAGES.DOCUMENT_UPLOADED,
+      document: this.toProfileDocumentDto(managed, type, title, meta.notes),
+    };
+  }
+
+  async deleteProfileDocument(
+    documentId: string,
+    actor: SettingsActor,
+    context: SettingsRequestContext,
+  ) {
+    const owned = await settingsRepository.findOwnedManagedFile(
+      actor.userId,
+      documentId,
+    );
+    if (!owned || !owned.tags.includes(PROFILE_DOCUMENT_TAG)) {
+      throw new SettingsError(
+        SETTINGS_MESSAGES.NOT_FOUND,
+        404,
+        SETTINGS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const fileUrl = buildInternalManagedFileDownloadPath(owned.id);
+    await settingsRepository.softDeleteManagedFile(owned.id, actor.userId);
+    await settingsRepository.softDeleteEmployeeDocumentByFileUrl(
+      fileUrl,
+      actor.userId,
+    );
+
+    await logSettingsAuditEvent({
+      userId: actor.userId,
+      action: SETTINGS_AUDIT_ACTIONS.PROFILE_DOCUMENT_DELETED,
+      resourceId: owned.id,
+      context,
+    });
+
+    return {
+      message: SETTINGS_MESSAGES.DOCUMENT_DELETED,
+      id: owned.id,
+    };
+  }
+
+  async downloadOwnedProfileFile(fileId: string, actor: SettingsActor) {
+    const owned = await settingsRepository.findOwnedManagedFile(
+      actor.userId,
+      fileId,
+    );
+    if (!owned) {
+      throw new SettingsError(
+        SETTINGS_MESSAGES.NOT_FOUND,
+        404,
+        SETTINGS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const isProfileAsset =
+      owned.tags.includes(PROFILE_AVATAR_TAG) ||
+      owned.tags.includes(PROFILE_DOCUMENT_TAG);
+    if (!isProfileAsset) {
+      throw new SettingsError(
+        SETTINGS_MESSAGES.FORBIDDEN,
+        403,
+        SETTINGS_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    const payload = await storageProvider.download(owned.storageKey);
+    return {
+      file: owned,
+      stream: payload.stream,
+      sizeBytes: payload.sizeBytes,
+    };
+  }
+
+  private toProfileDocumentDto(
+    file: {
+      id: string;
+      name: string;
+      originalName: string;
+      mimeType: string;
+      sizeBytes: bigint;
+      tags: string[];
+      createdAt: Date;
+      updatedAt: Date;
+    },
+    typeOverride?: ProfileDocumentType,
+    titleOverride?: string,
+    notes?: string | null,
+  ): ProfileDocumentDto {
+    const typeTag = file.tags.find((tag) => tag.startsWith("doc-type:"));
+    const type = (typeOverride ??
+      (typeTag?.slice("doc-type:".length) as ProfileDocumentType | undefined) ??
+      "OTHER") as ProfileDocumentType;
+
+    return {
+      id: file.id,
+      type,
+      title: titleOverride ?? file.name,
+      fileName: file.originalName,
+      mimeType: file.mimeType,
+      fileSize: Number(file.sizeBytes),
+      fileUrl: buildInternalManagedFileDownloadPath(file.id),
+      managedFileId: file.id,
+      notes: notes ?? null,
+      createdAt: file.createdAt.toISOString(),
+      updatedAt: file.updatedAt.toISOString(),
+    };
+  }
+
+  private async uploadPersonalManagedFile(
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      tempPath?: string;
+      buffer?: Buffer;
+    },
+    actor: SettingsActor,
+    options: {
+      tags: string[];
+      folderKey: string;
+      imageOnly: boolean;
+    },
+  ) {
+    let buffer: Buffer | undefined;
+    try {
+      if (file.buffer && file.buffer.length > 0) {
+        buffer = file.buffer;
+      } else if (file.tempPath) {
+        buffer = await readFile(file.tempPath);
+      } else {
+        throw new SettingsError(
+          "Upload content is missing",
+          400,
+          SETTINGS_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      const validated = await validateUploadFile({
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.size || buffer.byteLength,
+        buffer,
+      });
+
+      if (options.imageOnly && validated.category !== "IMAGE") {
+        throw new SettingsError(
+          "Profile picture must be an image (JPEG, PNG, WebP, or GIF).",
+          400,
+          SETTINGS_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      if (validated.extension === "svg" || validated.mimeType === "image/svg+xml") {
+        throw new SettingsError(
+          "SVG files are not allowed for profile uploads.",
+          400,
+          SETTINGS_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      const scan = await runVirusScanHook({
+        buffer,
+        mimeType: validated.mimeType,
+        originalName: file.originalname,
+      });
+      if (!scan.clean) {
+        throw new SettingsError(
+          scan.threatName
+            ? `File failed virus scan (${scan.threatName})`
+            : "File failed virus scan",
+          400,
+          SETTINGS_ERROR_CODES.VALIDATION,
+        );
+      }
+
+      let companyId: string | null = null;
+      if (actor.role === UserRole.CLIENT || actor.role === "CLIENT") {
+        const user = await prisma.user.findUnique({
+          where: { id: actor.userId },
+          select: { companyId: true },
+        });
+        companyId = user?.companyId ?? null;
+      }
+
+      const uploaded = await storageProvider.upload({
+        buffer,
+        originalName: file.originalname,
+        mimeType: validated.mimeType,
+        folderKey: options.folderKey,
+      });
+
+      return filesRepository.createFile({
+        folderId: null,
+        name: validated.displayName,
+        originalName: file.originalname.normalize("NFC"),
+        mimeType: validated.mimeType,
+        extension: validated.extension,
+        sizeBytes: BigInt(uploaded.sizeBytes),
+        category: validated.category,
+        storageKey: uploaded.key,
+        storageProvider: uploaded.provider,
+        checksum: uploaded.checksum,
+        tags: options.tags,
+        projectId: null,
+        clientId: companyId,
+        createdById: actor.userId,
+      });
+    } finally {
+      buffer = undefined;
+      if (file.tempPath) {
+        try {
+          await unlink(file.tempPath);
+        } catch {
+          // temp cleanup is best-effort
+        }
+      }
+    }
   }
 
   async requestAccountDeletion(

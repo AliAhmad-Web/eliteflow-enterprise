@@ -14,6 +14,10 @@ model User {
   phone             String?    @db.VarChar(30)
   bio               String?    @db.VarChar(1000)
   designation       String?    @db.VarChar(120)
+  address           String?    @db.VarChar(500)
+  city              String?    @db.VarChar(120)
+  country           String?    @db.VarChar(120)
+  dateOfBirth       DateTime?  @map("date_of_birth") @db.Date
   roleId            String     @map("role_id") @db.Uuid
   status            UserStatus @default(PENDING_VERIFICATION)
   emailVerified     Boolean    @default(false) @map("email_verified")

@@ -2,8 +2,11 @@ import {
   SETTINGS_API_PREFIX,
   type CreateBackupInput,
   type CreateIntegrationCredentialInput,
+  type CreateProfileDocumentMetaInput,
+  type ProfileDocumentDto,
   type RequestAccountDeletionInput,
   type SettingsOverviewDto,
+  type SettingsProfileDto,
   type UpdateAiSettingsInput,
   type UpdateAppearanceSettingsInput,
   type UpdateBillingSettingsInput,
@@ -19,7 +22,8 @@ import {
   type StorageSettingsDto,
 } from "@enterprise/shared";
 
-import { apiRequest } from "@/services/api/api-client";
+import { authenticatedFetch, apiRequest } from "@/services/api/api-client";
+import { ApiClientError } from "@/services/api/api-error";
 
 export const settingsService = {
   overview() {
@@ -29,10 +33,121 @@ export const settingsService = {
   },
 
   updateProfile(input: UpdateSettingsProfileInput) {
-    return apiRequest<{ message: string; profile: SettingsOverviewDto["profile"] }>(
+    return apiRequest<{ message: string; profile: SettingsProfileDto }>(
       `${SETTINGS_API_PREFIX}/profile`,
       { method: "PATCH", body: input, auth: true },
     );
+  },
+
+  async uploadAvatar(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await authenticatedFetch(
+      `${SETTINGS_API_PREFIX}/profile/avatar`,
+      {
+        method: "POST",
+        body: form,
+        headers: {},
+      },
+    );
+    if (!response.ok) {
+      let message = "Failed to upload profile picture";
+      let code = "SETTINGS_VALIDATION";
+      try {
+        const body = (await response.json()) as {
+          message?: string;
+          code?: string;
+        };
+        message = body.message ?? message;
+        code = body.code ?? code;
+      } catch {
+        // ignore
+      }
+      throw new ApiClientError(message, code, response.status);
+    }
+    const body = (await response.json()) as {
+      data: {
+        message: string;
+        profile: SettingsProfileDto;
+        managedFileId: string;
+      };
+    };
+    return body.data;
+  },
+
+  removeAvatar() {
+    return apiRequest<{ message: string; profile: SettingsProfileDto }>(
+      `${SETTINGS_API_PREFIX}/profile/avatar`,
+      { method: "DELETE", auth: true },
+    );
+  },
+
+  listProfileDocuments() {
+    return apiRequest<{ items: ProfileDocumentDto[] }>(
+      `${SETTINGS_API_PREFIX}/profile/documents`,
+      { auth: true },
+    );
+  },
+
+  async uploadProfileDocument(
+    file: File,
+    meta: CreateProfileDocumentMetaInput = { type: "OTHER" },
+  ) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("type", meta.type ?? "OTHER");
+    if (meta.title) form.append("title", meta.title);
+    if (meta.notes) form.append("notes", meta.notes);
+
+    const response = await authenticatedFetch(
+      `${SETTINGS_API_PREFIX}/profile/documents`,
+      {
+        method: "POST",
+        body: form,
+        headers: {},
+      },
+    );
+    if (!response.ok) {
+      let message = "Failed to upload document";
+      let code = "SETTINGS_VALIDATION";
+      try {
+        const body = (await response.json()) as {
+          message?: string;
+          code?: string;
+        };
+        message = body.message ?? message;
+        code = body.code ?? code;
+      } catch {
+        // ignore
+      }
+      throw new ApiClientError(message, code, response.status);
+    }
+    const body = (await response.json()) as {
+      data: { message: string; document: ProfileDocumentDto };
+    };
+    return body.data;
+  },
+
+  deleteProfileDocument(id: string) {
+    return apiRequest<{ message: string; id: string }>(
+      `${SETTINGS_API_PREFIX}/profile/documents/${id}`,
+      { method: "DELETE", auth: true },
+    );
+  },
+
+  async downloadProfileDocumentBlob(id: string): Promise<Blob> {
+    const response = await authenticatedFetch(
+      `${SETTINGS_API_PREFIX}/profile/documents/${id}/download`,
+      { method: "GET" },
+    );
+    if (!response.ok) {
+      throw new ApiClientError(
+        "Failed to download document",
+        "SETTINGS_NOT_FOUND",
+        response.status,
+      );
+    }
+    return response.blob();
   },
 
   requestDeletion(input: RequestAccountDeletionInput) {
@@ -43,24 +158,36 @@ export const settingsService = {
   },
 
   updateCompany(input: UpdateCompanySettingsInput) {
-    return apiRequest<{ message: string; company: NonNullable<SettingsOverviewDto["company"]> }>(
-      `${SETTINGS_API_PREFIX}/company`,
-      { method: "PUT", body: input, auth: true },
-    );
+    return apiRequest<{
+      message: string;
+      company: NonNullable<SettingsOverviewDto["company"]>;
+    }>(`${SETTINGS_API_PREFIX}/company`, {
+      method: "PUT",
+      body: input,
+      auth: true,
+    });
   },
 
   updateAppearance(input: UpdateAppearanceSettingsInput) {
-    return apiRequest<{ message: string; appearance: SettingsOverviewDto["appearance"] }>(
-      `${SETTINGS_API_PREFIX}/appearance`,
-      { method: "PUT", body: input, auth: true },
-    );
+    return apiRequest<{
+      message: string;
+      appearance: SettingsOverviewDto["appearance"];
+    }>(`${SETTINGS_API_PREFIX}/appearance`, {
+      method: "PUT",
+      body: input,
+      auth: true,
+    });
   },
 
   updateLocale(input: UpdateLocaleSettingsInput) {
-    return apiRequest<{ message: string; locale: SettingsOverviewDto["locale"] }>(
-      `${SETTINGS_API_PREFIX}/locale`,
-      { method: "PUT", body: input, auth: true },
-    );
+    return apiRequest<{
+      message: string;
+      locale: SettingsOverviewDto["locale"];
+    }>(`${SETTINGS_API_PREFIX}/locale`, {
+      method: "PUT",
+      body: input,
+      auth: true,
+    });
   },
 
   updateNotifications(input: UpdateNotificationSettingsInput) {
@@ -82,10 +209,14 @@ export const settingsService = {
   },
 
   updateSecurity(input: UpdateSecurityPreferencesInput) {
-    return apiRequest<{ message: string; security: SettingsOverviewDto["security"] }>(
-      `${SETTINGS_API_PREFIX}/security`,
-      { method: "PUT", body: input, auth: true },
-    );
+    return apiRequest<{
+      message: string;
+      security: SettingsOverviewDto["security"];
+    }>(`${SETTINGS_API_PREFIX}/security`, {
+      method: "PUT",
+      body: input,
+      auth: true,
+    });
   },
 
   resetPreferences() {

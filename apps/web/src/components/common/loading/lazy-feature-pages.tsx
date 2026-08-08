@@ -232,6 +232,14 @@ export const LazySettingsPage = dynamic(
   { loading: () => null },
 );
 
+export const LazyProfilePage = dynamic(
+  () =>
+    import("@/features/profile/components/profile-page-content").then(
+      (m) => m.ProfilePageContent,
+    ),
+  { loading: () => null },
+);
+
 export const LazySecurityPage = dynamic(
   () =>
     import("@/features/security/components/security-center-page-content").then(

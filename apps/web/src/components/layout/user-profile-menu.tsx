@@ -86,13 +86,13 @@ export function UserProfileMenu({ className }: UserProfileMenuProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href={ROUTES.SETTINGS}>
+          <Link href={ROUTES.PROFILE}>
             <User className="mr-2 h-4 w-4" aria-hidden="true" />
             Profile
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href={ROUTES.SETTINGS_SECURITY}>
+          <Link href={ROUTES.SETTINGS}>
             <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
             Settings
           </Link>

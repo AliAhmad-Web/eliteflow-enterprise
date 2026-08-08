@@ -132,6 +132,8 @@ export const config = {
     "/integrations/:path*",
     "/security",
     "/security/:path*",
+    "/profile",
+    "/profile/:path*",
     "/settings",
     "/settings/:path*",
   ],

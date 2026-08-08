@@ -207,7 +207,12 @@ const ProfileSection = memo(function ProfileSection({
       <CardHeader>
         <CardTitle>Profile settings</CardTitle>
         <CardDescription>
-          Name, avatar, contact details, and account actions.
+          Name, avatar, contact details, and account actions. For the full
+          personal profile experience (photo upload and documents), open{" "}
+          <Link href={ROUTES.PROFILE} className="underline underline-offset-2">
+            My Profile
+          </Link>
+          .
         </CardDescription>
       </CardHeader>
       <CardContent>

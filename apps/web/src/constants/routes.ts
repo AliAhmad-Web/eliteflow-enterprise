@@ -39,6 +39,7 @@ export const ROUTES = {
   SETTINGS: "/settings",
   SETTINGS_SECURITY: "/settings/security",
   SETTINGS_SESSIONS: "/settings/security/sessions",
+  PROFILE: "/profile",
   SECURITY: "/security",
 } as const;
 

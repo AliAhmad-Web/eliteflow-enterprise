@@ -2,6 +2,10 @@ export const SETTINGS_AUDIT_RESOURCE = "settings" as const;
 
 export const SETTINGS_AUDIT_ACTIONS = {
   PROFILE_UPDATED: "settings.profile_updated",
+  PROFILE_AVATAR_UPDATED: "settings.profile_avatar_updated",
+  PROFILE_AVATAR_REMOVED: "settings.profile_avatar_removed",
+  PROFILE_DOCUMENT_UPLOADED: "settings.profile_document_uploaded",
+  PROFILE_DOCUMENT_DELETED: "settings.profile_document_deleted",
   COMPANY_UPDATED: "settings.company_updated",
   APPEARANCE_UPDATED: "settings.appearance_updated",
   LOCALE_UPDATED: "settings.locale_updated",
@@ -19,8 +23,15 @@ export const SETTINGS_AUDIT_ACTIONS = {
 
 export const SETTINGS_ORG_KEY = "default" as const;
 
+export const PROFILE_AVATAR_TAG = "profile-avatar" as const;
+export const PROFILE_DOCUMENT_TAG = "profile-document" as const;
+
 export const SETTINGS_MESSAGES = {
   PROFILE_UPDATED: "Profile updated successfully.",
+  AVATAR_UPDATED: "Profile picture updated successfully.",
+  AVATAR_REMOVED: "Profile picture removed.",
+  DOCUMENT_UPLOADED: "Document uploaded successfully.",
+  DOCUMENT_DELETED: "Document deleted successfully.",
   COMPANY_UPDATED: "Company settings updated.",
   SAVED: "Settings saved successfully.",
   RESET: "Settings reset to defaults.",
