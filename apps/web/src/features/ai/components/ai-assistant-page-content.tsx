@@ -349,9 +349,9 @@ export function AiAssistantPageContent() {
       },
     ]);
 
-    if (!overrideMessage) {
-      setDraft("");
-    }
+    // Always clear the composer as soon as the send is accepted so the typed /
+    // spoken text does not linger (including voice/retry override sends).
+    setDraft("");
 
     setLastFailedMessage(null);
     if (showVoiceControls && voiceMode) {
@@ -393,6 +393,7 @@ export function AiAssistantPageContent() {
       });
       setSelectedId(result.conversation.id);
       setLocalMessages(result.conversation.messages ?? []);
+      setDraft("");
       if (
         result.confirmationRequired === true &&
         result.confirmationId &&
