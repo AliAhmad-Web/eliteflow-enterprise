@@ -19,6 +19,8 @@ export { VerifyEmailForm } from "./components/verify-email-form";
 
 export { useAuth } from "./hooks/use-auth";
 export { useCurrentUserQuery } from "./hooks/use-current-user-query";
+export { useUserAvatarSrc } from "./hooks/use-user-avatar-src";
+export { UserAvatar } from "./components/user-avatar";
 export { useForgotPassword } from "./hooks/use-forgot-password";
 export { useLogin } from "./hooks/use-login";
 export { useLogout } from "./hooks/use-logout";

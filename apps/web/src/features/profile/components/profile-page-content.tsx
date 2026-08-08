@@ -2,7 +2,6 @@
 
 import {
   PROFILE_DOCUMENT_TYPES,
-  parseInternalManagedFileId,
   type ProfileDocumentType,
   type SettingsProfileDto,
 } from "@enterprise/shared";
@@ -27,7 +26,6 @@ import {
 } from "react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +40,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ROUTES } from "@/constants/routes";
+import { useAuth } from "@/features/auth";
+import { UserAvatar } from "@/features/auth/components/user-avatar";
 import { ApiClientError } from "@/services/api/api-error";
 import { settingsService } from "@/features/settings/services/settings.service";
 import { cn } from "@/lib/utils";
@@ -56,55 +56,11 @@ import {
   useUploadProfileDocumentMutation,
 } from "../hooks/use-profile";
 
-function initialsOf(firstName: string, lastName: string) {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "U";
-}
-
 function formatBytes(size: number | null | undefined) {
   if (size == null || Number.isNaN(size)) return "—";
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function useAuthenticatedAvatarUrl(avatarUrl: string | null | undefined) {
-  const [src, setSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    let objectUrl: string | null = null;
-
-    async function load() {
-      if (!avatarUrl) {
-        setSrc(null);
-        return;
-      }
-
-      const managedId = parseInternalManagedFileId(avatarUrl);
-      if (!managedId) {
-        setSrc(avatarUrl);
-        return;
-      }
-
-      try {
-        const blob = await settingsService.downloadProfileDocumentBlob(managedId);
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setSrc(objectUrl);
-      } catch {
-        if (!cancelled) setSrc(null);
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [avatarUrl]);
-
-  return src;
 }
 
 function Feedback({
@@ -261,14 +217,18 @@ function ProfileHero({
   profile: SettingsProfileDto;
   onEdit: () => void;
 }) {
-  const avatarSrc = useAuthenticatedAvatarUrl(profile.avatarUrl);
+  const { user } = useAuth();
+  // Canonical avatar source = authenticated user (same as Header).
+  const avatarUrl = user?.avatarUrl ?? profile.avatarUrl;
+  const firstName = user?.firstName ?? profile.firstName;
+  const lastName = user?.lastName ?? profile.lastName;
   const uploadAvatar = useUploadAvatarMutation();
   const removeAvatar = useRemoveAvatarMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const displayName = `${profile.firstName} ${profile.lastName}`.trim();
+  const displayName = `${firstName} ${lastName}`.trim();
 
   async function onAvatarSelected(file: File | undefined) {
     if (!file) return;
@@ -291,14 +251,14 @@ function ProfileHero({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-end gap-4">
             <div className="relative">
-              <Avatar className="size-24 border-4 border-background shadow-md">
-                {avatarSrc ? (
-                  <AvatarImage src={avatarSrc} alt={displayName} />
-                ) : null}
-                <AvatarFallback className="text-xl">
-                  {initialsOf(profile.firstName, profile.lastName)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                firstName={firstName}
+                lastName={lastName}
+                avatarUrl={avatarUrl}
+                className="size-24 border-4 border-background shadow-md"
+                fallbackClassName="text-xl"
+                alt={displayName}
+              />
               <input
                 id={inputId}
                 ref={fileInputRef}
@@ -346,7 +306,7 @@ function ProfileHero({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {profile.avatarUrl ? (
+            {avatarUrl ? (
               <Button
                 type="button"
                 variant="outline"

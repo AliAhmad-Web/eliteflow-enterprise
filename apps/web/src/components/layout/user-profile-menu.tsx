@@ -4,7 +4,6 @@ import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,14 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ROUTES } from "@/constants/routes";
 import { useAuth, useLogout } from "@/features/auth";
+import { UserAvatar } from "@/features/auth/components/user-avatar";
 import { cn } from "@/lib/utils";
 
 interface UserProfileMenuProps {
   className?: string;
-}
-
-function getInitials(firstName: string, lastName: string): string {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "U";
 }
 
 export function UserProfileMenu({ className }: UserProfileMenuProps) {
@@ -36,7 +32,6 @@ export function UserProfileMenu({ className }: UserProfileMenuProps) {
   }
 
   const displayName = `${user.firstName} ${user.lastName}`.trim();
-  const initials = getInitials(user.firstName, user.lastName);
 
   const handleSignOut = async () => {
     try {
@@ -57,9 +52,14 @@ export function UserProfileMenu({ className }: UserProfileMenuProps) {
           )}
           aria-label="User menu"
         >
-          <Avatar className="size-7">
-            <AvatarFallback className="text-[11px]">{initials}</AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            firstName={user.firstName}
+            lastName={user.lastName}
+            avatarUrl={user.avatarUrl}
+            className="size-7"
+            fallbackClassName="text-[11px]"
+            alt={displayName}
+          />
           <div className="hidden min-w-0 text-left md:block">
             <p className="truncate text-sm font-medium leading-4 tracking-tight">
               {displayName}
