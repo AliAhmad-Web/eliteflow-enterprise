@@ -15,6 +15,7 @@ import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { aiController } from "./ai.controller.js";
 import {
   aiChatRequestSchema,
+  aiConfirmationIdParamsSchema,
   aiConversationIdParamsSchema,
   aiDocumentIdParamsSchema,
   createAiDocumentSchema,
@@ -84,6 +85,30 @@ aiRouter.post(
   }),
   validate(aiChatRequestSchema),
   asyncHandler((req, res) => aiController.chatStream(req, res)),
+);
+
+aiRouter.post(
+  "/tool-confirmations/:id/approve",
+  rateLimit({
+    name: "ai.confirmation.approve",
+    max: 40,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(aiConfirmationIdParamsSchema, "params"),
+  asyncHandler((req, res) => aiController.approveToolConfirmation(req, res)),
+);
+
+aiRouter.post(
+  "/tool-confirmations/:id/reject",
+  rateLimit({
+    name: "ai.confirmation.reject",
+    max: 40,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(aiConfirmationIdParamsSchema, "params"),
+  asyncHandler((req, res) => aiController.rejectToolConfirmation(req, res)),
 );
 
 aiRouter.get(

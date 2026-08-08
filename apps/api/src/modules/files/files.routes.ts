@@ -4,6 +4,7 @@ import { PERMISSIONS, RATE_LIMIT } from "@enterprise/shared";
 
 import {
   authenticate,
+  authorizeAnyPermission,
   authorizePermissions,
 } from "../../shared/authorization.js";
 import {
@@ -12,7 +13,7 @@ import {
 } from "../../middleware/rate-limit.middleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
-import { filesController, uploadMiddleware } from "./files.controller.js";
+import { filesController, handleMultipartUpload } from "./files.controller.js";
 import {
   createFolderSchema,
   fileIdParamsSchema,
@@ -71,7 +72,8 @@ filesRouter.patch(
 
 filesRouter.delete(
   "/folders/:id",
-  authorizePermissions(PERMISSIONS.FILES_DELETE),
+  // Owner may hold files:upload only; service enforces owner-or-admin (FS-01).
+  authorizeAnyPermission(PERMISSIONS.FILES_DELETE, PERMISSIONS.FILES_UPLOAD),
   rateLimit({
     name: "files.folders.delete",
     max: 30,
@@ -103,7 +105,7 @@ filesRouter.post(
     windowMs: 15 * 60 * 1000,
     keyGenerator: rateLimitByUser,
   }),
-  uploadMiddleware.array("files", 20),
+  handleMultipartUpload("files"),
   asyncHandler((req, res) => filesController.upload(req, res)),
 );
 
@@ -225,7 +227,8 @@ filesRouter.post(
 
 filesRouter.delete(
   "/:id/permanent",
-  authorizePermissions(PERMISSIONS.FILES_DELETE),
+  // Owner may hold files:upload only; service enforces owner-or-admin (FS-04).
+  authorizeAnyPermission(PERMISSIONS.FILES_DELETE, PERMISSIONS.FILES_UPLOAD),
   rateLimit({
     name: "files.permanent",
     max: 20,

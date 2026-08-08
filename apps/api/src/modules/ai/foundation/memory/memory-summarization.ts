@@ -5,11 +5,16 @@
 
 import { sanitizeMemoryText, type AiMemoryEntry } from "./memory-entry.js";
 import { formatMemoryType } from "./memory-types.js";
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
 
 export interface SummarizeMemoryInput {
   readonly entries: readonly AiMemoryEntry[];
   readonly maxLength?: number;
   readonly maxItems?: number;
+  readonly role?: string | null;
+  readonly permissions?: readonly string[] | null;
+  readonly userId?: string | null;
+  readonly explicitRestrictedAccess?: boolean;
 }
 
 /**
@@ -20,23 +25,37 @@ export function summarizeMemoryEntries(input: SummarizeMemoryInput): string {
     return "No runtime memory available.";
   }
 
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId: input.userId,
+    role: input.role,
+    permissions: input.permissions,
+    explicitRestrictedAccess: input.explicitRestrictedAccess === true,
+  });
+  const entries = aiDataPolicyService.sanitizeAIMemory(
+    input.entries,
+    policySubject,
+  );
+
   const maxItems = input.maxItems ?? 6;
   const maxLength = input.maxLength ?? 400;
   const lines: string[] = [];
 
-  for (const entry of input.entries.slice(0, maxItems)) {
+  for (const entry of entries.slice(0, maxItems)) {
     lines.push(
       `- [${formatMemoryType(entry.type)}] ${sanitizeMemoryText(entry.summary, 100)}`,
     );
   }
 
-  if (input.entries.length > maxItems) {
+  if (entries.length > maxItems) {
     lines.push(
-      `- …and ${input.entries.length - maxItems} more memory item${input.entries.length - maxItems === 1 ? "" : "s"}`,
+      `- …and ${entries.length - maxItems} more memory item${entries.length - maxItems === 1 ? "" : "s"}`,
     );
   }
 
-  return sanitizeMemoryText(lines.join(" "), maxLength);
+  return aiDataPolicyService.sanitizeSummary(
+    sanitizeMemoryText(lines.join(" "), maxLength),
+    policySubject,
+  );
 }
 
 /**

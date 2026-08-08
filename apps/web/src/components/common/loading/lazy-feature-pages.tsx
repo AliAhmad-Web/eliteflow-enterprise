@@ -5,9 +5,49 @@ import dynamic from "next/dynamic";
 import { FeatureErrorBoundary } from "@/components/common/feedback/feature-error-boundary";
 
 /**
- * Route-level code splitting helpers. Keep-alive is preferred for dashboard routes;
- * these exist as fallbacks. Never show a blocking spinner during chunk load.
+ * Route-level code splitting for App Router `page.tsx` shells.
+ * Keep-alive loaders share the same feature modules (webpack dedupes chunks).
+ * Never show a blocking spinner during chunk load — shell stays visible.
  */
+
+export const LazyDashboardPage = dynamic(
+  () =>
+    import("@/features/dashboard/components/dashboard-page-client").then(
+      (m) => m.DashboardPageClient,
+    ),
+  { loading: () => null },
+);
+
+export const LazyWorkspacePage = dynamic(
+  () =>
+    import("@/features/dashboard/components/workspace-page-client").then(
+      (m) => m.WorkspacePageClient,
+    ),
+  { loading: () => null },
+);
+
+export const LazyAdminPage = dynamic(
+  () =>
+    import("@/features/dashboard/components/admin-page-client").then(
+      (m) => m.AdminPageClient,
+    ),
+  {
+    loading: () => (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+        Loading admin console…
+      </div>
+    ),
+  },
+);
+
+export const LazyPortalPage = dynamic(
+  () =>
+    import("@/features/dashboard/components/portal-page-client").then(
+      (m) => m.PortalPageClient,
+    ),
+  { loading: () => null },
+);
+
 export const LazyClientsPage = dynamic(
   () =>
     import("@/features/clients/components/clients-page-content").then(
@@ -64,6 +104,14 @@ export const LazyCalendarPage = dynamic(
   { loading: () => null },
 );
 
+export const LazyWhiteboardPage = dynamic(
+  () =>
+    import("@/features/whiteboard/components/whiteboard-page-content").then(
+      (m) => m.WhiteboardPageContent,
+    ),
+  { loading: () => null },
+);
+
 export const LazyFileManagerPage = dynamic(
   () =>
     import("@/features/files/components/file-manager-page-content").then(
@@ -84,6 +132,110 @@ export const LazyAiDocumentsPage = dynamic(
   () =>
     import("@/features/ai/components/ai-documents-page-content").then(
       (m) => m.AiDocumentsPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyMessagesPage = dynamic(
+  () =>
+    import("@/features/communication/components/messages-page-content").then(
+      (m) => m.MessagesPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyChannelsPage = dynamic(
+  () =>
+    import("@/features/communication/components/channels-page-content").then(
+      (m) => m.ChannelsPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyAnnouncementsPage = dynamic(
+  () =>
+    import(
+      "@/features/communication/components/announcements-page-content"
+    ).then((m) => m.AnnouncementsPageContent),
+  { loading: () => null },
+);
+
+export const LazyThreadsPage = dynamic(
+  () =>
+    import("@/features/communication/components/threads-page-content").then(
+      (m) => m.ThreadsPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyMeetingsPage = dynamic(
+  () =>
+    import("@/features/communication/components/meetings-page-content").then(
+      (m) => m.MeetingsPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyActivityPage = dynamic(
+  () =>
+    import(
+      "@/features/communication/components/activity-feed-page-content"
+    ).then((m) => m.ActivityFeedPageContent),
+  { loading: () => null },
+);
+
+export const LazyVoiceAiPage = dynamic(
+  () =>
+    import("@/features/communication/components/voice-ai-page-content").then(
+      (m) => m.VoiceAiPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyWhatsappPage = dynamic(
+  () =>
+    import("@/features/communication/components/whatsapp-page-content").then(
+      (m) => m.WhatsappPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyEmailAutomationPage = dynamic(
+  () =>
+    import(
+      "@/features/communication/components/email-automation-workspace"
+    ).then((m) => m.EmailAutomationPageContent),
+  { loading: () => null },
+);
+
+export const LazyNotificationsPage = dynamic(
+  () =>
+    import(
+      "@/features/notifications/components/notifications-page-content"
+    ).then((m) => m.NotificationsPageContent),
+  { loading: () => null },
+);
+
+export const LazyIntegrationsPage = dynamic(
+  () =>
+    import(
+      "@/features/integrations/components/integrations-center-page-content"
+    ).then((m) => m.IntegrationsCenterPageContent),
+  { loading: () => null },
+);
+
+export const LazySettingsPage = dynamic(
+  () =>
+    import("@/features/settings/components/settings-center-page-content").then(
+      (m) => m.SettingsCenterPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazySecurityPage = dynamic(
+  () =>
+    import("@/features/security/components/security-center-page-content").then(
+      (m) => m.SecurityCenterPageContent,
     ),
   { loading: () => null },
 );

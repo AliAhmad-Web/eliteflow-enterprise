@@ -4,7 +4,13 @@ import { mkdir, unlink, writeFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import {
+  isSupabaseStorageReady,
+  supabaseConfig,
+} from "../../../config/supabase.config.js";
+import { tryGetSupabaseAdminClient } from "../../../integrations/supabase/supabase.client.js";
 
 export interface StorageUploadInput {
   buffer: Buffer;
@@ -38,6 +44,71 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
 }
 
+/**
+ * Reject path traversal / absolute / null-byte storage keys before I/O (F-10).
+ */
+export function assertSafeStorageKey(key: string): void {
+  if (!key || typeof key !== "string" || key.trim().length === 0) {
+    throw new Error("Invalid storage key");
+  }
+  if (key.includes("\0")) {
+    throw new Error("Invalid storage key");
+  }
+
+  const normalized = key.replace(/\\/g, "/");
+  if (normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized)) {
+    throw new Error("Invalid storage key");
+  }
+  if (normalized.includes("//")) {
+    throw new Error("Invalid storage key");
+  }
+
+  const segments = normalized.split("/");
+  for (const segment of segments) {
+    if (segment === ".." || segment === ".") {
+      throw new Error("Invalid storage key");
+    }
+    if (segment.length === 0) {
+      throw new Error("Invalid storage key");
+    }
+  }
+}
+
+/**
+ * Resolve a storage key under root with a hard boundary check.
+ * Avoids fragile `startsWith(root)` prefix bypasses (e.g. root vs root_evil).
+ */
+export function resolveContainedStoragePath(rootDir: string, key: string): string {
+  assertSafeStorageKey(key);
+
+  const root = path.resolve(rootDir);
+  const full = path.resolve(root, key);
+  const relative = path.relative(root, full);
+
+  if (
+    relative === "" ||
+    relative.startsWith(`..${path.sep}`) ||
+    relative === ".." ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error("Invalid storage key");
+  }
+
+  const rootPrefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (full !== root && !full.startsWith(rootPrefix)) {
+    throw new Error("Invalid storage key");
+  }
+
+  return full;
+}
+
+function sanitizeFolderKey(folderKey?: string): string {
+  const raw = (folderKey ?? "general").replace(/\\/g, "/").trim();
+  if (!raw) return "general";
+  assertSafeStorageKey(raw);
+  return raw;
+}
+
 export class LocalStorageProvider implements StorageProvider {
   readonly name = "local";
   readonly root: string;
@@ -49,18 +120,13 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   private resolveKeyPath(key: string): string {
-    const full = path.resolve(this.root, key);
-    if (!full.startsWith(this.root)) {
-      throw new Error("Invalid storage key");
-    }
-    return full;
+    return resolveContainedStoragePath(this.root, key);
   }
 
   async upload(input: StorageUploadInput): Promise<StorageUploadResult> {
-    const folder = input.folderKey?.replace(/\\/g, "/") || "general";
-    const key = path
-      .join(folder, `${randomUUID()}-${sanitizeFileName(input.originalName)}`)
-      .replace(/\\/g, "/");
+    const folder = sanitizeFolderKey(input.folderKey);
+    const key = `${folder}/${randomUUID()}-${sanitizeFileName(input.originalName)}`;
+    assertSafeStorageKey(key);
     const fullPath = this.resolveKeyPath(key);
     await mkdir(path.dirname(fullPath), { recursive: true });
     await writeFile(fullPath, input.buffer);
@@ -104,8 +170,9 @@ export class SupabaseStorageProvider implements StorageProvider {
   }
 
   async upload(input: StorageUploadInput): Promise<StorageUploadResult> {
-    const folder = input.folderKey?.replace(/\\/g, "/") || "general";
+    const folder = sanitizeFolderKey(input.folderKey);
     const key = `${folder}/${randomUUID()}-${sanitizeFileName(input.originalName)}`;
+    assertSafeStorageKey(key);
 
     const { error } = await this.client.storage
       .from(this.bucket)
@@ -127,6 +194,7 @@ export class SupabaseStorageProvider implements StorageProvider {
   }
 
   async download(key: string) {
+    assertSafeStorageKey(key);
     const { data, error } = await this.client.storage
       .from(this.bucket)
       .download(key);
@@ -147,6 +215,7 @@ export class SupabaseStorageProvider implements StorageProvider {
   }
 
   async delete(key: string): Promise<void> {
+    assertSafeStorageKey(key);
     const { error } = await this.client.storage.from(this.bucket).remove([key]);
     if (error) {
       throw new Error(`Supabase delete failed: ${error.message}`);
@@ -154,6 +223,7 @@ export class SupabaseStorageProvider implements StorageProvider {
   }
 
   async getSignedUrl(key: string, expiresInSeconds = 3600): Promise<string> {
+    assertSafeStorageKey(key);
     const { data, error } = await this.client.storage
       .from(this.bucket)
       .createSignedUrl(key, expiresInSeconds);
@@ -169,20 +239,56 @@ export class SupabaseStorageProvider implements StorageProvider {
 
 let logged = false;
 
-export function createStorageProvider(): StorageProvider {
+function resolveStorageMode(): "local" | "supabase" | "auto" {
   const mode = (process.env.STORAGE_PROVIDER ?? "local").trim().toLowerCase();
+  if (mode === "supabase" || mode === "auto" || mode === "local") {
+    return mode;
+  }
+  return "local";
+}
 
-  if (mode === "supabase") {
-    const url = process.env.SUPABASE_URL?.trim();
-    const key =
-      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
-      process.env.SUPABASE_SECRET_KEY?.trim();
-    const bucket = process.env.SUPABASE_STORAGE_BUCKET?.trim() || "files";
+/**
+ * Soft bucket access check — never logs credentials.
+ * Returns false when Admin/Storage is unavailable or the bucket is missing.
+ */
+export async function verifySupabaseStorageAccess(): Promise<{
+  ok: boolean;
+  reason: string;
+}> {
+  if (!isSupabaseStorageReady()) {
+    return {
+      ok: false,
+      reason: "supabase_admin_credentials_unavailable",
+    };
+  }
 
-    if (url && key) {
-      const client = createClient(url, key, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
+  const client = tryGetSupabaseAdminClient();
+  if (!client) {
+    return { ok: false, reason: "supabase_admin_client_unavailable" };
+  }
+
+  const bucket = supabaseConfig.storageBucket;
+  const { data, error } = await client.storage.getBucket(bucket);
+  if (error || !data) {
+    return {
+      ok: false,
+      reason: error?.message
+        ? `bucket_access_failed:${error.message.slice(0, 120)}`
+        : "bucket_missing",
+    };
+  }
+  return { ok: true, reason: "ok" };
+}
+
+export function createStorageProvider(): StorageProvider {
+  const mode = resolveStorageMode();
+  const preferSupabase = mode === "supabase" || mode === "auto";
+
+  if (preferSupabase) {
+    const client = tryGetSupabaseAdminClient();
+    const bucket = supabaseConfig.storageBucket;
+
+    if (client) {
       if (!logged) {
         logged = true;
         console.log(`[storage] Provider: supabase (bucket=${bucket})`);
@@ -190,9 +296,11 @@ export function createStorageProvider(): StorageProvider {
       return new SupabaseStorageProvider(client, bucket);
     }
 
-    console.warn(
-      "[storage] STORAGE_PROVIDER=supabase but credentials missing — falling back to local",
-    );
+    if (mode === "supabase") {
+      console.warn(
+        "[storage] STORAGE_PROVIDER=supabase but usable service-role credentials are missing — falling back to local",
+      );
+    }
   }
 
   const root = process.env.LOCAL_STORAGE_PATH?.trim();
@@ -206,39 +314,7 @@ export function createStorageProvider(): StorageProvider {
 
 export const storageProvider = createStorageProvider();
 
-export type VirusScanEngine = "noop" | "clamav" | "cloud";
-
-export interface VirusScanResult {
-  clean: boolean;
-  engine: VirusScanEngine;
-  scannedAt: string;
-  threatName?: string;
-}
-
-/**
- * Virus-scan architecture hook (prepare-only).
- * - Development / unset: no-op pass-through
- * - VIRUS_SCAN_ENGINE=clamav|cloud: reserved for future scanner adapters
- */
-export async function runVirusScanHook(_input: {
-  buffer: Buffer;
-  mimeType: string;
-  originalName: string;
-}): Promise<VirusScanResult> {
-  const raw = process.env.VIRUS_SCAN_ENGINE?.trim().toLowerCase() ?? "noop";
-  const engine: VirusScanEngine =
-    raw === "clamav" || raw === "cloud" ? raw : "noop";
-
-  if (engine === "clamav" || engine === "cloud") {
-    // Adapter placeholder — wire ClamAV / cloud AV SDK in a later phase.
-    console.warn(
-      `[virus-scan] Engine "${engine}" not implemented; treating as clean.`,
-    );
-  }
-
-  return {
-    clean: true,
-    engine,
-    scannedAt: new Date().toISOString(),
-  };
+/** Non-secret active provider name for connectivity reports. */
+export function getActiveStorageProviderName(): string {
+  return storageProvider.name;
 }

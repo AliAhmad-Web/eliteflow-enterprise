@@ -54,6 +54,17 @@ export const otpCodeSchema = z
   .length(6, "Verification code must be exactly 6 digits")
   .regex(/^\d{6}$/, "Verification code must contain only numbers");
 
+/** TOTP (6 digits) or one-time recovery code (alphanumeric with optional dashes). */
+export const mfaChallengeCodeSchema = z
+  .string({ required_error: "Verification code is required" })
+  .trim()
+  .min(6, "Verification code is required")
+  .max(32, "Verification code is invalid")
+  .regex(
+    /^[A-Za-z0-9-]+$/,
+    "Verification code must be a 6-digit TOTP or recovery code",
+  );
+
 export const tokenSchema = z
   .string({ required_error: "Token is required" })
   .trim()

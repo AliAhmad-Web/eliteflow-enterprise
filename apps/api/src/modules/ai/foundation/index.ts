@@ -74,6 +74,20 @@ export { isAiMemoryAnalyticsEnabled } from "./feature-flags.js";
 export { isAiMemoryMonitoringEnabled } from "./feature-flags.js";
 export { isAiMemoryHealthEnabled } from "./feature-flags.js";
 export { isAiMemoryDiagnosticsEnabled } from "./feature-flags.js";
+export { isAiBudgetFeatureEnabled } from "./feature-flags.js";
+export {
+  aiBudgetService,
+  AiBudgetService,
+  AiBudgetBlockedError,
+  isAiBudgetEnabled,
+  getAiBudgetConfig,
+} from "./budget/index.js";
+export type {
+  AiBudgetValidationResult,
+  AiBudgetLedger,
+  AiBudgetLevel,
+  AiBudgetType,
+} from "./budget/index.js";
 export {
   PromptOrchestrator,
   promptOrchestrator,
@@ -617,3 +631,49 @@ export {
   formatAutomationStatus,
   formatAutomationProviderKind,
 } from "./automation/index.js";
+
+export {
+  aiDataPolicyService,
+  AI_DATA_POLICY_AUDIT,
+  AI_REDACTED,
+  canAiReceiveRestrictedData,
+  isAiRestrictedKey,
+} from "./policy/index.js";
+export type {
+  AiDataPolicySubject,
+  AiDataPolicyResource,
+  AiDataPolicyAuditAction,
+} from "./policy/index.js";
+
+export {
+  promptSecurityService,
+  isPromptSecurityEnabled,
+  getPromptInjectionThreshold,
+  isPromptOutputValidationEnabled,
+  isPromptDocumentScanEnabled,
+} from "./security/index.js";
+export type {
+  PromptScanResult,
+  PromptOutputScanResult,
+  PromptThreatCategory,
+  PromptSecurityContext,
+} from "./security/index.js";
+
+export {
+  humanConfirmationService,
+  ConfirmationEngineError,
+  hashConfirmationArguments,
+  isAiConfirmationEnabled,
+  getAiConfirmationExpirationMinutes,
+  isAiConfirmationHighRiskOnly,
+  PROTECTED_ACTION_CATALOG,
+  getProtectedActionByToolId,
+  CONFIRMATION_RISK_LEVELS,
+} from "./confirmation/index.js";
+export type {
+  ConfirmationRequiredPayload,
+  ConfirmationRiskLevel,
+  CreateConfirmationInput,
+  ApproveConfirmationInput,
+  ConfirmationFailureReason,
+} from "./confirmation/index.js";

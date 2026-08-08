@@ -20,6 +20,7 @@ const AVAILABLE_ROUTES = new Set<string>([
   ROUTES.AI_ASSISTANT,
   ROUTES.AI_DOCUMENTS,
   ROUTES.FILE_MANAGER,
+  ROUTES.FILES,
   ROUTES.TEAM,
   ROUTES.NOTIFICATIONS,
   ROUTES.MESSAGES,
@@ -83,6 +84,7 @@ function isRedirectAllowedForRole(role: UserRoleType, path: string): boolean {
         matchesRoute(path, ROUTES.PROJECTS) ||
         matchesRoute(path, ROUTES.INVOICES) ||
         matchesRoute(path, ROUTES.FILE_MANAGER) ||
+        matchesRoute(path, ROUTES.FILES) ||
         matchesRoute(path, ROUTES.CALENDAR) ||
         matchesRoute(path, ROUTES.MESSAGES) ||
         matchesRoute(path, ROUTES.ACTIVITY) ||

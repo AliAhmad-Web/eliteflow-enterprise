@@ -22,11 +22,16 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
-    optimizePackageImports: ["lucide-react", "framer-motion"],
+    optimizePackageImports: [
+      "lucide-react",
+      "framer-motion",
+      "@tanstack/react-query",
+      "zod",
+    ],
     /** Keep client Router Cache warm so revisits feel instant (no full remount flash). */
     staleTimes: {
-      dynamic: 30,
-      static: 180,
+      dynamic: 60,
+      static: 300,
     },
   },
   async headers() {

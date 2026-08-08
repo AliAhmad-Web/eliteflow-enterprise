@@ -18,6 +18,7 @@ import {
   type ProjectAccessScope,
 } from "./projects.repository.js";
 import { toProjectDto } from "./projects.types.js";
+import { attachmentSecurityService } from "../files/attachment-security.service.js";
 
 export interface ProjectActor {
   userId: string;
@@ -81,7 +82,17 @@ export class ProjectsService {
       }
     }
 
-    const created = await projectsRepository.create(input, actor.userId);
+    const attachments = input.attachments?.length
+      ? await attachmentSecurityService.secureAttachments(
+          input.attachments,
+          actor,
+        )
+      : input.attachments;
+
+    const created = await projectsRepository.create(
+      { ...input, attachments: attachments ?? [] },
+      actor.userId,
+    );
 
     await logProjectAuditEvent({
       userId: actor.userId,
@@ -123,7 +134,22 @@ export class ProjectsService {
       }
     }
 
-    const updated = await projectsRepository.update(id, input, actor.userId);
+    const securedInput =
+      input.attachments !== undefined
+        ? {
+            ...input,
+            attachments: await attachmentSecurityService.secureAttachments(
+              input.attachments,
+              actor,
+            ),
+          }
+        : input;
+
+    const updated = await projectsRepository.update(
+      id,
+      securedInput,
+      actor.userId,
+    );
 
     await logProjectAuditEvent({
       userId: actor.userId,

@@ -174,6 +174,13 @@ export const filesService = {
     });
   },
 
+  unshareFile(shareId: string) {
+    return apiRequest<{ id: string }>(`${FILES_API_PREFIX}/shares/${shareId}`, {
+      method: "DELETE",
+      auth: true,
+    });
+  },
+
   listVersions(id: string) {
     return apiRequest<FileVersionDto[]>(`${FILES_API_PREFIX}/${id}/versions`, {
       auth: true,

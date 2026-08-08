@@ -57,6 +57,8 @@ export interface SafeUser {
   emailVerified: boolean;
   permissions: string[];
   mustChangePassword?: boolean;
+  twoFactorEnabled?: boolean;
+  mfaEnrollmentRequired?: boolean;
   createdAt: string;
 }
 
@@ -145,6 +147,8 @@ export interface LoginResponse {
   tokens?: AuthTokens;
   requiresOtp?: boolean;
   otpSessionId?: string;
+  mfaMethod?: "totp" | "email";
+  expiresIn?: number;
 }
 
 export interface SignupResponse {

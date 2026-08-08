@@ -5,7 +5,7 @@ import {
   canAccessRoute,
   type UserRole,
 } from "@enterprise/shared";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { RedirectFallback } from "@/components/common/feedback/redirect-fallback";
@@ -23,7 +23,6 @@ interface RoutePermissionGuardProps {
  * init when access is denied.
  */
 export function RoutePermissionGuard({ children }: RoutePermissionGuardProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
@@ -54,14 +53,14 @@ export function RoutePermissionGuard({ children }: RoutePermissionGuardProps) {
     redirectedRef.current = true;
     const fallback =
       ROLE_DASHBOARD_ROUTES[user.role.code as UserRole] ?? ROUTES.DASHBOARD;
-    router.replace(fallback);
+    window.location.assign(fallback);
 
     const timeout = window.setTimeout(() => {
       setRedirectTimedOut(true);
     }, 4_000);
 
     return () => window.clearTimeout(timeout);
-  }, [allowed, isAuthenticated, isInitialized, router, user]);
+  }, [allowed, isAuthenticated, isInitialized, user]);
 
   if (isInitialized && !isAuthenticated) {
     return null;

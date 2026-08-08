@@ -120,9 +120,24 @@ export const createWhiteboardCommentSchema = z.object({
   objectId: z.string().max(64).optional().nullable(),
 });
 
-export type CreateWhiteboardCommentInput = z.infer<
+export type CreateWhiteboardCommentInput = z.input<
   typeof createWhiteboardCommentSchema
 >;
+
+/** Matches whiteboardsService.listComments / addComment response shapes. */
+export const whiteboardCommentDtoSchema = z.object({
+  id: uuidSchema,
+  whiteboardId: uuidSchema,
+  authorId: uuidSchema,
+  body: z.string(),
+  anchorX: z.number(),
+  anchorY: z.number(),
+  objectId: z.string().nullable(),
+  resolvedAt: z.string().nullable().optional(),
+  createdAt: z.string(),
+});
+
+export type WhiteboardCommentDto = z.infer<typeof whiteboardCommentDtoSchema>;
 
 export const whiteboardDtoSchema = z.object({
   id: uuidSchema,

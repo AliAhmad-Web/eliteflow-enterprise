@@ -204,7 +204,7 @@ function baseRouteForType(type: LinkedEntityType): string {
     case "CALENDAR":
       return ROUTES.CALENDAR;
     case "FILE":
-      return ROUTES.FILE_MANAGER;
+      return ROUTES.FILES;
     case "AI_DOCUMENT":
       return ROUTES.AI_DOCUMENTS;
     default: {
@@ -235,8 +235,11 @@ export function buildLinkedRecordDeepLink(
 
   const base = baseRouteForType(type);
   if (base === ROUTES.CALENDAR) params.set("event", entityId);
-  if (base === ROUTES.FILE_MANAGER) params.set("file", entityId);
   if (base === ROUTES.AI_DOCUMENTS) params.set("id", entityId);
+
+  if (base === ROUTES.FILES || base === ROUTES.FILE_MANAGER) {
+    return `${ROUTES.FILES}/${entityId}?${params.toString()}`;
+  }
 
   return `${base}?${params.toString()}`;
 }

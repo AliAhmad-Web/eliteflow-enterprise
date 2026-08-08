@@ -1,0 +1,61 @@
+// =============================================================================
+// Phase 3 Step 9 — Enterprise Data Retention & Legal Hold
+// =============================================================================
+
+/// Active or historical legal hold on a module or specific entity.
+model LegalHold {
+  id           String              @id @default(uuid()) @db.Uuid
+  entityType   RetentionEntityType @map("entity_type")
+  /// Null = module-wide hold for entityType.
+  entityId     String?             @map("entity_id") @db.Uuid
+  reason       String              @db.VarChar(500)
+  heldByUserId String?             @map("held_by_user_id") @db.Uuid
+  heldAt       DateTime            @default(now()) @map("held_at")
+  releasedAt   DateTime?           @map("released_at")
+  isActive     Boolean             @default(true) @map("is_active")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  @@index([entityType, isActive])
+  @@index([entityType, entityId, isActive])
+  @@map("legal_holds")
+}
+
+/// Per-entity retention lifecycle state (does not mutate domain status enums).
+model RetentionLifecycle {
+  id                String                   @id @default(uuid()) @db.Uuid
+  entityType        RetentionEntityType      @map("entity_type")
+  entityId          String                   @map("entity_id") @db.Uuid
+  status            RetentionLifecycleStatus @default(ACTIVE)
+  archivedAt        DateTime?                @map("archived_at")
+  pendingDeletionAt DateTime?                @map("pending_deletion_at")
+  secureDeletedAt   DateTime?                @map("secure_deleted_at")
+  notes             String?                  @db.VarChar(500)
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+
+  @@unique([entityType, entityId])
+  @@index([entityType, status])
+  @@index([status, updatedAt])
+  @@map("retention_lifecycles")
+}
+
+/// Retention processor execution history for admin status/reporting.
+model RetentionJobRun {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  status             RetentionJobRunStatus  @default(RUNNING)
+  triggeredBy        String?                @map("triggered_by") @db.VarChar(80)
+  startedAt          DateTime               @default(now()) @map("started_at")
+  finishedAt         DateTime?              @map("finished_at")
+  executionTimeMs    Int?                   @map("execution_time_ms")
+  itemsArchived      Int                    @default(0) @map("items_archived")
+  itemsDeleted       Int                    @default(0) @map("items_deleted")
+  legalHoldsSkipped  Int                    @default(0) @map("legal_holds_skipped")
+  failures           Int                    @default(0)
+  details            Json?
+  createdAt          DateTime               @default(now()) @map("created_at")
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+  @@map("retention_job_runs")
+}

@@ -37,6 +37,9 @@ enum SessionRevokedReason {
   REUSE_DETECTED
   SESSION_LIMIT
   IDLE_TIMEOUT
+  ABSOLUTE_TIMEOUT
+  MFA_RESET
+  ACCOUNT_DISABLED
 
   @@map("session_revoked_reason")
 }
@@ -795,4 +798,48 @@ enum IntegrationLogLevel {
   DEBUG
 
   @@map("integration_log_level")
+}
+
+/// Phase 3 Step 9 — Data retention lifecycle status.
+enum RetentionLifecycleStatus {
+  ACTIVE
+  ARCHIVED
+  LEGAL_HOLD
+  PENDING_DELETION
+  SECURE_DELETED
+
+  @@map("retention_lifecycle_status")
+}
+
+/// Phase 3 Step 9 — Retention policy entity categories.
+enum RetentionEntityType {
+  AUDIT_LOGS
+  AI_MEMORY
+  AI_DOCUMENTS
+  FILES
+  COMMUNICATIONS
+  PROJECTS
+  TASKS
+  HR_DOCUMENTS
+  NOTIFICATIONS
+  REPORTS
+
+  @@map("retention_entity_type")
+}
+
+enum RetentionJobRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+
+  @@map("retention_job_run_status")
+}
+
+/// Phase 3 Step 10 — Security incident workflow status.
+enum SecurityIncidentStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+
+  @@map("security_incident_status")
 }

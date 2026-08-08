@@ -1,10 +1,9 @@
-import { prisma, Prisma } from "@enterprise/database";
-
 import type { SecurityRequestContext } from "./security.types.js";
 import {
   SECURITY_AUDIT_ACTIONS,
   SECURITY_AUDIT_RESOURCE,
 } from "./security.constants.js";
+import { writeAuditLog } from "../../shared/security/write-audit-log.js";
 
 interface AuditInput {
   userId?: string;
@@ -15,18 +14,14 @@ interface AuditInput {
 }
 
 export async function logSecurityAuditEvent(input: AuditInput): Promise<void> {
-  await prisma.auditLog.create({
-    data: {
-      userId: input.userId ?? null,
-      action: input.action,
-      resource: SECURITY_AUDIT_RESOURCE,
-      resourceId: input.resourceId ?? null,
-      metadata: input.metadata
-        ? (input.metadata as Prisma.InputJsonValue)
-        : undefined,
-      ipAddress: input.context.ipAddress,
-      userAgent: input.context.userAgent,
-    },
+  await writeAuditLog({
+    userId: input.userId ?? null,
+    action: input.action,
+    resource: SECURITY_AUDIT_RESOURCE,
+    resourceId: input.resourceId ?? null,
+    metadata: input.metadata,
+    ipAddress: input.context.ipAddress,
+    userAgent: input.context.userAgent,
   });
 }
 

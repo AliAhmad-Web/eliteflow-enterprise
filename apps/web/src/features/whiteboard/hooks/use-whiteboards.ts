@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  CreateWhiteboardCommentInput,
   CreateWhiteboardInput,
   ListWhiteboardsQueryInput,
   UpdateWhiteboardInput,
@@ -17,6 +18,8 @@ export const WHITEBOARDS_QUERY_KEYS = {
   detail: (id: string) => [...WHITEBOARDS_QUERY_KEYS.all, "detail", id] as const,
   versions: (id: string) =>
     [...WHITEBOARDS_QUERY_KEYS.all, "versions", id] as const,
+  comments: (id: string) =>
+    [...WHITEBOARDS_QUERY_KEYS.all, "comments", id] as const,
 };
 
 export function useWhiteboards(
@@ -37,6 +40,17 @@ export function useWhiteboard(id: string | null) {
     queryKey: WHITEBOARDS_QUERY_KEYS.detail(id ?? "none"),
     queryFn: () => whiteboardsService.getById(id!),
     enabled: Boolean(id),
+  });
+}
+
+export function useWhiteboardComments(
+  whiteboardId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: WHITEBOARDS_QUERY_KEYS.comments(whiteboardId ?? "none"),
+    queryFn: () => whiteboardsService.listComments(whiteboardId!),
+    enabled: Boolean(whiteboardId) && enabled,
   });
 }
 
@@ -90,5 +104,29 @@ export function useWhiteboardMutations() {
     }) => whiteboardsService.runAi(id, input),
   });
 
-  return { create, update, rename, duplicate, remove, restoreVersion, runAi };
+  const addComment = useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: CreateWhiteboardCommentInput;
+    }) => whiteboardsService.addComment(id, input),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: WHITEBOARDS_QUERY_KEYS.comments(variables.id),
+      });
+    },
+  });
+
+  return {
+    create,
+    update,
+    rename,
+    duplicate,
+    remove,
+    restoreVersion,
+    runAi,
+    addComment,
+  };
 }

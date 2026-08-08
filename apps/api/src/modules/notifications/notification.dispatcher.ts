@@ -342,17 +342,37 @@ export class NotificationDispatcher {
 export const notificationDispatcher = new NotificationDispatcher();
 
 /** Process pending EMAIL + WhatsApp queue items. PUSH/SMS remain stubs. */
-export async function processNotificationQueue(limit = 20): Promise<{
+export async function processNotificationQueue(
+  limit = 20,
+  options?: {
+    budgetMs?: number;
+    skipBatchScaling?: boolean;
+    /** Prefer freshly queued mail on the send/create request path. */
+    preferNewest?: boolean;
+  },
+): Promise<{
   processed: number;
   sent: number;
   failed: number;
 }> {
-  const effectiveLimit = resolveNotificationQueueBatchSize(limit);
-  const claimed = await notificationsRepository.claimPendingQueue(effectiveLimit);
+  const effectiveLimit = options?.skipBatchScaling
+    ? Math.max(1, limit)
+    : resolveNotificationQueueBatchSize(limit);
+  const budgetMs = options?.budgetMs ?? 25_000;
+  const deadline = Date.now() + budgetMs;
+  const claimed = await notificationsRepository.claimPendingQueue(
+    effectiveLimit,
+    { order: options?.preferNewest ? "desc" : "asc" },
+  );
   let sent = 0;
   let failed = 0;
+  let cursor = 0;
 
-  for (const item of claimed) {
+  for (; cursor < claimed.length; cursor += 1) {
+    if (Date.now() >= deadline) {
+      break;
+    }
+    const item = claimed[cursor]!;
     try {
       switch (item.channel) {
         case NotificationChannel.EMAIL: {
@@ -363,12 +383,20 @@ export async function processNotificationQueue(limit = 20): Promise<{
           if (!item.toAddress || !item.subject) {
             throw new Error("Missing email address or subject");
           }
-          await emailService.sendNotificationEmail({
-            to: item.toAddress,
-            subject: item.subject,
-            html: payload.html ?? `<p>${item.subject}</p>`,
-            text: payload.text ?? item.subject,
-          });
+          const remaining = Math.max(1_000, deadline - Date.now());
+          await Promise.race([
+            emailService.sendNotificationEmail({
+              to: item.toAddress,
+              subject: item.subject,
+              html: payload.html ?? `<p>${item.subject}</p>`,
+              text: payload.text ?? item.subject,
+            }),
+            new Promise<never>((_, reject) => {
+              setTimeout(() => {
+                reject(new Error(`Email provider timeout after ${remaining}ms`));
+              }, Math.min(remaining, 35_000));
+            }),
+          ]);
           await notificationsRepository.markQueueSent(item.id);
           sent += 1;
           if (
@@ -559,7 +587,14 @@ export async function processNotificationQueue(limit = 20): Promise<{
     }
   }
 
-  const result = { processed: claimed.length, sent, failed };
+  const unprocessed = claimed.slice(cursor);
+  if (unprocessed.length > 0) {
+    await notificationsRepository.releaseQueueToPending(
+      unprocessed.map((item) => item.id),
+    );
+  }
+
+  const result = { processed: sent + failed, sent, failed };
   recordSaasNotificationQueueResult(result);
   return result;
 }

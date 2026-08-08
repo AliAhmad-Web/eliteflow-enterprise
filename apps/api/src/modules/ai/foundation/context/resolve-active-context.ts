@@ -14,6 +14,7 @@ import type { AiFoundationSurface } from "../contracts/ai-execution-context.js";
 import { emptyAiActiveContext } from "../contracts/defaults.js";
 import { permissionService } from "../../../../shared/services/permission.service.js";
 import { SETTINGS_ORG_KEY } from "../../../settings/settings.constants.js";
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
 
 /** Optional hints supplied by AiService / future surfaces (no business payloads). */
 export interface AiContextHints {
@@ -31,6 +32,15 @@ export interface AiContextHints {
   readonly actionId?: string | null;
   /** When omitted, Context Engine may load keys read-only for permission checks. */
   readonly permissions?: readonly string[];
+  /** Session id for confirmation token binding. */
+  readonly sessionId?: string | null;
+  /** Optional tenant / organization id for confirmation binding. */
+  readonly tenantId?: string | null;
+  /**
+   * Super Admin only — when true, RESTRICTED fields may flow into AI context.
+   * Additive optional hint; omitted by default (backward compatible).
+   */
+  readonly explicitRestrictedAccess?: boolean;
 }
 
 export interface ResolveAiActiveContextInput {
@@ -182,7 +192,7 @@ export async function resolveAiActiveContext(
   const organization = await resolveOrganization(hints);
   const entities = filterEntitiesByPermission(hints?.entityRefs ?? [], subject);
 
-  return {
+  const context: AiActiveContext = {
     module: resolveModule(hints),
     surface: hints?.surface ?? "UNKNOWN",
     conversationId: hints?.conversationId ?? null,
@@ -193,5 +203,23 @@ export async function resolveAiActiveContext(
     entities,
     snippets: [],
     ambientText: null,
+  };
+
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId,
+    role,
+    permissions,
+    explicitRestrictedAccess: hints?.explicitRestrictedAccess === true,
+  });
+
+  return {
+    ...context,
+    snippets: aiDataPolicyService.sanitizeAIContext(
+      context.snippets,
+      policySubject,
+    ),
+    ambientText: context.ambientText
+      ? aiDataPolicyService.sanitizeSummary(context.ambientText, policySubject)
+      : null,
   };
 }

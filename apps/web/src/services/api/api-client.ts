@@ -4,6 +4,12 @@ import { useAuthStore } from "@/features/auth/stores/auth.store";
 import { clearSessionHintCookie } from "@/features/auth/utils/session-hint";
 
 import { ApiClientError, getApiBaseUrl, parseApiResponse } from "./api-error";
+import {
+  applyCsrfHeader,
+  captureCsrfFromResponse,
+  clearCachedCsrfToken,
+  ensureCsrfToken,
+} from "./csrf";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -17,6 +23,8 @@ interface RequestOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 45_000;
+/** Wall-clock cap for authenticatedFetch header/connection phase (SSE body may continue). */
+const AUTHENTICATED_FETCH_TIMEOUT_MS = 45_000;
 
 /**
  * Cross-chunk mutex: Next.js can evaluate this module twice (different bundles),
@@ -45,6 +53,19 @@ function setRefreshPromise(promise: Promise<string | null> | null): void {
 function clearAuthState(): void {
   useAuthStore.getState().clearSession();
   clearSessionHintCookie();
+  clearCachedCsrfToken();
+}
+
+function isTimeoutAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === "AbortError" || error.name === "TimeoutError";
+  }
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name: string }).name === "AbortError"
+  );
 }
 
 async function fetchWithTimeout(
@@ -52,9 +73,9 @@ async function fetchWithTimeout(
   init: RequestInit,
   timeoutMs: number,
 ): Promise<Response> {
-  const controller = new AbortController();
+  const timeoutController = new AbortController();
   const timeoutId = setTimeout(() => {
-    controller.abort(
+    timeoutController.abort(
       new DOMException(
         `Request timed out after ${Math.round(timeoutMs / 1000)}s. Please try again.`,
         "TimeoutError",
@@ -62,15 +83,39 @@ async function fetchWithTimeout(
     );
   }, timeoutMs);
 
+  const userSignal = init.signal;
+  let signal: AbortSignal = timeoutController.signal;
+
+  if (userSignal) {
+    if (typeof AbortSignal.any === "function") {
+      // Keeps caller abort linked for SSE bodies after headers arrive.
+      signal = AbortSignal.any([timeoutController.signal, userSignal]);
+    } else if (userSignal.aborted) {
+      signal = userSignal;
+    } else {
+      const merged = new AbortController();
+      const forward = () => merged.abort(userSignal.reason);
+      const forwardTimeout = () => merged.abort(timeoutController.signal.reason);
+      userSignal.addEventListener("abort", forward, { once: true });
+      timeoutController.signal.addEventListener("abort", forwardTimeout, {
+        once: true,
+      });
+      signal = merged.signal;
+    }
+  }
+
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { ...init, signal });
   } catch (error) {
-    if (
-      error instanceof DOMException &&
-      (error.name === "AbortError" || error.name === "TimeoutError")
-    ) {
+    if (isTimeoutAbortError(error)) {
+      // Caller-initiated abort (e.g. stop streaming) — rethrow as-is.
+      if (userSignal?.aborted) {
+        throw error;
+      }
       throw new ApiClientError(
-        error.message && error.message !== "signal is aborted without reason"
+        error instanceof Error &&
+          error.message &&
+          error.message !== "signal is aborted without reason"
           ? error.message
           : `Request timed out after ${Math.round(timeoutMs / 1000)}s. Please try again.`,
         "REQUEST_TIMEOUT",
@@ -78,36 +123,32 @@ async function fetchWithTimeout(
       );
     }
 
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "name" in error &&
-      (error as { name: string }).name === "AbortError"
-    ) {
-      throw new ApiClientError(
-        `Request timed out after ${Math.round(timeoutMs / 1000)}s. Please try again.`,
-        "REQUEST_TIMEOUT",
-        408,
-      );
-    }
-
     throw error;
   } finally {
+    // Clear wall-clock timeout once headers arrive so SSE/download bodies may continue.
     clearTimeout(timeoutId);
   }
 }
 
 async function postRefresh(): Promise<Response> {
-  return fetchWithTimeout(
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  // Refresh is CSRF-exempt; still send header when available for double-submit BC.
+  applyCsrfHeader(headers, "POST");
+
+  const response = await fetchWithTimeout(
     `${getApiBaseUrl()}${AUTH_API_PREFIX}/refresh`,
     {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({}),
     },
     60_000,
   );
+  captureCsrfFromResponse(response);
+  return response;
 }
 
 /** Refresh the access token using the httpOnly refresh cookie. */
@@ -157,11 +198,19 @@ export async function refreshAccessToken(): Promise<string | null> {
 /**
  * Authenticated fetch that retries once after refreshing an expired access token.
  * Use for non-JSON flows (SSE streams, file downloads, etc.).
+ *
+ * Applies a connection/header timeout. For SSE, fetch resolves once headers arrive,
+ * so the stream body can continue beyond the timeout window.
  */
 export async function authenticatedFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+    await ensureCsrfToken();
+  }
+
   const buildHeaders = (accessToken: string | null): Headers => {
     const headers = new Headers(init.headers);
     if (accessToken) {
@@ -175,22 +224,29 @@ export async function authenticatedFetch(
     if (typeof FormData !== "undefined" && init.body instanceof FormData) {
       headers.delete("Content-Type");
     }
+    applyCsrfHeader(headers, method);
     return headers;
   };
 
   const execute = (accessToken: string | null) =>
-    fetch(`${getApiBaseUrl()}${path}`, {
-      ...init,
-      credentials: init.credentials ?? "include",
-      headers: buildHeaders(accessToken),
-    });
+    fetchWithTimeout(
+      `${getApiBaseUrl()}${path}`,
+      {
+        ...init,
+        credentials: init.credentials ?? "include",
+        headers: buildHeaders(accessToken),
+      },
+      AUTHENTICATED_FETCH_TIMEOUT_MS,
+    );
 
   let response = await execute(useAuthStore.getState().accessToken);
+  captureCsrfFromResponse(response);
 
   if (response.status === 401 && !path.endsWith("/refresh")) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       response = await execute(newToken);
+      captureCsrfFromResponse(response);
     }
   }
 
@@ -225,6 +281,11 @@ export async function apiRequest<T>(
     }
   }
 
+  if (method !== "GET") {
+    await ensureCsrfToken();
+    applyCsrfHeader(headers, method);
+  }
+
   const execute = async (accessToken?: string | null) => {
     const requestHeaders = { ...headers };
 
@@ -233,7 +294,9 @@ export async function apiRequest<T>(
         `${AUTH_HEADERS.BEARER_PREFIX}${accessToken}`;
     }
 
-    return fetchWithTimeout(
+    applyCsrfHeader(requestHeaders, method);
+
+    const response = await fetchWithTimeout(
       `${getApiBaseUrl()}${path}`,
       {
         method,
@@ -243,6 +306,8 @@ export async function apiRequest<T>(
       },
       timeoutMs,
     );
+    captureCsrfFromResponse(response);
+    return response;
   };
 
   let response = await execute(useAuthStore.getState().accessToken);

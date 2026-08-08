@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isAttachmentUrlSchemeAllowed } from "../utils/attachment-url.js";
 import { uuidSchema } from "./common.schema.js";
 
 export const CALENDAR_EVENT_TYPES = [
@@ -102,7 +103,20 @@ export const createCalendarEventSchema = z
     recurrenceInterval: z.coerce.number().int().min(1).max(365).optional().default(1),
     recurrenceUntil: z.string().datetime().optional().nullable(),
     recurrenceCount: z.coerce.number().int().min(1).max(365).optional().nullable(),
-    attachmentUrls: z.array(z.string().url().max(2048)).max(20).optional().default([]),
+    attachmentUrls: z
+      .array(
+        z
+          .string()
+          .trim()
+          .max(2048)
+          .refine(
+            isAttachmentUrlSchemeAllowed,
+            "Forbidden attachment URL scheme. Use a File Manager file.",
+          ),
+      )
+      .max(20)
+      .optional()
+      .default([]),
     projectId: uuidSchema.optional().nullable(),
     taskId: uuidSchema.optional().nullable(),
     clientId: uuidSchema.optional().nullable(),
@@ -140,7 +154,19 @@ export const updateCalendarEventSchema = z
     recurrenceInterval: z.coerce.number().int().min(1).max(365).optional(),
     recurrenceUntil: z.string().datetime().optional().nullable(),
     recurrenceCount: z.coerce.number().int().min(1).max(365).optional().nullable(),
-    attachmentUrls: z.array(z.string().url().max(2048)).max(20).optional(),
+    attachmentUrls: z
+      .array(
+        z
+          .string()
+          .trim()
+          .max(2048)
+          .refine(
+            isAttachmentUrlSchemeAllowed,
+            "Forbidden attachment URL scheme. Use a File Manager file.",
+          ),
+      )
+      .max(20)
+      .optional(),
     projectId: uuidSchema.optional().nullable(),
     taskId: uuidSchema.optional().nullable(),
     clientId: uuidSchema.optional().nullable(),

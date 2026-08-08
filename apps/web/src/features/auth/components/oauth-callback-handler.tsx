@@ -17,65 +17,129 @@ import { ApiClientError } from "@/services/api/api-error";
 
 import {
   OAUTH_INTENT_STORAGE_KEY,
+  OAUTH_MFA_METHOD_STORAGE_KEY,
   OAUTH_OTP_SESSION_STORAGE_KEY,
   OAUTH_PROVIDER_STORAGE_KEY,
   OAUTH_SIGNUP_ERROR_STORAGE_KEY,
   type OAuthFlowIntent,
 } from "../constants/oauth";
 import { authService } from "../services/auth.service";
+import {
+  captureOAuthRedirectParams,
+  clearCapturedOAuthRedirect,
+  getOAuthParamsFromCapture,
+  readCapturedOAuthRedirect,
+} from "../utils/oauth-redirect-capture";
 import { getPostLoginRedirect } from "../utils/redirect";
 import { setSessionHintCookie } from "../utils/session-hint";
 import { AuthAlert } from "./auth-alert";
 import { AuthCard } from "./auth-card";
 import { AuthPageShell } from "./auth-page-shell";
 
-function parseProvider(value: string | null): OAuthProviderType | null {
-  if (value === OAuthProvider.GOOGLE || value === OAuthProvider.GITHUB) {
-    return value;
-  }
+// Capture redirect params as soon as this module evaluates in the browser —
+// before Supabase detectSessionInUrl clears the hash/query.
+if (typeof window !== "undefined") {
+  captureOAuthRedirectParams();
+}
 
+function parseProvider(value: string | null | undefined): OAuthProviderType | null {
+  if (!value) return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === OAuthProvider.GOOGLE || normalized === "GOOGLE") {
+    return OAuthProvider.GOOGLE;
+  }
+  if (normalized === OAuthProvider.GITHUB || normalized === "GITHUB") {
+    return OAuthProvider.GITHUB;
+  }
   return null;
+}
+
+function mapSupabaseProvider(
+  value: string | null | undefined,
+): OAuthProviderType | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "google") return OAuthProvider.GOOGLE;
+  if (normalized === "github") return OAuthProvider.GITHUB;
+  return parseProvider(value);
 }
 
 function parseIntent(value: string | null): OAuthFlowIntent {
   return value === "signup" ? "signup" : "login";
 }
 
-function resolveProvider(searchParams: URLSearchParams): OAuthProviderType | null {
-  const fromQuery = parseProvider(searchParams.get("provider"));
-  if (fromQuery) {
-    return fromQuery;
+function readStoredProvider(): OAuthProviderType | null {
+  if (typeof window === "undefined") return null;
+  return (
+    parseProvider(sessionStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY)) ??
+    parseProvider(localStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY))
+  );
+}
+
+function readStoredIntent(): OAuthFlowIntent {
+  if (typeof window === "undefined") return "login";
+  return parseIntent(
+    sessionStorage.getItem(OAUTH_INTENT_STORAGE_KEY) ??
+      localStorage.getItem(OAUTH_INTENT_STORAGE_KEY),
+  );
+}
+
+function inferProviderFromSession(session: Session): OAuthProviderType | null {
+  const appMeta = (session.user?.app_metadata ?? {}) as Record<string, unknown>;
+  const fromApp = mapSupabaseProvider(
+    typeof appMeta.provider === "string" ? appMeta.provider : null,
+  );
+  if (fromApp) return fromApp;
+
+  const providers = Array.isArray(appMeta.providers)
+    ? appMeta.providers.filter((v): v is string => typeof v === "string")
+    : [];
+  for (const entry of providers) {
+    const mapped = mapSupabaseProvider(entry);
+    if (mapped) return mapped;
   }
 
-  if (typeof window === "undefined") {
-    return null;
+  const identities = session.user?.identities ?? [];
+  for (const identity of identities) {
+    const mapped = mapSupabaseProvider(identity.provider);
+    if (mapped) return mapped;
   }
 
-  return parseProvider(sessionStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY));
+  return null;
+}
+
+function resolveProvider(
+  searchParams: URLSearchParams,
+  session?: Session | null,
+): OAuthProviderType | null {
+  const fromQuery =
+    parseProvider(searchParams.get("provider")) ??
+    mapSupabaseProvider(searchParams.get("provider"));
+  if (fromQuery) return fromQuery;
+
+  const fromStorage = readStoredProvider();
+  if (fromStorage) return fromStorage;
+
+  if (session) {
+    return inferProviderFromSession(session);
+  }
+
+  return null;
 }
 
 function resolveIntent(): OAuthFlowIntent {
-  if (typeof window === "undefined") {
-    return "login";
-  }
-
-  return parseIntent(sessionStorage.getItem(OAUTH_INTENT_STORAGE_KEY));
+  return readStoredIntent();
 }
 
 function clearOAuthFlowStorage(): void {
   sessionStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
   sessionStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+  localStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
+  localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
 }
 
-function readOAuthErrorFromUrl(): string | null {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  return (
-    query.get("error_description") ||
-    query.get("error") ||
-    hash.get("error_description") ||
-    hash.get("error")
-  );
+function readOAuthErrorFromParams(params: URLSearchParams): string | null {
+  return params.get("error_description") || params.get("error");
 }
 
 function stripOAuthParamsFromUrl(): void {
@@ -84,17 +148,20 @@ function stripOAuthParamsFromUrl(): void {
   url.searchParams.delete("state");
   url.hash = "";
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+  clearCapturedOAuthRedirect();
 }
 
-function hasOAuthCallbackParams(): boolean {
-  const query = new URLSearchParams(window.location.search);
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+function hasOAuthCallbackParams(params: URLSearchParams): boolean {
   return Boolean(
-    query.get("code") ||
-      hash.get("access_token") ||
-      hash.get("error") ||
-      query.get("error"),
+    params.get("code") ||
+      params.get("access_token") ||
+      params.get("error") ||
+      params.get("error_description"),
   );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 /**
@@ -108,28 +175,37 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
   }
 
   supabaseSessionPromise = (async () => {
-    const supabase = getSupabaseBrowserClient();
-    const oauthError = readOAuthErrorFromUrl();
+    // Re-capture in case module evaluated before the redirect URL was ready.
+    captureOAuthRedirectParams();
+    const captured = readCapturedOAuthRedirect();
+    const params = getOAuthParamsFromCapture(captured);
+
+    const oauthError = readOAuthErrorFromParams(params);
     if (oauthError) {
       throw new Error(oauthError);
     }
 
-    // detectSessionInUrl runs during client initialize (implicit hash or PKCE code).
-    const first = await supabase.auth.getSession();
-    if (first.data.session?.access_token) {
-      stripOAuthParamsFromUrl();
-      return first.data.session;
+    const supabase = getSupabaseBrowserClient();
+
+    // detectSessionInUrl may still be processing — poll briefly before failing.
+    const deadline = Date.now() + Math.min(timeoutMs, 8_000);
+    while (Date.now() < deadline) {
+      const current = await supabase.auth.getSession();
+      if (current.data.session?.access_token) {
+        stripOAuthParamsFromUrl();
+        return current.data.session;
+      }
+      if (!hasOAuthCallbackParams(params) && !hasOAuthCallbackParams(getOAuthParamsFromCapture())) {
+        // No credentials anywhere yet — keep waiting a bit for late capture.
+        await sleep(150);
+        captureOAuthRedirectParams();
+        continue;
+      }
+      break;
     }
 
-    if (!hasOAuthCallbackParams()) {
-      throw new Error(
-        "No OAuth credentials were returned. Confirm Supabase Redirect URLs include your app origin plus /auth/callback (for local development: http://localhost:3000/auth/callback), then try signing in again from this same browser tab.",
-      );
-    }
-
-    // Manual PKCE exchange only when a code is present and initialize did not
-    // already establish a session (e.g. race / older redirect shape).
-    const code = new URLSearchParams(window.location.search).get("code");
+    const latestParams = getOAuthParamsFromCapture();
+    const code = latestParams.get("code");
     if (code) {
       const { data, error: exchangeError } =
         await supabase.auth.exchangeCodeForSession(code);
@@ -148,6 +224,28 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
       if (exchangeError) {
         throw new Error(exchangeError.message);
       }
+    }
+
+    const accessToken = latestParams.get("access_token");
+    const refreshToken = latestParams.get("refresh_token");
+    if (accessToken) {
+      const { data, error: setError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken ?? "",
+      });
+      if (data.session?.access_token) {
+        stripOAuthParamsFromUrl();
+        return data.session;
+      }
+      if (setError) {
+        throw new Error(setError.message);
+      }
+    }
+
+    if (!hasOAuthCallbackParams(latestParams)) {
+      throw new Error(
+        "No OAuth credentials were returned. In Supabase → Authentication → URL Configuration, add Redirect URL http://localhost:3000/auth/callback (and set Site URL to http://localhost:3000). Then start Google sign-in again from this same browser tab.",
+      );
     }
 
     return await new Promise<Session>((resolve, reject) => {
@@ -206,17 +304,18 @@ export function OAuthCallbackHandler() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const provider = resolveProvider(searchParams);
     const intent = resolveIntent();
-
-    if (!provider) {
-      setError("Invalid OAuth provider in callback.");
-      return;
-    }
 
     if (!oauthCompletionPromise) {
       oauthCompletionPromise = (async () => {
         const session = await waitForSupabaseSession();
+
+        const provider = resolveProvider(searchParams, session);
+        if (!provider) {
+          throw new Error(
+            "Could not determine OAuth provider. Please start Google or GitHub sign-in again from this browser.",
+          );
+        }
 
         const accessToken = session.access_token;
         const refreshToken = session.refresh_token ?? undefined;
@@ -241,6 +340,12 @@ export function OAuthCallbackHandler() {
             OAUTH_OTP_SESSION_STORAGE_KEY,
             result.otpSessionId,
           );
+          if (result.mfaMethod) {
+            sessionStorage.setItem(
+              OAUTH_MFA_METHOD_STORAGE_KEY,
+              result.mfaMethod,
+            );
+          }
           window.location.assign(`${ROUTES.LOGIN}?otpRequired=1`);
           return;
         }
@@ -256,16 +361,22 @@ export function OAuthCallbackHandler() {
         const supabase = getSupabaseBrowserClient();
         await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
 
+        const providerHint =
+          resolveProvider(searchParams) ?? readStoredProvider();
+
         if (
           err instanceof ApiClientError &&
           err.code === AUTH_ERROR_CODES.EMAIL_ALREADY_EXISTS &&
-          intent === "signup"
+          intent === "signup" &&
+          providerHint
         ) {
           sessionStorage.setItem(OAUTH_SIGNUP_ERROR_STORAGE_KEY, err.message);
-          sessionStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, provider);
+          sessionStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, providerHint);
+          localStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, providerHint);
           sessionStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+          localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
           window.location.assign(
-            `${ROUTES.LOGIN}?oauthExisting=1&provider=${provider}`,
+            `${ROUTES.LOGIN}?oauthExisting=1&provider=${providerHint}`,
           );
           return;
         }

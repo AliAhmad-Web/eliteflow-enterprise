@@ -1,49 +1,55 @@
 "use client";
 
 import { ROLE_DASHBOARD_ROUTES, type UserRole } from "@enterprise/shared";
-import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
+import { RedirectFallback } from "@/components/common/feedback/redirect-fallback";
 import { ROUTES } from "@/constants/routes";
 
 import { useAuth } from "../hooks/use-auth";
 import { readCachedAuthUser } from "../utils/auth-session-cache";
 
+function roleHome(roleCode: string): string {
+  return ROLE_DASHBOARD_ROUTES[roleCode as UserRole] ?? ROUTES.DASHBOARD;
+}
+
 /**
  * Sends signed-in users to their role home and guests to login.
- * Uses cached user immediately — no full-screen auth spinner on `/`.
+ * Hard navigation avoids Next.js router-init blank screens on `/`.
  */
 export function RoleHomeRedirect() {
-  const router = useRouter();
   const { user, isAuthenticated, isInitialized } = useAuth();
+  const [redirectTimedOut, setRedirectTimedOut] = useState(false);
 
   useLayoutEffect(() => {
     const cached = readCachedAuthUser();
-    if (cached || (isAuthenticated && user)) {
-      const roleUser = user ?? cached;
-      if (!roleUser) return;
-      const home =
-        ROLE_DASHBOARD_ROUTES[roleUser.role.code as UserRole] ??
-        ROUTES.DASHBOARD;
-      router.replace(home);
-    }
-  }, [isAuthenticated, router, user]);
+    const roleUser = user ?? cached;
+    if (!roleUser) return;
+    if (!(cached || (isAuthenticated && user))) return;
+    window.location.replace(roleHome(roleUser.role.code));
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
-    if (!isInitialized) {
-      return;
-    }
+    if (!isInitialized) return;
+
+    const timeout = window.setTimeout(() => setRedirectTimedOut(true), 4_000);
 
     if (!isAuthenticated || !user) {
-      router.replace(ROUTES.LOGIN);
-      return;
+      window.location.replace(ROUTES.LOGIN);
+      return () => window.clearTimeout(timeout);
     }
 
-    const home =
-      ROLE_DASHBOARD_ROUTES[user.role.code as UserRole] ?? ROUTES.DASHBOARD;
-    router.replace(home);
-  }, [isAuthenticated, isInitialized, router, user]);
+    window.location.replace(roleHome(user.role.code));
+    return () => window.clearTimeout(timeout);
+  }, [isAuthenticated, isInitialized, user]);
 
-  // Transparent — never block with "Checking authentication".
-  return null;
+  return (
+    <RedirectFallback
+      label="Opening your workspace"
+      timedOut={redirectTimedOut}
+      timeoutMessage="Unable to open your home page automatically."
+      actionLabel="Go to sign in"
+      onAction={() => window.location.assign(ROUTES.LOGIN)}
+    />
+  );
 }

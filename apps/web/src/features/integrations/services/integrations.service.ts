@@ -21,9 +21,11 @@ import {
   type OAuthIntegrationProviderValue,
   type SyncHistoryListResponse,
   type SyncQueueJobDto,
+  type SyncQueueOverviewDto,
   type SyncSchedulerConfigDto,
   type TestIntegrationInput,
   type UpdateSchedulerConfigInput,
+  type WebhookMonitorOverviewDto,
 } from "@enterprise/shared";
 
 import { apiRequest } from "@/services/api/api-client";
@@ -196,6 +198,34 @@ export const integrationsService = {
   monitoringOverview() {
     return apiRequest<IntegrationMonitoringOverviewDto>(
       `${INTEGRATIONS_API_PREFIX}/monitoring`,
+      { auth: true },
+    );
+  },
+
+  queueOverview() {
+    return apiRequest<SyncQueueOverviewDto>(
+      `${INTEGRATIONS_API_PREFIX}/queue`,
+      { auth: true },
+    );
+  },
+
+  queueForIntegration(idOrSlug: string) {
+    return apiRequest<SyncQueueOverviewDto>(
+      `${INTEGRATIONS_API_PREFIX}/queue/${idOrSlug}`,
+      { auth: true },
+    );
+  },
+
+  webhookMonitor() {
+    return apiRequest<WebhookMonitorOverviewDto>(
+      `${INTEGRATIONS_API_PREFIX}/webhooks/monitor`,
+      { auth: true },
+    );
+  },
+
+  webhookMonitorForIntegration(idOrSlug: string) {
+    return apiRequest<WebhookMonitorOverviewDto>(
+      `${INTEGRATIONS_API_PREFIX}/webhooks/monitor/${idOrSlug}`,
       { auth: true },
     );
   },

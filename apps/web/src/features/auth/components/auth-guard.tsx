@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { RedirectFallback } from "@/components/common/feedback/redirect-fallback";
@@ -18,9 +18,11 @@ interface AuthGuardProps {
  * Middleware already requires a session hint for protected routes.
  * Render shell immediately; token + /me refresh in the background.
  * Only redirect after bootstrap confirms there is no valid session.
+ *
+ * Uses hard navigation (location.assign) to avoid Next.js
+ * "Router action dispatched before initialization" blank screens.
  */
 export function AuthGuard({ children }: AuthGuardProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
@@ -34,14 +36,22 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
     const loginUrl = new URL(ROUTES.LOGIN, window.location.origin);
     loginUrl.searchParams.set("redirect", pathname);
-    router.replace(`${loginUrl.pathname}${loginUrl.search}`);
+    const target = `${loginUrl.pathname}${loginUrl.search}`;
 
     const timeout = window.setTimeout(() => {
       setRedirectTimedOut(true);
     }, 4_000);
 
-    return () => window.clearTimeout(timeout);
-  }, [isAuthenticated, isInitialized, pathname, router]);
+    // Defer past router boot; prefer hard nav for reliability.
+    const nav = window.setTimeout(() => {
+      window.location.assign(target);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearTimeout(nav);
+    };
+  }, [isAuthenticated, isInitialized, pathname]);
 
   // Only gate after bootstrap confirms the session is gone.
   if (isInitialized && !isAuthenticated) {

@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Suspense } from "react";
 
+import { LazyMessagesPage } from "@/components/common/loading/lazy-feature-pages";
 import { ChatThreadSkeleton } from "@/features/communication/components/communication-skeletons";
-import { MessagesPageContent } from "@/features/communication/components/messages-page-content";
 
 export const metadata: Metadata = { title: "Messages" };
 
@@ -15,7 +15,7 @@ export default function MessagesPage() {
         </div>
       }
     >
-      <MessagesPageContent />
+      <LazyMessagesPage />
     </Suspense>
   );
 }

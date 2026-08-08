@@ -15,7 +15,8 @@ apps/web/
 apps/mobile/
 apps/desktop/
 apps/extension/
-tools/
+# Root tooling only — do NOT ignore apps/**/tools (API AI foundation tools)
+/tools/
 docs/
 coverage/
 *.log

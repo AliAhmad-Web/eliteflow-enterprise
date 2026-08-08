@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { CalendarPageContent } from "@/features/calendar/components/calendar-page-content";
+import { LazyCalendarPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Calendar" };
 
 export default function CalendarPage() {
-  return <CalendarPageContent />;
+  return <LazyCalendarPage />;
 }

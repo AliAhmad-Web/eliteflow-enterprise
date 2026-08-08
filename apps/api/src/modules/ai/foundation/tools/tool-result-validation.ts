@@ -11,6 +11,8 @@ import type {
   AiToolExecutionStatus,
   AiToolId,
 } from "../contracts/ai-tool-execution.js";
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
+import type { AiDataPolicySubject } from "../policy/ai-data-policy.types.js";
 import {
   AI_TOOL_CATALOG,
   type AiToolDefinition,
@@ -55,6 +57,9 @@ export interface ValidateToolResultsInput {
   readonly policy: AiEffectivePolicy;
   readonly activeContext: AiActiveContext;
   readonly permissions?: readonly string[] | null;
+  readonly role?: string | null;
+  readonly userId?: string | null;
+  readonly explicitRestrictedAccess?: boolean;
   readonly catalog?: readonly AiToolDefinition[];
   /** Optional confidence by toolId (e.g. from intelligent selection). */
   readonly confidenceByToolId?: ReadonlyMap<AiToolId, number> | null;
@@ -115,19 +120,53 @@ function sanitizeString(
   return next;
 }
 
+function sanitizeRecord(
+  input: Readonly<Record<string, unknown>>,
+  privacyMode: boolean,
+  maxChars: number,
+  depth = 0,
+  policySubject?: AiDataPolicySubject,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const keys = Object.keys(input).sort();
+  for (const key of keys) {
+    if (SENSITIVE_KEY_RE.test(key)) {
+      out[key] = "[redacted]";
+      continue;
+    }
+    out[key] = redactValue(
+      key,
+      input[key],
+      privacyMode,
+      maxChars,
+      depth,
+      policySubject,
+    );
+  }
+
+  if (policySubject) {
+    return aiDataPolicyService.sanitizeToolOutput(out, policySubject);
+  }
+  return out;
+}
+
 function redactValue(
   key: string,
   value: unknown,
   privacyMode: boolean,
   maxChars: number,
   depth: number,
+  policySubject?: AiDataPolicySubject,
 ): unknown {
   if (SENSITIVE_KEY_RE.test(key) || (privacyMode && SENSITIVE_KEY_RE.test(key))) {
     return "[redacted]";
   }
 
   if (typeof value === "string") {
-    return sanitizeString(value, privacyMode, maxChars);
+    const cleaned = sanitizeString(value, privacyMode, maxChars);
+    return policySubject
+      ? aiDataPolicyService.sanitizeRestrictedText(cleaned, policySubject)
+      : cleaned;
   }
 
   if (typeof value === "number" || typeof value === "boolean" || value === null) {
@@ -137,34 +176,23 @@ function redactValue(
   if (Array.isArray(value)) {
     if (depth >= 4) return "[truncated-array]";
     return value.slice(0, 50).map((item, index) =>
-      redactValue(String(index), item, privacyMode, maxChars, depth + 1),
+      redactValue(
+        String(index),
+        item,
+        privacyMode,
+        maxChars,
+        depth + 1,
+        policySubject,
+      ),
     );
   }
 
   if (isPlainObject(value)) {
     if (depth >= 4) return "[truncated-object]";
-    return sanitizeRecord(value, privacyMode, maxChars, depth + 1);
+    return sanitizeRecord(value, privacyMode, maxChars, depth + 1, policySubject);
   }
 
   return "[unsupported]";
-}
-
-function sanitizeRecord(
-  input: Readonly<Record<string, unknown>>,
-  privacyMode: boolean,
-  maxChars: number,
-  depth = 0,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  const keys = Object.keys(input).sort();
-  for (const key of keys) {
-    if (SENSITIVE_KEY_RE.test(key)) {
-      out[key] = "[redacted]";
-      continue;
-    }
-    out[key] = redactValue(key, input[key], privacyMode, maxChars, depth);
-  }
-  return out;
 }
 
 function enforceOutputSize(
@@ -326,6 +354,12 @@ export function validateToolResults(
   const maxChars =
     input.maxOutputChars ?? resolveToolResultMaxOutputChars();
   const privacyMode = input.policy.privacyMode === true;
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId: input.userId ?? input.activeContext.user?.userId,
+    role: input.role ?? input.activeContext.user?.role,
+    permissions: input.permissions,
+    explicitRestrictedAccess: input.explicitRestrictedAccess === true,
+  });
   const results: AiValidatedToolResult[] = [];
 
   for (const execution of input.executions) {
@@ -376,7 +410,13 @@ export function validateToolResults(
 
       // Privacy mode: strip sensitive fields even when still validating for state.
       const base = execution.output ?? {};
-      let sanitized = sanitizeRecord(base, privacyMode, maxChars);
+      let sanitized = sanitizeRecord(
+        base,
+        privacyMode,
+        maxChars,
+        0,
+        policySubject,
+      );
       if (privacyMode) {
         // Drop high-risk payload keys entirely under privacy mode.
         const filtered: Record<string, unknown> = {};

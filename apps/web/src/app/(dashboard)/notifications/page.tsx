@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { NotificationsPageContent } from "@/features/notifications";
+import { LazyNotificationsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Notifications" };
 
 export default function NotificationsPage() {
-  return <NotificationsPageContent />;
+  return <LazyNotificationsPage />;
 }

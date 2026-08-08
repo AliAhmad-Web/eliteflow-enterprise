@@ -1,6 +1,7 @@
 "use client";
 
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import dynamic from "next/dynamic";
 import { memo } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DashboardRightPanelContent } from "@/features/dashboard/components/dashboard-right-panel-content";
 import { cn } from "@/lib/utils";
+
+const DashboardRightPanelContent = dynamic(
+  () =>
+    import("@/features/dashboard/components/dashboard-right-panel-content").then(
+      (m) => m.DashboardRightPanelContent,
+    ),
+  { ssr: false, loading: () => null },
+);
 
 interface RightPanelProps {
   open: boolean;
@@ -65,7 +73,9 @@ function RightPanelComponent({ open, onToggle, className }: RightPanelProps) {
       aria-label="Utility panel"
     >
       <div className="flex h-16 items-center justify-between gap-3 border-b border-sidebar-border px-4">
-        <p className="text-sm font-semibold tracking-tight text-foreground">Quick Access</p>
+        <p className="text-sm font-semibold tracking-tight text-foreground">
+          Quick Access
+        </p>
         <Tooltip delayDuration={100}>
           <TooltipTrigger asChild>
             <Button

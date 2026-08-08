@@ -63,6 +63,7 @@ import {
   WhiteboardCanvas,
   type WhiteboardCanvasHandle,
 } from "./whiteboard-canvas";
+import { WhiteboardCommentsPanel } from "./whiteboard-comments-panel";
 
 const DRAW_TOOLS: Array<{ id: WhiteboardTool; label: string; icon: typeof PenTool }> = [
   { id: "select", label: "Select", icon: MousePointer2 },
@@ -606,47 +607,51 @@ export function WhiteboardPageContent() {
               className="min-h-[560px]"
             />
 
-            <div className="rounded-xl border border-border/50 bg-card/60 p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                <Bot className="size-4" aria-hidden="true" />
-                AI Assistant
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-border/50 bg-card/60 p-3">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <Bot className="size-4" aria-hidden="true" />
+                  AI Assistant
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {AI_ACTIONS.map((action) => (
+                    <Button
+                      key={action.id}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!activeId || mutations.runAi.isPending}
+                      onClick={async () => {
+                        if (!activeId) {
+                          setAiResult("Save the whiteboard first to run AI actions.");
+                          return;
+                        }
+                        try {
+                          const result = await mutations.runAi.mutateAsync({
+                            id: activeId,
+                            input: {
+                              action: action.id,
+                              canvasData: board.document as WhiteboardAiRequestInput["canvasData"],
+                            },
+                          });
+                          setAiResult(result.result);
+                        } catch {
+                          setAiResult("AI request failed.");
+                        }
+                      }}
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+                {aiResult ? (
+                  <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
+                    {aiResult}
+                  </pre>
+                ) : null}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {AI_ACTIONS.map((action) => (
-                  <Button
-                    key={action.id}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!activeId || mutations.runAi.isPending}
-                    onClick={async () => {
-                      if (!activeId) {
-                        setAiResult("Save the whiteboard first to run AI actions.");
-                        return;
-                      }
-                      try {
-                        const result = await mutations.runAi.mutateAsync({
-                          id: activeId,
-                          input: {
-                            action: action.id,
-                            canvasData: board.document as WhiteboardAiRequestInput["canvasData"],
-                          },
-                        });
-                        setAiResult(result.result);
-                      } catch {
-                        setAiResult("AI request failed.");
-                      }
-                    }}
-                  >
-                    {action.label}
-                  </Button>
-                ))}
-              </div>
-              {aiResult ? (
-                <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
-                  {aiResult}
-                </pre>
-              ) : null}
+
+              <WhiteboardCommentsPanel whiteboardId={activeId} />
             </div>
           </CardContent>
         </Card>

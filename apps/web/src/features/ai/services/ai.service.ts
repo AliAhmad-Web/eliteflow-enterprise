@@ -233,6 +233,29 @@ export const aiService = {
 
   chatStream,
 
+  approveToolConfirmation(confirmationId: string) {
+    return apiRequest<{
+      confirmationId: string;
+      status: "approved";
+      toolId: string;
+      output?: Record<string, unknown>;
+    }>(`${AI_API_PREFIX}/tool-confirmations/${confirmationId}/approve`, {
+      method: "POST",
+      auth: true,
+      timeoutMs: 60_000,
+    });
+  },
+
+  rejectToolConfirmation(confirmationId: string) {
+    return apiRequest<{
+      confirmationId: string;
+      status: "rejected";
+    }>(`${AI_API_PREFIX}/tool-confirmations/${confirmationId}/reject`, {
+      method: "POST",
+      auth: true,
+    });
+  },
+
   listDocuments(query: ListAiDocumentsQueryInput) {
     return apiRequest<AiDocumentListResponse>(
       `${AI_API_PREFIX}/documents${toDocumentQuery(query)}`,

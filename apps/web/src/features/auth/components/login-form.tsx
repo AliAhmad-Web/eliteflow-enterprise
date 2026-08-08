@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,7 @@ import { PasswordInput } from "./password-input";
 import { SocialLoginButtons } from "./social-login-buttons";
 import {
   OAUTH_OTP_SESSION_STORAGE_KEY,
+  OAUTH_MFA_METHOD_STORAGE_KEY,
   OAUTH_PROVIDER_STORAGE_KEY,
   OAUTH_SIGNUP_ERROR_STORAGE_KEY,
 } from "../constants/oauth";
@@ -57,6 +58,7 @@ export function LoginForm() {
   const [otpSessionId, setOtpSessionId] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [otpInfo, setOtpInfo] = useState<string | null>(null);
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "email" | null>(null);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendError, setResendError] = useState<string | null>(null);
   const [oauthExistingError, setOauthExistingError] = useState<string | null>(
@@ -90,10 +92,18 @@ export function LoginForm() {
       return;
     }
 
+    const pendingMethod = sessionStorage.getItem(OAUTH_MFA_METHOD_STORAGE_KEY);
     sessionStorage.removeItem(OAUTH_OTP_SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(OAUTH_MFA_METHOD_STORAGE_KEY);
     setOtpSessionId(pendingOtpSessionId);
     setOtpCode("");
-    setOtpInfo("Enter the verification code sent to your email.");
+    const method = pendingMethod === "totp" ? "totp" : "email";
+    setMfaMethod(method);
+    setOtpInfo(
+      method === "totp"
+        ? "Enter the 6-digit code from your authenticator app, or a one-time recovery code."
+        : "Enter the verification code sent to your email.",
+    );
   }, [otpRequired]);
 
   useEffect(() => {
@@ -121,10 +131,11 @@ export function LoginForm() {
     getValues,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
+    resolver: zodResolver(loginSchema) as Resolver<LoginInput>,
     defaultValues: {
       email: registeredEmail || getRememberedEmail(),
       password: "",
+      rememberMe: false,
     },
   });
 
@@ -172,6 +183,7 @@ export function LoginForm() {
       const result = await loginMutation.mutateAsync({
         email: values.email,
         password: values.password,
+        rememberMe: values.rememberMe,
         captchaToken,
       });
 
@@ -180,7 +192,13 @@ export function LoginForm() {
       if (result.requiresOtp && result.otpSessionId) {
         setOtpSessionId(result.otpSessionId);
         setOtpCode("");
-        setOtpInfo("Enter the verification code sent to your email.");
+        const method = result.mfaMethod === "totp" ? "totp" : "email";
+        setMfaMethod(method);
+        setOtpInfo(
+          method === "totp"
+            ? "Enter the 6-digit code from your authenticator app, or a one-time recovery code."
+            : "Enter the verification code sent to your email.",
+        );
         return;
       }
 
@@ -233,7 +251,11 @@ export function LoginForm() {
     try {
       const result = await resendOtpMutation.mutateAsync(otpSessionId);
       setOtpSessionId(result.otpSessionId);
-      setOtpInfo("A new verification code has been sent.");
+      setOtpInfo(
+        mfaMethod === "totp"
+          ? "Authenticator challenge refreshed. Enter a new code from your app."
+          : "A new verification code has been sent.",
+      );
     } catch (error) {
       setApiError(
         getApiErrorMessage(error, "Unable to resend code. Please try again."),
@@ -254,17 +276,28 @@ export function LoginForm() {
 
         <div className="space-y-2">
           <Label htmlFor="otp-code" required>
-            Verification code
+            {mfaMethod === "totp" ? "Authenticator or recovery code" : "Verification code"}
           </Label>
           <Input
             id="otp-code"
-            inputMode="numeric"
+            inputMode={mfaMethod === "totp" ? "text" : "numeric"}
             autoComplete="one-time-code"
-            placeholder="6-digit code"
-            maxLength={6}
+            placeholder={
+              mfaMethod === "totp" ? "6-digit code or recovery code" : "6-digit code"
+            }
+            maxLength={mfaMethod === "totp" ? 32 : 6}
             value={otpCode}
-            onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            aria-invalid={otpCode.length > 0 && otpCode.length !== 6}
+            onChange={(event) => {
+              const next =
+                mfaMethod === "totp"
+                  ? event.target.value.replace(/[^A-Za-z0-9-]/g, "").slice(0, 32)
+                  : event.target.value.replace(/\D/g, "").slice(0, 6);
+              setOtpCode(next);
+            }}
+            aria-invalid={
+              otpCode.length > 0 &&
+              (mfaMethod === "totp" ? otpCode.length < 6 : otpCode.length !== 6)
+            }
           />
           <p className="text-xs text-muted-foreground">
             Signed in as {getValues("email")}
@@ -275,7 +308,7 @@ export function LoginForm() {
           className="w-full"
           type="submit"
           isLoading={verifyOtpMutation.isPending}
-          disabled={otpCode.length !== 6}
+          disabled={otpCode.trim().length < 6}
         >
           Verify and continue
         </Button>
@@ -287,7 +320,7 @@ export function LoginForm() {
           onClick={() => void onResendOtp()}
           isLoading={resendOtpMutation.isPending}
         >
-          Resend code
+          {mfaMethod === "totp" ? "Refresh challenge" : "Resend code"}
         </Button>
 
         <button
@@ -296,6 +329,7 @@ export function LoginForm() {
           onClick={() => {
             setOtpSessionId(null);
             setOtpCode("");
+            setMfaMethod(null);
             setApiError(null);
             setOtpInfo(null);
           }}

@@ -1176,7 +1176,7 @@ function HelpDrawer({
             ]
           : step === 4
             ? [
-                "Temporary password is shown once after creation",
+                "A password setup link is emailed on creation",
                 "Permission preset controls admin access scope",
                 "Email invitation shares credentials securely",
               ]
@@ -1802,17 +1802,26 @@ function StepSecurity({
         />
         <SecurityCard
           icon={KeyRound}
-          title="Temporary Password"
+          title="Password Setup"
           value={
-            result?.temporaryPassword ??
-            (editing ? "Already set — use password reset" : "Generated on create")
+            result?.passwordSetupRequired
+              ? result.invitationSent
+                ? "Setup link emailed"
+                : result.passwordSetupUrl
+                  ? "Setup link ready"
+                  : "Setup required"
+              : editing
+                ? "Already set — use password reset"
+                : "Setup link issued on create"
           }
           hint={
-            result?.mustChangePassword || form.requirePasswordChange
-              ? "Must change password on first login"
-              : "Shown once after creation"
+            result?.expiresAt
+              ? `Expires ${new Date(result.expiresAt).toLocaleString()}`
+              : result?.mustChangePassword || form.requirePasswordChange
+                ? "Must set password via secure link"
+                : "One-time link — never share in chat"
           }
-          mono={Boolean(result?.temporaryPassword)}
+          mono={false}
         />
         <SecurityCard
           icon={BadgeCheck}
@@ -2046,12 +2055,29 @@ function SuccessPanel({ result }: { result: CreateAdminResult }) {
             {result.companyEmail}
           </p>
         ) : null}
-        <p>
-          <span className="text-muted-foreground">Temporary password: </span>
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            {result.temporaryPassword}
-          </code>
-        </p>
+        {result.passwordSetupRequired ? (
+          <p>
+            <span className="text-muted-foreground">Password setup: </span>
+            {result.invitationSent
+              ? "Secure setup link emailed to the admin."
+              : result.passwordSetupUrl
+                ? "Setup link ready — share securely out-of-band if email was delayed."
+                : "Password setup required before first sign-in."}
+            {result.expiresAt ? (
+              <span className="block text-xs text-muted-foreground mt-1">
+                Expires {new Date(result.expiresAt).toLocaleString()}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        {result.passwordSetupUrl ? (
+          <p>
+            <span className="text-muted-foreground">Setup link: </span>
+            <code className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              {result.passwordSetupUrl}
+            </code>
+          </p>
+        ) : null}
         {result.qrToken ? (
           <p>
             <span className="text-muted-foreground">QR token: </span>
@@ -2070,8 +2096,8 @@ function SuccessPanel({ result }: { result: CreateAdminResult }) {
         ) : null}
         <p className="text-muted-foreground">
           {result.invitationSent
-            ? "Email invitation and in-app notification were sent."
-            : "Invitation notification queued. Share the temporary password securely if email delivery is delayed."}
+            ? "Email invitation and in-app notification were sent with a password setup link."
+            : "Invitation notification queued. Share the password setup link securely if email delivery is delayed."}
         </p>
       </div>
     </div>

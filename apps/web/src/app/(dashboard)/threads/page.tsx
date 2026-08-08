@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { ThreadsPageContent } from "@/features/communication/components/threads-page-content";
+import { LazyThreadsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Threads" };
 
 export default function ThreadsPage() {
-  return <ThreadsPageContent />;
+  return <LazyThreadsPage />;
 }

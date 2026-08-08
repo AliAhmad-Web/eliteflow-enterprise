@@ -1,0 +1,67 @@
+/**
+ * Enterprise Device Management constants.
+ */
+
+export const DEVICE_STORE_PREFIX = "ebm:device";
+export const DEVICE_USER_INDEX_PREFIX = "ebm:device-user";
+export const DEVICE_FP_INDEX_PREFIX = "ebm:device-fp";
+
+/** Absolute TTL for inactive device records (days). */
+export const DEVICE_RECORD_TTL_DAYS = 90;
+
+/** Max IP history entries retained per device. */
+export const DEVICE_IP_HISTORY_MAX = 20;
+
+export const DEVICE_STATES = {
+  NEW: "NEW",
+  TRUSTED: "TRUSTED",
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  BLOCKED: "BLOCKED",
+  SUSPICIOUS: "SUSPICIOUS",
+  REVOKED: "REVOKED",
+} as const;
+
+export const DEVICE_TYPES = {
+  DESKTOP: "DESKTOP",
+  LAPTOP: "LAPTOP",
+  BROWSER: "BROWSER",
+  MOBILE: "MOBILE",
+  TABLET: "TABLET",
+  UNKNOWN: "UNKNOWN",
+} as const;
+
+export const DEVICE_RISK_SIGNALS = {
+  IMPOSSIBLE_DEVICE: "IMPOSSIBLE_DEVICE",
+  FINGERPRINT_CHANGED: "FINGERPRINT_CHANGED",
+  BROWSER_CHANGED: "BROWSER_CHANGED",
+  OS_CHANGED: "OS_CHANGED",
+  COUNTRY_CHANGED: "COUNTRY_CHANGED",
+  HIGH_RISK_DEVICE: "HIGH_RISK_DEVICE",
+  BLOCKED_DEVICE: "BLOCKED_DEVICE",
+  DEVICE_FLOOD: "DEVICE_FLOOD",
+  RAPID_DEVICE_SWITCHING: "RAPID_DEVICE_SWITCHING",
+} as const;
+
+export const DEVICE_MONITORING_EVENTS = {
+  DEVICE_REGISTERED: "DEVICE_REGISTERED",
+  DEVICE_TRUSTED: "DEVICE_TRUSTED",
+  DEVICE_REMOVED: "DEVICE_REMOVED",
+  DEVICE_BLOCKED: "DEVICE_BLOCKED",
+  DEVICE_REVOKED: "DEVICE_REVOKED",
+  DEVICE_SUSPICIOUS: "DEVICE_SUSPICIOUS",
+  UNKNOWN_DEVICE: "UNKNOWN_DEVICE",
+  DEVICE_LIMIT_EXCEEDED: "DEVICE_LIMIT_EXCEEDED",
+  DEVICE_POLICY_VIOLATION: "DEVICE_POLICY_VIOLATION",
+} as const;
+
+export const DEVICE_AUDIT_ACTIONS = {
+  REGISTERED: "device.registered",
+  TRUSTED: "device.trusted",
+  RENAMED: "device.renamed",
+  REMOVED: "device.removed",
+  BLOCKED: "device.blocked",
+  REVOKED: "device.revoked",
+  SUSPICIOUS: "device.suspicious",
+  POLICY_VIOLATION: "device.policy_violation",
+} as const;

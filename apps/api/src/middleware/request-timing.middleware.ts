@@ -18,6 +18,17 @@ export function requestTiming(
   return (req: Request, res: Response, next: NextFunction) => {
     const started = process.hrtime.bigint();
 
+    const originalEnd = res.end.bind(res);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (res as any).end = (...args: unknown[]) => {
+      const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+      const rounded = Math.round(elapsedMs * 100) / 100;
+      if (!res.headersSent) {
+        res.setHeader("X-Response-Time", `${rounded}ms`);
+      }
+      return originalEnd(...(args as Parameters<typeof res.end>));
+    };
+
     res.on("finish", () => {
       const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
       const rounded = Math.round(elapsedMs * 100) / 100;

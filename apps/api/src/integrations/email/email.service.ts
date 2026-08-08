@@ -16,6 +16,17 @@ export interface PasswordResetEmailInput {
   to: string;
   firstName: string;
   resetUrl: string;
+  /** Displayed expiry; defaults to TOKEN_EXPIRATION.PASSWORD_SETUP_MINUTES. */
+  expiresInMinutes?: number;
+}
+
+export interface PasswordSetupEmailInput {
+  to: string;
+  firstName: string;
+  setupUrl: string;
+  expiresInMinutes: number;
+  /** invitation | admin_create | admin_reset | forgot_password */
+  kind: "invitation" | "admin_create" | "admin_reset" | "forgot_password";
 }
 
 export interface VerificationEmailInput {
@@ -157,6 +168,11 @@ class EmailService {
           user: emailConfig.smtp.user,
           pass: emailConfig.smtp.pass,
         },
+        // Prevent hung SMTP from blocking notification/email HTTP requests past the
+        // web client's 45s AbortController budget.
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
       });
       this.smtpFingerprint = fingerprint;
     }
@@ -165,9 +181,11 @@ class EmailService {
   }
 
   async sendPasswordResetEmail(input: PasswordResetEmailInput): Promise<void> {
+    const expiresInMinutes =
+      input.expiresInMinutes ?? 30;
     const subject = `Reset your ${emailConfig.appName} password`;
-    const html = this.buildPasswordResetHtml(input);
-    const text = this.buildPasswordResetText(input);
+    const html = this.buildPasswordResetHtml({ ...input, expiresInMinutes });
+    const text = this.buildPasswordResetText({ ...input, expiresInMinutes });
 
     await this.deliver({
       to: input.to,
@@ -175,7 +193,26 @@ class EmailService {
       html,
       text,
       logLabel: "password reset",
-      logUrl: input.resetUrl,
+      // Never log the token-bearing URL
+      logUrl: "[password-reset-link-redacted]",
+    });
+  }
+
+  async sendPasswordSetupEmail(input: PasswordSetupEmailInput): Promise<void> {
+    const subject =
+      input.kind === "forgot_password" || input.kind === "admin_reset"
+        ? `Reset your ${emailConfig.appName} password`
+        : `Set up your ${emailConfig.appName} password`;
+    const html = this.buildPasswordSetupHtml(input);
+    const text = this.buildPasswordSetupText(input);
+
+    await this.deliver({
+      to: input.to,
+      subject,
+      html,
+      text,
+      logLabel: "password setup",
+      logUrl: "[password-setup-link-redacted]",
     });
   }
 
@@ -190,7 +227,7 @@ class EmailService {
       html,
       text,
       logLabel: "email verification",
-      logUrl: input.verifyUrl,
+      logUrl: "[email-verification-link-redacted]",
     });
   }
 
@@ -391,6 +428,7 @@ class EmailService {
         html: input.html,
         text: input.text,
       }),
+      signal: AbortSignal.timeout(12_000),
     });
 
     const payload = (await response.json()) as {
@@ -411,27 +449,70 @@ class EmailService {
     return { id: payload.id };
   }
 
-  private buildPasswordResetHtml(input: PasswordResetEmailInput): string {
+  private buildPasswordResetHtml(
+    input: PasswordResetEmailInput & { expiresInMinutes: number },
+  ): string {
     const firstName = this.escapeHtml(input.firstName);
     const resetUrl = this.escapeHtml(input.resetUrl);
     const appName = this.escapeHtml(emailConfig.appName);
+    const minutes = input.expiresInMinutes;
 
     return `
       <p>Hi ${firstName},</p>
       <p>We received a request to reset your ${appName} password.</p>
       <p><a href="${resetUrl}">Reset your password</a></p>
-      <p>This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+      <p>This link expires in ${minutes} minutes and can only be used once. If you did not request a password reset, you can safely ignore this email.</p>
     `;
   }
 
-  private buildPasswordResetText(input: PasswordResetEmailInput): string {
+  private buildPasswordResetText(
+    input: PasswordResetEmailInput & { expiresInMinutes: number },
+  ): string {
     return [
       `Hi ${input.firstName},`,
       "",
       `We received a request to reset your ${emailConfig.appName} password.`,
       `Reset your password: ${input.resetUrl}`,
       "",
-      "This link expires in 1 hour. If you did not request a password reset, you can safely ignore this email.",
+      `This link expires in ${input.expiresInMinutes} minutes and can only be used once. If you did not request a password reset, you can safely ignore this email.`,
+    ].join("\n");
+  }
+
+  private buildPasswordSetupHtml(input: PasswordSetupEmailInput): string {
+    const firstName = this.escapeHtml(input.firstName);
+    const setupUrl = this.escapeHtml(input.setupUrl);
+    const appName = this.escapeHtml(emailConfig.appName);
+    const minutes = input.expiresInMinutes;
+    const isReset =
+      input.kind === "forgot_password" || input.kind === "admin_reset";
+    const intro = isReset
+      ? `A password reset was requested for your ${appName} account.`
+      : `Your ${appName} account is ready. Set your password to activate sign-in.`;
+    const cta = isReset ? "Reset your password" : "Set up your password";
+
+    return `
+      <p>Hi ${firstName},</p>
+      <p>${intro}</p>
+      <p><a href="${setupUrl}">${cta}</a></p>
+      <p>This link expires in ${minutes} minutes and can only be used once. Never share this link. ${emailConfig.appName} will never ask for your password by email.</p>
+    `;
+  }
+
+  private buildPasswordSetupText(input: PasswordSetupEmailInput): string {
+    const isReset =
+      input.kind === "forgot_password" || input.kind === "admin_reset";
+    const intro = isReset
+      ? `A password reset was requested for your ${emailConfig.appName} account.`
+      : `Your ${emailConfig.appName} account is ready. Set your password to activate sign-in.`;
+    const cta = isReset ? "Reset your password" : "Set up your password";
+
+    return [
+      `Hi ${input.firstName},`,
+      "",
+      intro,
+      `${cta}: ${input.setupUrl}`,
+      "",
+      `This link expires in ${input.expiresInMinutes} minutes and can only be used once. Never share this link.`,
     ].join("\n");
   }
 
@@ -493,6 +574,11 @@ export const emailService = new EmailService();
 
 export function buildPasswordResetUrl(token: string): string {
   return `${emailConfig.frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+/** Alias used by PasswordSetupService consumers / emails. */
+export function buildPasswordSetupUrl(token: string): string {
+  return buildPasswordResetUrl(token);
 }
 
 export function buildEmailVerificationUrl(token: string): string {

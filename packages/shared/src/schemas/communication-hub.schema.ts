@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isAttachmentUrlSchemeAllowed } from "../utils/attachment-url.js";
 import { uuidSchema } from "./common.schema.js";
 import { communicationUserSummarySchema } from "./communication.schema.js";
 
@@ -50,7 +51,14 @@ export type CommunicationAiActionValue = z.infer<
 
 const hubAttachmentInputSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
-  fileUrl: z.string().trim().url().max(2048),
+  fileUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine(
+      isAttachmentUrlSchemeAllowed,
+      "Forbidden attachment URL scheme. Use a File Manager file.",
+    ),
   mimeType: z.string().trim().max(120).optional().nullable(),
   sizeBytes: z.number().int().nonnegative().optional().nullable(),
   managedFileId: uuidSchema.optional().nullable(),
@@ -312,7 +320,16 @@ export const updateMeetingParticipantSchema = z.object({
 
 export const createMeetingRecordingSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
-  storageUrl: z.string().trim().url().max(2048).optional().nullable(),
+  storageUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine(
+      (value) => value.length === 0 || isAttachmentUrlSchemeAllowed(value),
+      "Forbidden attachment URL scheme. Use a File Manager file.",
+    )
+    .optional()
+    .nullable(),
   mimeType: z.string().trim().max(120).optional().nullable(),
   sizeBytes: z.number().int().nonnegative().optional().nullable(),
   durationSeconds: z.number().int().nonnegative().optional().nullable(),

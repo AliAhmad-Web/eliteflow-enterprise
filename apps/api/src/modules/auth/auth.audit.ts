@@ -1,7 +1,11 @@
-import { prisma, Prisma } from "@enterprise/database";
-
 import type { RequestContext } from "./auth.types.js";
 import { AUTH_AUDIT_ACTIONS, AUTH_AUDIT_RESOURCE } from "./auth.constants.js";
+import {
+  writeAuditLog,
+  writeAuditLogSafe,
+} from "../../shared/security/write-audit-log.js";
+import { maskEmail } from "@enterprise/shared";
+import { prisma } from "@enterprise/database";
 
 interface AuditEventInput {
   userId?: string;
@@ -11,20 +15,28 @@ interface AuditEventInput {
   context: RequestContext;
 }
 
+function toAuditInput(input: AuditEventInput) {
+  return {
+    userId: input.userId ?? null,
+    action: input.action,
+    resource: AUTH_AUDIT_RESOURCE,
+    resourceId: input.resourceId ?? null,
+    metadata: input.metadata,
+    ipAddress: input.context.ipAddress,
+    userAgent: input.context.userAgent,
+  };
+}
+
 export async function logAuthAuditEvent(input: AuditEventInput): Promise<void> {
-  await prisma.auditLog.create({
-    data: {
-      userId: input.userId ?? null,
-      action: input.action,
-      resource: AUTH_AUDIT_RESOURCE,
-      resourceId: input.resourceId ?? null,
-      metadata: input.metadata
-        ? (input.metadata as Prisma.InputJsonValue)
-        : undefined,
-      ipAddress: input.context.ipAddress,
-      userAgent: input.context.userAgent,
-    },
-  });
+  await writeAuditLog(toAuditInput(input));
+}
+
+/**
+ * Fire-and-forget auth audit — never blocks token issuance (e.g. /auth/refresh).
+ * Still writes the integrity-chained audit row via writeAuditLogSafe.
+ */
+export function scheduleAuthAuditEvent(input: AuditEventInput): void {
+  void writeAuditLogSafe(toAuditInput(input), "auth-audit");
 }
 
 interface LoginAttemptInput {
@@ -35,6 +47,10 @@ interface LoginAttemptInput {
   context: RequestContext;
 }
 
+/**
+ * Login attempts retain email for lockout/security correlation.
+ * Display layer must mask; do not put raw passwords here.
+ */
 export async function logLoginAttempt(input: LoginAttemptInput): Promise<void> {
   await prisma.loginAttempt.create({
     data: {
@@ -46,6 +62,11 @@ export async function logLoginAttempt(input: LoginAttemptInput): Promise<void> {
       failureReason: input.failureReason ?? null,
     },
   });
+}
+
+/** Helper for audit metadata that only needs a masked email reference. */
+export function maskedEmailMeta(email: string): { email: string } {
+  return { email: maskEmail(email) };
 }
 
 export { AUTH_AUDIT_ACTIONS };

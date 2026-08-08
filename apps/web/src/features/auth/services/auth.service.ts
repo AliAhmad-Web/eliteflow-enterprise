@@ -45,6 +45,7 @@ export const authService = {
       requiresOtp?: boolean;
       otpSessionId?: string;
       expiresIn?: number;
+      mfaMethod?: "totp" | "email";
     }>(`${AUTH_API_PREFIX}/login`, {
       method: "POST",
       body: input,
@@ -66,6 +67,7 @@ export const authService = {
       requiresOtp?: boolean;
       otpSessionId?: string;
       expiresIn?: number;
+      mfaMethod?: "totp" | "email";
     }>(`${AUTH_API_PREFIX}/oauth/callback`, {
       method: "POST",
       body: input,
@@ -211,6 +213,43 @@ export const authService = {
         timeoutMs: 120_000,
       },
     );
+  },
+
+  async mfaStatus() {
+    return apiRequest<{
+      enabled: boolean;
+      enrollmentRequired: boolean;
+      canEnroll: boolean;
+      recoveryCodesRemaining?: number;
+    }>(`${AUTH_API_PREFIX}/mfa/status`, { auth: true });
+  },
+
+  async mfaSetup() {
+    return apiRequest<{
+      secret: string;
+      otpauthUrl: string;
+      qrCodeDataUrl: string;
+      recoveryCodes: string[];
+    }>(`${AUTH_API_PREFIX}/mfa/setup`, {
+      method: "POST",
+      auth: true,
+    });
+  },
+
+  async mfaEnable(code: string) {
+    return apiRequest<{ message: string }>(`${AUTH_API_PREFIX}/mfa/enable`, {
+      method: "POST",
+      body: { code },
+      auth: true,
+    });
+  },
+
+  async mfaDisable(code: string) {
+    return apiRequest<{ message: string }>(`${AUTH_API_PREFIX}/mfa/disable`, {
+      method: "POST",
+      body: { code },
+      auth: true,
+    });
   },
 
   async listSessions() {

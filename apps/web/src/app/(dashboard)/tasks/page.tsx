@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { TasksPageContent } from "@/features/tasks/components/tasks-page-content";
+import { LazyTasksPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Tasks" };
 
 export default function TasksPage() {
-  return <TasksPageContent />;
+  return <LazyTasksPage />;
 }

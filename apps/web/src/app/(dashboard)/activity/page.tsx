@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { ActivityFeedPageContent } from "@/features/communication/components/activity-feed-page-content";
+import { LazyActivityPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Activity" };
 
 export default function ActivityPage() {
-  return <ActivityFeedPageContent />;
+  return <LazyActivityPage />;
 }

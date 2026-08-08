@@ -27,6 +27,7 @@ import {
   toTaskDto,
 } from "./tasks.types.js";
 import { queuePerformanceRecalcForUser } from "../team/performance-recalc.queue.js";
+import { attachmentSecurityService } from "../files/attachment-security.service.js";
 
 export interface TaskActor {
   userId: string;
@@ -76,7 +77,17 @@ export class TasksService {
     this.assertIsAdmin(actor);
     await this.assertProjectAndAssignee(input.projectId, input.assignedToId);
 
-    const created = await tasksRepository.create(input, actor.userId);
+    const attachments = input.attachments?.length
+      ? await attachmentSecurityService.secureAttachments(
+          input.attachments,
+          actor,
+        )
+      : input.attachments;
+
+    const created = await tasksRepository.create(
+      { ...input, attachments: attachments ?? [] },
+      actor.userId,
+    );
 
     await logTaskAuditEvent({
       userId: actor.userId,
@@ -117,9 +128,20 @@ export class TasksService {
         );
       }
 
+      const securedInput =
+        fullInput.attachments !== undefined
+          ? {
+              ...fullInput,
+              attachments: await attachmentSecurityService.secureAttachments(
+                fullInput.attachments,
+                actor,
+              ),
+            }
+          : fullInput;
+
       const updated = await tasksRepository.update(
         id,
-        fullInput,
+        securedInput,
         actor.userId,
         "Task details were updated",
       );

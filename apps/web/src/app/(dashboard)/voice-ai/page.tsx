@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { VoiceAiPageContent } from "@/features/communication/components/voice-ai-page-content";
+import { LazyVoiceAiPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Voice AI" };
 
 export default function VoiceAiPage() {
-  return <VoiceAiPageContent />;
+  return <LazyVoiceAiPage />;
 }

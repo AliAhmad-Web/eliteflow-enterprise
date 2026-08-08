@@ -20,22 +20,15 @@ function getPersistKey(): string {
   return buildTenantAwarePersistStorageKey(PERSIST_KEY_BASE);
 }
 
-/** Queries safe to restore across F5 (list/overview shells — not realtime-only). */
+/**
+ * Queries safe to restore across F5. Keep narrow to avoid main-thread
+ * serialize cost and large localStorage writes on every cache update.
+ * List/detail surfaces (files, communication, reports) refetch from RQ memory.
+ */
 const PERSIST_KEY_PREFIXES = [
   "auth",
   "settings",
-  "clients",
-  "projects",
-  "tasks",
-  "invoices",
-  "communication",
   "dashboard",
-  "reports",
-  "calendar",
-  "team",
-  "notifications",
-  "integrations",
-  "files",
 ] as const;
 
 function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
@@ -116,7 +109,7 @@ function schedulePersist(client: QueryClient): void {
     } catch {
       // Quota / private mode — ignore
     }
-  }, 1_000);
+  }, 2_500);
 }
 
 /** Shared TanStack Query defaults for enterprise production caching. */

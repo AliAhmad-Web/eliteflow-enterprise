@@ -21,6 +21,11 @@ import { OtpPurpose } from "@enterprise/shared";
 import { AUTH_ERROR_CODES } from "@enterprise/shared";
 
 import { emailConfig } from "../../config/email.config.js";
+import {
+  csrfService,
+  isCsrfRotateOnRefresh,
+} from "../../shared/security/csrf/index.js";
+import { zeroTrustService } from "../../shared/security/zero-trust/index.js";
 import { successResponse } from "../../shared/utils/api-response.js";
 import {
   clearRefreshTokenCookie,
@@ -29,7 +34,29 @@ import {
 } from "./auth.cookies.js";
 import { AuthError } from "./auth.errors.js";
 import { authService } from "./auth.service.js";
+import { verifyAccessToken } from "./auth.tokens.js";
 import { extractRequestContext } from "./auth.utils.js";
+
+async function rotateCsrfForAccessToken(
+  req: Request,
+  res: Response,
+  accessToken: string,
+): Promise<void> {
+  try {
+    const payload = verifyAccessToken(accessToken);
+    await csrfService.rotate(req, res, {
+      sessionId: payload.sessionId,
+      userId: payload.sub,
+      tenantId: null,
+    });
+  } catch {
+    await csrfService.rotate(req, res, {
+      sessionId: null,
+      userId: null,
+      tenantId: null,
+    });
+  }
+}
 
 export class AuthController {
   async signup(req: Request, res: Response): Promise<void> {
@@ -62,14 +89,19 @@ export class AuthController {
             requiresOtp: true,
             otpSessionId: result.otpSessionId,
             expiresIn: result.expiresIn,
+            mfaMethod: result.mfaMethod,
           },
-          "OTP verification required",
+          result.mfaMethod === "totp"
+            ? "Authenticator verification required"
+            : "OTP verification required",
         ),
       );
       return;
     }
 
     setRefreshTokenCookie(res, result.refreshToken);
+
+    await rotateCsrfForAccessToken(req, res, result.tokens.accessToken);
 
     res.json(
       successResponse(
@@ -95,6 +127,7 @@ export class AuthController {
 
     await authService.logout(req.auth.sessionId, req.auth.userId, context);
     clearRefreshTokenCookie(res);
+    await csrfService.clear(req, res);
 
     res.json(successResponse({ message: "Logged out successfully" }, "Logout successful"));
   }
@@ -117,6 +150,10 @@ export class AuthController {
     // cookie already set by the winning rotation request.
     if (result.refreshToken) {
       setRefreshTokenCookie(res, result.refreshToken);
+    }
+
+    if (isCsrfRotateOnRefresh()) {
+      await rotateCsrfForAccessToken(req, res, result.accessToken);
     }
 
     res.json(
@@ -163,6 +200,8 @@ export class AuthController {
       context,
     );
 
+    await csrfService.clear(req, res);
+
     res.json(successResponse(result, "Password reset successful"));
   }
 
@@ -208,6 +247,8 @@ export class AuthController {
 
     if (result.purpose === OtpPurpose.LOGIN_2FA) {
       setRefreshTokenCookie(res, result.refreshToken);
+
+      await rotateCsrfForAccessToken(req, res, result.tokens.accessToken);
 
       res.json(
         successResponse(
@@ -270,14 +311,19 @@ export class AuthController {
             requiresOtp: true,
             otpSessionId: result.otpSessionId,
             expiresIn: result.expiresIn,
+            mfaMethod: result.mfaMethod,
           },
-          "OTP verification required",
+          result.mfaMethod === "totp"
+            ? "Authenticator verification required"
+            : "OTP verification required",
         ),
       );
       return;
     }
 
     setRefreshTokenCookie(res, result.refreshToken);
+
+    await rotateCsrfForAccessToken(req, res, result.tokens.accessToken);
 
     res.json(
       successResponse(
@@ -418,6 +464,136 @@ export class AuthController {
     );
 
     res.json(successResponse(result, "Device renamed successfully"));
+  }
+
+  async mfaStatus(req: Request, res: Response): Promise<void> {
+    if (!req.auth) {
+      throw new AuthError(
+        "Authentication required",
+        401,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    const result = await authService.getMfaStatus(req.auth.userId);
+    res.json(successResponse(result, "MFA status retrieved"));
+  }
+
+  async mfaSetup(req: Request, res: Response): Promise<void> {
+    if (!req.auth) {
+      throw new AuthError(
+        "Authentication required",
+        401,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    const context = extractRequestContext(req);
+    const result = await authService.setupMfa(req.auth.userId, context);
+    res.json(
+      successResponse(result, "Scan the QR code with your authenticator app"),
+    );
+  }
+
+  async mfaEnable(req: Request, res: Response): Promise<void> {
+    if (!req.auth) {
+      throw new AuthError(
+        "Authentication required",
+        401,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    const body = req.body as { code: string };
+    const context = extractRequestContext(req);
+    const result = await authService.enableMfa(
+      req.auth.userId,
+      body.code,
+      context,
+      req.auth.sessionId,
+    );
+    res.json(successResponse(result, result.message));
+  }
+
+  async mfaDisable(req: Request, res: Response): Promise<void> {
+    if (!req.auth) {
+      throw new AuthError(
+        "Authentication required",
+        401,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    const body = req.body as { code: string };
+    const context = extractRequestContext(req);
+    const result = await authService.disableMfa(
+      req.auth.userId,
+      body.code,
+      context,
+      req.auth.sessionId,
+    );
+    res.json(successResponse(result, result.message));
+  }
+
+  /**
+   * Zero Trust step-up MFA — reuses existing TOTP/recovery verification.
+   */
+  async mfaStepUp(req: Request, res: Response): Promise<void> {
+    if (!req.auth) {
+      throw new AuthError(
+        "Authentication required",
+        401,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    const body = req.body as { code: string };
+    const context = extractRequestContext(req);
+
+    try {
+      const result = await zeroTrustService.completeStepUp({
+        actor: {
+          userId: req.auth.userId,
+          email: req.auth.email,
+          role: req.auth.role,
+          permissions: req.auth.permissions,
+          sessionId: req.auth.sessionId,
+        },
+        code: body.code,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+
+      res.json(
+        successResponse(
+          {
+            verified: result.verified,
+            expiresAt: result.expiresAt,
+            requiresStepUp: false as const,
+          },
+          "Step-up MFA verified",
+        ),
+      );
+    } catch (error) {
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code: string }).code)
+          : "MFA_INVALID";
+
+      if (code === "MFA_NOT_ENABLED") {
+        throw new AuthError(
+          "Multi-factor authentication is not enabled",
+          400,
+          AUTH_ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      throw new AuthError(
+        "Invalid verification code",
+        400,
+        AUTH_ERROR_CODES.OTP_INVALID,
+      );
+    }
   }
 }
 

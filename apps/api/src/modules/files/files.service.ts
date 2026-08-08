@@ -16,6 +16,7 @@ import type {
   FileVersionDto,
 } from "@enterprise/shared";
 import { UserRole } from "@enterprise/shared";
+import { readFile, unlink } from "node:fs/promises";
 
 import { FILES_AUDIT_ACTIONS, logFilesAuditEvent } from "./files.audit.js";
 import { FILES_ERROR_CODES, FilesError } from "./files.errors.js";
@@ -32,10 +33,9 @@ import {
   uniqueFileName,
   validateUploadFile,
 } from "./files.validation-rules.js";
-import {
-  runVirusScanHook,
-  storageProvider,
-} from "./storage/storage.provider.js";
+import { runVirusScanHook } from "./antivirus/index.js";
+import { storageProvider } from "./storage/storage.provider.js";
+import { securityMonitoringService } from "../../shared/security/monitoring/index.js";
 
 export interface FilesActor {
   userId: string;
@@ -60,10 +60,19 @@ function hasPermission(actor: FilesActor, key: string): boolean {
 }
 
 export class FilesService {
+  /** Active (non-expired) share predicate — used in every share-scoped query. */
+  private activeShareWhere(): Prisma.FileShareWhereInput {
+    return {
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    };
+  }
+
   private async fileScope(
     actor: FilesActor,
   ): Promise<Prisma.ManagedFileWhereInput> {
     if (isAdmin(actor)) return {};
+
+    const activeShare = this.activeShareWhere();
 
     if (isClient(actor)) {
       if (!actor.companyId) {
@@ -76,7 +85,7 @@ export class FilesService {
             shares: {
               some: {
                 sharedWithClientId: actor.companyId,
-                OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+                ...activeShare,
               },
             },
           },
@@ -98,7 +107,7 @@ export class FilesService {
           shares: {
             some: {
               sharedWithUserId: actor.userId,
-              OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+              ...activeShare,
             },
           },
         },
@@ -128,10 +137,259 @@ export class FilesService {
     });
 
     if (allowed.total === 0) {
+      void securityMonitoringService.reportAclDenial({
+        userId: actor.userId,
+        resource: "files",
+        resourceId: fileId,
+        message: "File ACL denial",
+        metadata: { action: "read" },
+        ipAddress: actor.ipAddress ?? null,
+        userAgent: actor.userAgent ?? null,
+      });
       throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
     }
 
     return file;
+  }
+
+  /**
+   * Download ACL (FS-07): VIEW shares never grant download.
+   * Owners, admins, project members, and company-linked clients may download.
+   * Share recipients need an active DOWNLOAD share.
+   */
+  private async assertCanDownloadFile(actor: FilesActor, fileId: string) {
+    const file = await this.assertCanReadFile(actor, fileId);
+
+    if (isAdmin(actor) || file.createdById === actor.userId) {
+      return file;
+    }
+
+    if (file.projectId && !isClient(actor)) {
+      const membership = await filesRepository.findProjectMembership(
+        actor.userId,
+        file.projectId,
+      );
+      if (membership) return file;
+    }
+
+    if (isClient(actor) && actor.companyId && file.clientId === actor.companyId) {
+      return file;
+    }
+
+    if (isClient(actor) && actor.companyId) {
+      const share = await filesRepository.findActiveShareForClient(
+        fileId,
+        actor.companyId,
+        "DOWNLOAD",
+      );
+      if (share) return file;
+    } else if (!isClient(actor)) {
+      const share = await filesRepository.findActiveShareForUser(
+        fileId,
+        actor.userId,
+        "DOWNLOAD",
+      );
+      if (share) return file;
+    }
+
+    throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
+  }
+
+  /**
+   * Share target validation (FS-10).
+   */
+  private async assertShareTarget(
+    actor: FilesActor,
+    input: { sharedWithUserId?: string; sharedWithClientId?: string },
+  ): Promise<void> {
+    if (input.sharedWithUserId) {
+      if (input.sharedWithUserId === actor.userId) {
+        throw new FilesError(
+          "Permission denied",
+          403,
+          FILES_ERROR_CODES.FORBIDDEN,
+        );
+      }
+
+      const user = await filesRepository.findShareTargetUser(
+        input.sharedWithUserId,
+      );
+      if (!user || user.deletedAt) {
+        throw new FilesError("User not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+      }
+      if (user.status === "LOCKED" || user.status === "DEACTIVATED") {
+        throw new FilesError(
+          "Permission denied",
+          403,
+          FILES_ERROR_CODES.FORBIDDEN,
+        );
+      }
+    }
+
+    if (input.sharedWithClientId) {
+      const client = await filesRepository.findShareTargetClient(
+        input.sharedWithClientId,
+      );
+      if (!client || client.deletedAt) {
+        throw new FilesError(
+          "Client not found",
+          404,
+          FILES_ERROR_CODES.NOT_FOUND,
+        );
+      }
+      if (client.status === "INACTIVE") {
+        throw new FilesError(
+          "Permission denied",
+          403,
+          FILES_ERROR_CODES.FORBIDDEN,
+        );
+      }
+    }
+  }
+
+  /**
+   * Folder visibility scope (FS-01).
+   * Admin: all folders.
+   * Client: folders linked to their company (clientId).
+   * Employee: folders they own or folders linked to projects they belong to.
+   * Folder shares are not modeled in the schema — no share branch.
+   */
+  private async folderScope(
+    actor: FilesActor,
+  ): Promise<Prisma.FolderWhereInput> {
+    if (isAdmin(actor)) return {};
+
+    if (isClient(actor)) {
+      if (!actor.companyId) {
+        return { id: "__none__" };
+      }
+      return { clientId: actor.companyId };
+    }
+
+    const memberships = await filesRepository.listProjectIdsForUser(
+      actor.userId,
+    );
+    const projectIds = memberships.map((item) => item.projectId);
+
+    return {
+      OR: [
+        { createdById: actor.userId },
+        ...(projectIds.length ? [{ projectId: { in: projectIds } }] : []),
+      ],
+    };
+  }
+
+  private async assertCanReadFolder(actor: FilesActor, folderId: string) {
+    const folder = await filesRepository.getFolder(folderId);
+    if (!folder) {
+      throw new FilesError("Folder not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+    }
+
+    if (isAdmin(actor)) return folder;
+
+    const scope = await this.folderScope(actor);
+    const allowed = await filesRepository.listFolders(folder.parentId, "", {
+      AND: [scope, { id: folderId }],
+    });
+
+    if (allowed.length === 0) {
+      throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
+    }
+
+    return folder;
+  }
+
+  /** Mutate/delete: folder owner or administrator only. */
+  private async assertCanManageFolder(actor: FilesActor, folderId: string) {
+    const folder = await filesRepository.getFolder(folderId);
+    if (!folder) {
+      throw new FilesError("Folder not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+    }
+
+    if (isAdmin(actor) || folder.createdById === actor.userId) {
+      return folder;
+    }
+
+    throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
+  }
+
+  /**
+   * File write ACL (FS-02): owner or administrator only.
+   * Read access, shares, and files:upload must never grant write.
+   */
+  private async assertCanManageFile(actor: FilesActor, fileId: string) {
+    const file = await filesRepository.getFile(fileId, true);
+    if (!file) {
+      throw new FilesError("File not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+    }
+
+    if (isAdmin(actor) || file.createdById === actor.userId) {
+      return file;
+    }
+
+    throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
+  }
+
+  /**
+   * Upload association validation (FS-06).
+   * Never trust client-supplied folderId / projectId / clientId.
+   */
+  private async assertUploadAssociations(
+    actor: FilesActor,
+    meta: {
+      folderId?: string | null;
+      projectId?: string | null;
+      clientId?: string | null;
+    },
+  ): Promise<void> {
+    const folderId = meta.folderId ?? null;
+    const projectId = meta.projectId ?? null;
+    const clientId = meta.clientId ?? null;
+
+    if (folderId) {
+      await this.assertCanReadFolder(actor, folderId);
+    }
+
+    if (projectId) {
+      const project = await filesRepository.findProjectId(projectId);
+      if (!project) {
+        throw new FilesError("Project not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+      }
+
+      if (!isAdmin(actor)) {
+        const membership = await filesRepository.findProjectMembership(
+          actor.userId,
+          projectId,
+        );
+        if (!membership) {
+          throw new FilesError(
+            "Permission denied",
+            403,
+            FILES_ERROR_CODES.FORBIDDEN,
+          );
+        }
+      }
+    }
+
+    if (clientId) {
+      const client = await filesRepository.findClientId(clientId);
+      if (!client) {
+        throw new FilesError("Client not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+      }
+
+      if (!isAdmin(actor)) {
+        const canAssociate =
+          hasPermission(actor, "clients:write") ||
+          hasPermission(actor, "clients:read");
+        if (!canAssociate) {
+          throw new FilesError(
+            "Permission denied",
+            403,
+            FILES_ERROR_CODES.FORBIDDEN,
+          );
+        }
+      }
+    }
   }
 
   async listFolders(
@@ -144,7 +402,17 @@ export class FilesService {
 
     const parentId =
       !query.parentId || query.parentId === "root" ? null : query.parentId;
-    const items = await filesRepository.listFolders(parentId, query.search);
+
+    if (parentId) {
+      await this.assertCanReadFolder(actor, parentId);
+    }
+
+    const scope = await this.folderScope(actor);
+    const items = await filesRepository.listFolders(
+      parentId,
+      query.search,
+      scope,
+    );
     return { items: items.map(toFolderDto) };
   }
 
@@ -157,10 +425,7 @@ export class FilesService {
     }
 
     if (input.parentId) {
-      const parent = await filesRepository.getFolder(input.parentId);
-      if (!parent) {
-        throw new FilesError("Parent folder not found", 404, FILES_ERROR_CODES.NOT_FOUND);
-      }
+      await this.assertCanReadFolder(actor, input.parentId);
     }
 
     const folder = await filesRepository.createFolder({
@@ -191,9 +456,10 @@ export class FilesService {
       throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
     }
 
-    const existing = await filesRepository.getFolder(id);
-    if (!existing) {
-      throw new FilesError("Folder not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+    await this.assertCanManageFolder(actor, id);
+
+    if (input.parentId) {
+      await this.assertCanReadFolder(actor, input.parentId);
     }
 
     const updated = await filesRepository.updateFolder(id, {
@@ -214,14 +480,7 @@ export class FilesService {
   }
 
   async deleteFolder(id: string, actor: FilesActor): Promise<{ id: string }> {
-    if (!hasPermission(actor, "files:delete") && !isAdmin(actor)) {
-      throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
-    }
-
-    const existing = await filesRepository.getFolder(id);
-    if (!existing) {
-      throw new FilesError("Folder not found", 404, FILES_ERROR_CODES.NOT_FOUND);
-    }
+    await this.assertCanManageFolder(actor, id);
 
     await filesRepository.softDeleteFolder(id, actor.userId);
     await logFilesAuditEvent({
@@ -240,19 +499,24 @@ export class FilesService {
     actor: FilesActor,
   ): Promise<ManagedFileListResponse> {
     if (query.view === "shared") {
+      const activeShare = this.activeShareWhere();
       const scope: Prisma.ManagedFileWhereInput = isClient(actor)
         ? {
             shares: {
               some: {
                 sharedWithClientId: actor.companyId ?? "__none__",
+                ...activeShare,
               },
             },
           }
         : isAdmin(actor)
-          ? { shares: { some: {} } }
+          ? { shares: { some: { ...activeShare } } }
           : {
               shares: {
-                some: { sharedWithUserId: actor.userId },
+                some: {
+                  sharedWithUserId: actor.userId,
+                  ...activeShare,
+                },
               },
             };
 
@@ -302,8 +566,11 @@ export class FilesService {
     files: Array<{
       originalname: string;
       mimetype: string;
-      buffer: Buffer;
       size: number;
+      /** Preferred: disk temp path from multer diskStorage (F-06). */
+      tempPath?: string;
+      /** Optional in-memory buffer (tests / legacy). */
+      buffer?: Buffer;
     }>,
     meta: {
       folderId?: string | null;
@@ -318,84 +585,138 @@ export class FilesService {
     }
 
     const folderId = meta.folderId ?? null;
-    if (folderId) {
-      const folder = await filesRepository.getFolder(folderId);
-      if (!folder) {
-        throw new FilesError("Folder not found", 404, FILES_ERROR_CODES.NOT_FOUND);
-      }
-    }
+    const projectId = meta.projectId ?? null;
+    const clientId = meta.clientId ?? null;
+
+    await this.assertUploadAssociations(actor, {
+      folderId,
+      projectId,
+      clientId,
+    });
 
     const existing = await filesRepository.listNamesInFolder(folderId);
     const existingNames = existing.map((item) => item.name);
     const created: ManagedFileDto[] = [];
 
     for (const file of files) {
-      const validated = validateUploadFile({
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-        buffer: file.buffer,
-      });
-
-      const scan = await runVirusScanHook({
-        buffer: file.buffer,
-        mimeType: file.mimetype,
-        originalName: file.originalname,
-      });
-      if (!scan.clean) {
-        throw new FilesError(
-          "File failed virus scan",
-          400,
-          FILES_ERROR_CODES.VALIDATION,
-        );
-      }
-
-      const name = uniqueFileName(file.originalname, existingNames);
-      existingNames.push(name);
-
-      let uploaded;
+      // Load one file at a time to keep peak heap near a single max-sized upload.
+      let buffer: Buffer | undefined;
       try {
-        uploaded = await storageProvider.upload({
-          buffer: file.buffer,
+        if (file.buffer && file.buffer.length > 0) {
+          buffer = file.buffer;
+        } else if (file.tempPath) {
+          buffer = await readFile(file.tempPath);
+        } else {
+          throw new FilesError(
+            "Upload content is missing",
+            400,
+            FILES_ERROR_CODES.VALIDATION,
+          );
+        }
+
+        const validated = await validateUploadFile({
           originalName: file.originalname,
           mimeType: file.mimetype,
-          folderKey: folderId ?? "root",
+          sizeBytes: file.size || buffer.byteLength,
+          buffer,
+        }).catch((error) => {
+          void securityMonitoringService.reportUploadValidationFailure({
+            userId: actor.userId,
+            resource: "files",
+            message: "Upload validation failed",
+            metadata: {
+              originalName: file.originalname,
+              mimeType: file.mimetype,
+            },
+            ipAddress: actor.ipAddress ?? null,
+            userAgent: actor.userAgent ?? null,
+          });
+          throw error;
         });
-      } catch (error) {
-        throw new FilesError(
-          error instanceof Error ? error.message : "Storage upload failed",
-          502,
-          FILES_ERROR_CODES.STORAGE,
-        );
+
+        const scan = await runVirusScanHook({
+          buffer,
+          mimeType: validated.mimeType,
+          originalName: file.originalname,
+        });
+        if (!scan.clean) {
+          void securityMonitoringService.reportMalware({
+            userId: actor.userId,
+            resource: "files",
+            message: "Malware detected in upload",
+            metadata: {
+              threatName: scan.threatName ?? null,
+              originalName: file.originalname,
+            },
+            ipAddress: actor.ipAddress ?? null,
+            userAgent: actor.userAgent ?? null,
+          });
+          throw new FilesError(
+            scan.threatName
+              ? `File failed virus scan (${scan.threatName})`
+              : "File failed virus scan",
+            400,
+            FILES_ERROR_CODES.VIRUS_INFECTED,
+          );
+        }
+
+        const name = uniqueFileName(validated.displayName, existingNames);
+        existingNames.push(name);
+
+        let uploaded;
+        try {
+          uploaded = await storageProvider.upload({
+            buffer,
+            originalName: file.originalname,
+            mimeType: validated.mimeType,
+            folderKey: folderId ?? "root",
+          });
+        } catch (error) {
+          throw new FilesError(
+            error instanceof Error ? error.message : "Storage upload failed",
+            502,
+            FILES_ERROR_CODES.STORAGE,
+          );
+        }
+
+        const record = await filesRepository.createFile({
+          folderId,
+          name,
+          originalName: file.originalname.normalize("NFC"),
+          mimeType: validated.mimeType,
+          extension: validated.extension,
+          sizeBytes: BigInt(uploaded.sizeBytes),
+          category: validated.category,
+          storageKey: uploaded.key,
+          storageProvider: uploaded.provider,
+          checksum: uploaded.checksum,
+          tags: meta.tags ?? [],
+          projectId: meta.projectId ?? null,
+          clientId: meta.clientId ?? null,
+          createdById: actor.userId,
+        });
+
+        await logFilesAuditEvent({
+          userId: actor.userId,
+          action: FILES_AUDIT_ACTIONS.FILE_UPLOAD,
+          resourceId: record.id,
+          metadata: { name: record.name, sizeBytes: uploaded.sizeBytes },
+          ipAddress: actor.ipAddress,
+          userAgent: actor.userAgent,
+        });
+
+        created.push(toManagedFileDto(record));
+      } finally {
+        // Drop buffer reference each iteration; unlink temp ASAP.
+        buffer = undefined;
+        if (file.tempPath) {
+          try {
+            await unlink(file.tempPath);
+          } catch {
+            // Already removed by controller finally, or never written.
+          }
+        }
       }
-
-      const record = await filesRepository.createFile({
-        folderId,
-        name,
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        extension: validated.extension,
-        sizeBytes: BigInt(uploaded.sizeBytes),
-        category: validated.category,
-        storageKey: uploaded.key,
-        storageProvider: uploaded.provider,
-        checksum: uploaded.checksum,
-        tags: meta.tags ?? [],
-        projectId: meta.projectId ?? null,
-        clientId: meta.clientId ?? null,
-        createdById: actor.userId,
-      });
-
-      await logFilesAuditEvent({
-        userId: actor.userId,
-        action: FILES_AUDIT_ACTIONS.FILE_UPLOAD,
-        resourceId: record.id,
-        metadata: { name: record.name, sizeBytes: uploaded.sizeBytes },
-        ipAddress: actor.ipAddress,
-        userAgent: actor.userAgent,
-      });
-
-      created.push(toManagedFileDto(record));
     }
 
     queuePerformanceRecalcForUser(actor.userId);
@@ -407,19 +728,11 @@ export class FilesService {
     input: UpdateFileInput,
     actor: FilesActor,
   ): Promise<ManagedFileDto> {
-    const file = await this.assertCanReadFile(actor, id);
-
     if (isClient(actor)) {
       throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
     }
 
-    if (
-      !isAdmin(actor) &&
-      file.createdById !== actor.userId &&
-      !hasPermission(actor, "files:upload")
-    ) {
-      throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
-    }
+    await this.assertCanManageFile(actor, id);
 
     const updated = await filesRepository.updateFile(id, {
       name: input.name,
@@ -463,7 +776,7 @@ export class FilesService {
       throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
     }
 
-    await this.assertCanReadFile(actor, id);
+    await this.assertCanManageFile(actor, id);
 
     if (input.folderId) {
       const folder = await filesRepository.getFolder(input.folderId);
@@ -563,14 +876,7 @@ export class FilesService {
   }
 
   async permanentDelete(id: string, actor: FilesActor): Promise<{ id: string }> {
-    if (!isAdmin(actor) && !hasPermission(actor, "files:delete")) {
-      throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
-    }
-
-    const file = await filesRepository.getFile(id, true);
-    if (!file) {
-      throw new FilesError("File not found", 404, FILES_ERROR_CODES.NOT_FOUND);
-    }
+    const file = await this.assertCanManageFile(actor, id);
 
     try {
       await storageProvider.delete(file.storageKey);
@@ -596,8 +902,20 @@ export class FilesService {
     return { id };
   }
 
+  /**
+   * Attachment Security (F-15): managed file must exist, not be deleted,
+   * and the actor must have download access.
+   */
+  async assertManagedFileForAttachment(actor: FilesActor, fileId: string) {
+    const file = await filesRepository.getFile(fileId, true);
+    if (!file || file.deletedAt) {
+      throw new FilesError("File not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+    }
+    return this.assertCanDownloadFile(actor, fileId);
+  }
+
   async download(id: string, actor: FilesActor) {
-    const file = await this.assertCanReadFile(actor, id);
+    const file = await this.assertCanDownloadFile(actor, id);
     if (file.deletedAt && !isAdmin(actor)) {
       throw new FilesError("File not found", 404, FILES_ERROR_CODES.NOT_FOUND);
     }
@@ -624,6 +942,33 @@ export class FilesService {
       signedUrl: storageProvider.getSignedUrl
         ? await storageProvider.getSignedUrl(file.storageKey)
         : null,
+    };
+  }
+
+  /** Preview allows VIEW shares (FS-07); does not require DOWNLOAD access. */
+  async preview(id: string, actor: FilesActor) {
+    const file = await this.assertCanReadFile(actor, id);
+    if (file.deletedAt && !isAdmin(actor)) {
+      throw new FilesError("File not found", 404, FILES_ERROR_CODES.NOT_FOUND);
+    }
+
+    // FS-08: SVG must never be rendered inline (stored XSS via script/event handlers).
+    const extension = file.extension.toLowerCase();
+    const mime = file.mimeType.toLowerCase();
+    if (extension === "svg" || mime === "image/svg+xml") {
+      throw new FilesError(
+        "SVG preview is not allowed; use download instead",
+        403,
+        FILES_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    const payload = await storageProvider.download(file.storageKey);
+    return {
+      file,
+      stream: payload.stream,
+      sizeBytes: payload.sizeBytes,
+      signedUrl: null as string | null,
     };
   }
 
@@ -660,7 +1005,11 @@ export class FilesService {
       throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
     }
 
-    await this.assertCanReadFile(actor, id);
+    await this.assertCanManageFile(actor, id);
+    await this.assertShareTarget(actor, {
+      sharedWithUserId: input.sharedWithUserId,
+      sharedWithClientId: input.sharedWithClientId,
+    });
 
     const share = await filesRepository.createShare({
       fileId: id,
@@ -702,7 +1051,7 @@ export class FilesService {
       throw new FilesError("Share not found", 404, FILES_ERROR_CODES.NOT_FOUND);
     }
 
-    await this.assertCanReadFile(actor, share.fileId);
+    await this.assertCanManageFile(actor, share.fileId);
     await filesRepository.deleteShare(shareId);
     await filesRepository.addActivity({
       fileId: share.fileId,

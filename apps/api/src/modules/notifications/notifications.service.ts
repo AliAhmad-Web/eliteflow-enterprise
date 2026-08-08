@@ -14,7 +14,6 @@ import {
   prisma,
 } from "@enterprise/database";
 
-import { runNotificationQueueWorker } from "../../shared/services/saas-queue.helpers.js";
 import { isApiCommunicationEmailAutomationEnabled } from "../../config/communication-flags.js";
 import {
   notificationDispatcher,
@@ -202,13 +201,21 @@ export class NotificationsService {
       scheduledFor: input.scheduledFor ? new Date(input.scheduledFor) : undefined,
     });
 
-    // Auto-flush EMAIL queue so non-admin communicators do not depend on admin processQueue.
+    // Flush freshly queued mail first (not the whole backlog) under the 45s client timeout.
+    // Older PENDING items drain in the background.
     if (input.sendEmail && result.queued > 0) {
       try {
-        await runNotificationQueueWorker(processNotificationQueue, 50);
+        await processNotificationQueue(Math.min(result.queued, 3), {
+          budgetMs: 35_000,
+          skipBatchScaling: true,
+          preferNewest: true,
+        });
       } catch {
         // Queue worker may retry later via automation / admin flush.
       }
+      void processNotificationQueue(25, { budgetMs: 60_000 }).catch(() => {
+        // Best-effort backlog drain — failures remain PENDING/FAILED for retry.
+      });
     }
 
     return result;
@@ -359,7 +366,10 @@ export class NotificationsService {
     if (isApiCommunicationEmailAutomationEnabled()) {
       await notificationsRepository.requeueFailedEmail(25);
     }
-    return runNotificationQueueWorker(processNotificationQueue, 25);
+    return processNotificationQueue(25, {
+      budgetMs: 35_000,
+      skipBatchScaling: true,
+    });
   }
 
   async runTriggers(actor: NotificationsActor) {
@@ -470,7 +480,12 @@ export class NotificationsService {
             replyId: reply.id,
           } as Prisma.InputJsonValue,
         });
-        await runNotificationQueueWorker(processNotificationQueue, 25);
+        await processNotificationQueue(3, {
+          budgetMs: 35_000,
+          skipBatchScaling: true,
+          preferNewest: true,
+        });
+        void processNotificationQueue(25, { budgetMs: 60_000 }).catch(() => {});
       } catch {
         // Reply row is persisted even if outbound notify fails.
       }

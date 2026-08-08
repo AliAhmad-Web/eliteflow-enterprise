@@ -471,8 +471,9 @@ async function runHireEmployee(
     employeeId: result.employee.id,
     employeeCode: result.employee.employeeCode,
     email: result.employee.user?.email ?? payload.email,
-    temporaryPassword: result.temporaryPassword,
+    passwordSetupRequired: true,
     invitationSent: result.invitationSent,
+    expiresAt: result.expiresAt,
     badgeNumber: result.badgeNumber ?? result.employee.badgeNumber ?? null,
   };
 }

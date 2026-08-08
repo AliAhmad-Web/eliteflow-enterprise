@@ -1,7 +1,19 @@
 import type { FileCategory } from "@enterprise/database";
 
 import { isApiSecurityUploadHardeningEnabled } from "../../config/security-flags.js";
+import {
+  isZipContainerExtension,
+  validateArchiveUpload,
+} from "./files.archive-validation.js";
 import { FilesError, FILES_ERROR_CODES } from "./files.errors.js";
+import {
+  assertSafeUploadFileName,
+  canonicalizeDisplayFileName,
+} from "./files.filename.js";
+import {
+  assertMimeMatchesExtension,
+  detectServerMimeType,
+} from "./files.mime-detect.js";
 
 const DEFAULT_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -62,6 +74,53 @@ export function getMaxUploadBytes(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_BYTES;
 }
 
+const DEFAULT_MAX_UPLOAD_FILES = 20;
+
+/** Max files per multipart request (env: FILE_MAX_UPLOAD_FILES). */
+export function getMaxUploadFileCount(): number {
+  const raw = process.env.FILE_MAX_UPLOAD_FILES?.trim();
+  if (!raw) return DEFAULT_MAX_UPLOAD_FILES;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(Math.floor(parsed), 50)
+    : DEFAULT_MAX_UPLOAD_FILES;
+}
+
+/**
+ * Early multer gate (F-12): reject clearly invalid extension / declared MIME
+ * before the body is fully buffered to disk. Authoritative checks still run later.
+ */
+export function assertEarlyUploadAcceptance(input: {
+  originalName: string;
+  mimeType?: string;
+}): void {
+  assertSafeUploadFileName(input.originalName);
+
+  const extension = getExtension(input.originalName);
+  if (!extension || !ALLOWED_EXTENSIONS.has(extension)) {
+    throw new FilesError(
+      `File extension .${extension || "unknown"} is not allowed`,
+      400,
+      FILES_ERROR_CODES.VALIDATION,
+    );
+  }
+
+  const mime = (input.mimeType ?? "").trim().toLowerCase();
+  // Generic / empty client MIME is allowed — server detection is authoritative.
+  if (
+    mime &&
+    mime !== "application/octet-stream" &&
+    mime !== "binary/octet-stream" &&
+    !ALLOWED_MIME_TYPES.has(mime)
+  ) {
+    throw new FilesError(
+      `MIME type ${input.mimeType} is not allowed`,
+      400,
+      FILES_ERROR_CODES.VALIDATION,
+    );
+  }
+}
+
 export function getExtension(fileName: string): string {
   const parts = fileName.toLowerCase().split(".");
   return parts.length > 1 ? (parts.at(-1) ?? "") : "";
@@ -103,7 +162,15 @@ export function categorizeFile(
   return "OTHER";
 }
 
-export function isPreviewable(category: FileCategory): boolean {
+export function isPreviewable(
+  category: FileCategory,
+  extension?: string,
+): boolean {
+  // FS-08: SVG must not be treated as an inline-previewable image.
+  if (extension?.toLowerCase() === "svg") {
+    return false;
+  }
+
   return (
     category === "IMAGE" ||
     category === "PDF" ||
@@ -113,24 +180,29 @@ export function isPreviewable(category: FileCategory): boolean {
   );
 }
 
-export function validateUploadFile(input: {
+/**
+ * Validate an upload using server-detected MIME as the authoritative type.
+ * Client-supplied `mimeType` (if provided) is informational only and ignored.
+ */
+export async function validateUploadFile(input: {
   originalName: string;
-  mimeType: string;
+  /** Client multipart MIME — ignored for authorization decisions. */
+  mimeType?: string;
   sizeBytes: number;
   buffer?: Buffer;
-}): { extension: string; category: FileCategory } {
+}): Promise<{
+  extension: string;
+  category: FileCategory;
+  mimeType: string;
+  /** Canonical display name for persistence (F-09). */
+  displayName: string;
+}> {
+  assertSafeUploadFileName(input.originalName);
+
   const extension = getExtension(input.originalName);
   if (!extension || !ALLOWED_EXTENSIONS.has(extension)) {
     throw new FilesError(
       `File extension .${extension || "unknown"} is not allowed`,
-      400,
-      FILES_ERROR_CODES.VALIDATION,
-    );
-  }
-
-  if (!ALLOWED_MIME_TYPES.has(input.mimeType)) {
-    throw new FilesError(
-      `MIME type ${input.mimeType} is not allowed`,
       400,
       FILES_ERROR_CODES.VALIDATION,
     );
@@ -145,12 +217,36 @@ export function validateUploadFile(input: {
     );
   }
 
-  if (input.buffer && input.buffer.length > 0) {
-    validateMagicBytes(input.buffer, extension, input.mimeType);
+  if (!input.buffer || input.buffer.length === 0) {
+    throw new FilesError(
+      "Unable to determine file type from empty content",
+      400,
+      FILES_ERROR_CODES.VALIDATION,
+    );
+  }
+
+  const detectedMime = await detectServerMimeType(input.buffer, extension);
+
+  if (!ALLOWED_MIME_TYPES.has(detectedMime)) {
+    throw new FilesError(
+      `MIME type ${detectedMime} is not allowed`,
+      400,
+      FILES_ERROR_CODES.VALIDATION,
+    );
+  }
+
+  // Detected MIME must match the allowlisted extension mapping.
+  assertMimeMatchesExtension(extension, detectedMime);
+
+  validateMagicBytes(input.buffer, extension, detectedMime);
+
+  // ZIP / OOXML: inspect central directory before storage (F-04).
+  if (isZipContainerExtension(extension)) {
+    validateArchiveUpload(input.buffer, extension);
   }
 
   // SVG can carry script payloads — reject embedded script / event handlers.
-  if (extension === "svg" && input.buffer) {
+  if (extension === "svg") {
     const svgText = input.buffer.toString("utf8").slice(0, 64_000);
     if (/<script[\s>]|on\w+\s*=/i.test(svgText)) {
       throw new FilesError(
@@ -176,53 +272,33 @@ export function validateUploadFile(input: {
           FILES_ERROR_CODES.VALIDATION,
         );
       }
-
-      // Reject double extensions (e.g. file.php.svg)
-      if (/\.(php|phtml|asp|aspx|js|exe|sh|bat)(\.|$)/i.test(input.originalName)) {
-        throw new FilesError(
-          "File name is not allowed",
-          400,
-          FILES_ERROR_CODES.VALIDATION,
-        );
-      }
     }
-  }
-
-  // When upload hardening is ON, require MIME ↔ extension consistency for images.
-  if (isApiSecurityUploadHardeningEnabled()) {
-    assertMimeExtensionConsistency(extension, input.mimeType);
   }
 
   return {
     extension,
-    category: categorizeFile(extension, input.mimeType),
+    mimeType: detectedMime,
+    category: categorizeFile(extension, detectedMime),
+    displayName: canonicalizeDisplayFileName(input.originalName, extension),
   };
 }
 
 /**
- * Magic-byte (file signature) checks to prevent MIME/extension spoofing.
- * Text-only formats (txt/md/csv) and some Office/OpenXML zips are lenient.
+ * Magic-byte (file signature) checks to prevent MIME/extension spoofing (F-07).
+ * Text-only formats (txt/md/csv/svg) have no fixed magic bytes.
  */
 function validateMagicBytes(
   buffer: Buffer,
   extension: string,
   mimeType: string,
 ): void {
-  const signatures: Record<string, Array<number[]>> = {
-    jpg: [[0xff, 0xd8, 0xff]],
-    jpeg: [[0xff, 0xd8, 0xff]],
-    png: [[0x89, 0x50, 0x4e, 0x47]],
-    gif: [[0x47, 0x49, 0x46, 0x38]],
-    webp: [[0x52, 0x49, 0x46, 0x46]],
-    pdf: [[0x25, 0x50, 0x44, 0x46]],
-    zip: [[0x50, 0x4b, 0x03, 0x04], [0x50, 0x4b, 0x05, 0x06]],
-    docx: [[0x50, 0x4b, 0x03, 0x04]],
-    xlsx: [[0x50, 0x4b, 0x03, 0x04]],
-    pptx: [[0x50, 0x4b, 0x03, 0x04]],
-    mp4: [[0x00, 0x00, 0x00]], // ftyp box offset varies — soft check below
-    webm: [[0x1a, 0x45, 0xdf, 0xa3]],
-    wav: [[0x52, 0x49, 0x46, 0x46]],
-    ogg: [[0x4f, 0x67, 0x67, 0x53]],
+  const mismatch = (detail?: string) => {
+    throw new FilesError(
+      detail ??
+        `File content does not match declared type (${mimeType})`,
+      400,
+      FILES_ERROR_CODES.VALIDATION,
+    );
   };
 
   // Pure text formats — no fixed magic bytes
@@ -234,38 +310,129 @@ function validateMagicBytes(
   if (["doc", "xls", "ppt"].includes(extension)) {
     const ole = [0xd0, 0xcf, 0x11, 0xe0];
     if (!matchesSignature(buffer, [ole])) {
-      throw new FilesError(
-        "File content does not match declared Office document type",
-        400,
-        FILES_ERROR_CODES.VALIDATION,
-      );
+      mismatch("File content does not match declared Office document type");
+    }
+    return;
+  }
+
+  if (extension === "webp") {
+    // RIFF....WEBP
+    if (
+      buffer.length < 12 ||
+      buffer[0] !== 0x52 ||
+      buffer[1] !== 0x49 ||
+      buffer[2] !== 0x46 ||
+      buffer[3] !== 0x46 ||
+      buffer[8] !== 0x57 ||
+      buffer[9] !== 0x45 ||
+      buffer[10] !== 0x42 ||
+      buffer[11] !== 0x50
+    ) {
+      mismatch("File content does not match WEBP signature");
+    }
+    return;
+  }
+
+  if (extension === "wav") {
+    // RIFF....WAVE
+    if (
+      buffer.length < 12 ||
+      buffer[0] !== 0x52 ||
+      buffer[1] !== 0x49 ||
+      buffer[2] !== 0x46 ||
+      buffer[3] !== 0x46 ||
+      buffer[8] !== 0x57 ||
+      buffer[9] !== 0x41 ||
+      buffer[10] !== 0x56 ||
+      buffer[11] !== 0x45
+    ) {
+      mismatch("File content does not match WAV signature");
+    }
+    return;
+  }
+
+  if (extension === "gif") {
+    // GIF87a or GIF89a
+    if (buffer.length < 6) {
+      mismatch("File content does not match GIF signature");
+    }
+    const header = buffer.subarray(0, 6).toString("ascii");
+    if (header !== "GIF87a" && header !== "GIF89a") {
+      mismatch("File content does not match GIF signature");
+    }
+    return;
+  }
+
+  if (extension === "png") {
+    // 89 50 4E 47 0D 0A 1A 0A
+    const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (!matchesSignature(buffer, [png])) {
+      mismatch("File content does not match PNG signature");
+    }
+    return;
+  }
+
+  if (extension === "jpg" || extension === "jpeg") {
+    if (
+      buffer.length < 3 ||
+      buffer[0] !== 0xff ||
+      buffer[1] !== 0xd8 ||
+      buffer[2] !== 0xff
+    ) {
+      mismatch("File content does not match JPEG signature");
+    }
+    return;
+  }
+
+  if (extension === "pdf") {
+    // Optional UTF-8 BOM + leading whitespace, then %PDF
+    let offset = 0;
+    if (
+      buffer.length >= 3 &&
+      buffer[0] === 0xef &&
+      buffer[1] === 0xbb &&
+      buffer[2] === 0xbf
+    ) {
+      offset = 3;
+    }
+    while (
+      offset < buffer.length &&
+      offset < 32 &&
+      (buffer[offset] === 0x20 ||
+        buffer[offset] === 0x09 ||
+        buffer[offset] === 0x0d ||
+        buffer[offset] === 0x0a)
+    ) {
+      offset += 1;
+    }
+    if (
+      offset + 4 > buffer.length ||
+      buffer[offset] !== 0x25 ||
+      buffer[offset + 1] !== 0x50 ||
+      buffer[offset + 2] !== 0x44 ||
+      buffer[offset + 3] !== 0x46
+    ) {
+      mismatch("File content does not match PDF signature");
     }
     return;
   }
 
   if (extension === "mp3") {
     if (buffer.length < 3) {
-      throw new FilesError(
-        "File content does not match declared audio type",
-        400,
-        FILES_ERROR_CODES.VALIDATION,
-      );
+      mismatch("File content does not match declared audio type");
     }
-    const isId3 = buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33;
+    const isId3 =
+      buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33;
     const second = buffer[1] ?? 0;
     const isFrame = buffer[0] === 0xff && (second & 0xe0) === 0xe0;
     if (!isId3 && !isFrame) {
-      throw new FilesError(
-        "File content does not match declared audio type",
-        400,
-        FILES_ERROR_CODES.VALIDATION,
-      );
+      mismatch("File content does not match declared audio type");
     }
     return;
   }
 
   if (extension === "mp4") {
-    // ISO BMFF: bytes 4..7 often "ftyp"
+    // ISO BMFF: bytes 4..7 are "ftyp"
     const ftyp =
       buffer.length >= 8 &&
       buffer[4] === 0x66 &&
@@ -273,26 +440,33 @@ function validateMagicBytes(
       buffer[6] === 0x79 &&
       buffer[7] === 0x70;
     if (!ftyp) {
-      throw new FilesError(
-        "File content does not match declared video type",
-        400,
-        FILES_ERROR_CODES.VALIDATION,
-      );
+      mismatch("File content does not match declared video type");
     }
     return;
   }
 
-  const expected = signatures[extension];
-  if (!expected) {
+  if (extension === "ogg") {
+    if (!matchesSignature(buffer, [[0x4f, 0x67, 0x67, 0x53]])) {
+      mismatch("File content does not match OGG signature");
+    }
     return;
   }
 
-  if (!matchesSignature(buffer, expected)) {
-    throw new FilesError(
-      `File content does not match declared type (${mimeType})`,
-      400,
-      FILES_ERROR_CODES.VALIDATION,
-    );
+  if (extension === "webm") {
+    // EBML header
+    if (!matchesSignature(buffer, [[0x1a, 0x45, 0xdf, 0xa3]])) {
+      mismatch("File content does not match WebM signature");
+    }
+    return;
+  }
+
+  if (["zip", "docx", "xlsx", "pptx"].includes(extension)) {
+    const zipLocal = [0x50, 0x4b, 0x03, 0x04];
+    const zipEmpty = [0x50, 0x4b, 0x05, 0x06];
+    if (!matchesSignature(buffer, [zipLocal, zipEmpty])) {
+      mismatch("File content does not match ZIP/Office container signature");
+    }
+    return;
   }
 }
 
@@ -300,39 +474,6 @@ function matchesSignature(buffer: Buffer, signatures: number[][]): boolean {
   return signatures.some((sig) =>
     sig.every((byte, index) => buffer[index] === byte),
   );
-}
-
-function assertMimeExtensionConsistency(
-  extension: string,
-  mimeType: string,
-): void {
-  const expectedByExt: Record<string, string[]> = {
-    jpg: ["image/jpeg"],
-    jpeg: ["image/jpeg"],
-    png: ["image/png"],
-    gif: ["image/gif"],
-    webp: ["image/webp"],
-    svg: ["image/svg+xml"],
-    pdf: ["application/pdf"],
-    txt: ["text/plain"],
-    md: ["text/markdown", "text/plain"],
-    csv: ["text/csv", "text/plain"],
-    mp4: ["video/mp4"],
-    webm: ["video/webm"],
-    mp3: ["audio/mpeg"],
-    wav: ["audio/wav"],
-    ogg: ["audio/ogg"],
-  };
-
-  const allowed = expectedByExt[extension];
-  if (!allowed) return;
-  if (!allowed.includes(mimeType)) {
-    throw new FilesError(
-      `MIME type ${mimeType} does not match file extension .${extension}`,
-      400,
-      FILES_ERROR_CODES.VALIDATION,
-    );
-  }
 }
 
 export function uniqueFileName(desired: string, existingNames: string[]): string {

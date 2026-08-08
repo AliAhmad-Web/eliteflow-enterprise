@@ -33,6 +33,8 @@ import { formatAutomationExecutionForRuntime } from "../automation/automation-pr
 import { formatMemoryContextForRuntime } from "../memory/memory-runtime.js";
 import { formatSemanticKnowledgeForRuntime } from "../memory/semantic/knowledge-runtime.js";
 import { formatMemoryPlatformForRuntime } from "../memory/platform/memory-platform-runtime.js";
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
+import { promptSecurityService } from "../security/index.js";
 import { buildRuntimeInstructions } from "./build-runtime-instructions.js";
 
 export interface BuildEngineeredPromptOptions {
@@ -70,9 +72,24 @@ export function buildEngineeredPrompt<TResult>(
       ? (options.businessSnippets ?? state.activeContext.snippets ?? [])
       : [];
 
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId: state.userId ?? state.activeContext.user?.userId,
+    role: state.activeContext.user?.role ?? state.contextHints?.role,
+    permissions: state.contextHints?.permissions,
+    explicitRestrictedAccess:
+      state.contextHints?.explicitRestrictedAccess === true,
+  });
+
+  const safeBusinessSnippets = promptSecurityService.sanitizeContextSnippets(
+    aiDataPolicyService.sanitizeAIContext(businessSnippets, policySubject),
+  );
+
   const toolResultRuntime =
     isAiToolResultInjectionEnabled() && !state.policy.privacyMode
-      ? (state.toolResultRuntime?.trim() ?? "")
+      ? aiDataPolicyService.sanitizeSummary(
+          state.toolResultRuntime?.trim() ?? "",
+          policySubject,
+        )
       : "";
 
   // Agent Context (5.2) supplies safe runtime metadata when present.
@@ -188,7 +205,7 @@ export function buildEngineeredPrompt<TResult>(
           eligibleTools: state.toolExecutions,
           streaming: state.streaming,
           mode,
-          businessSnippets,
+          businessSnippets: safeBusinessSnippets,
           toolResultRuntime: toolResultRuntime || undefined,
         }),
         agentRuntime,
@@ -196,10 +213,10 @@ export function buildEngineeredPrompt<TResult>(
         .filter((block) => block.length > 0)
         .join("\n\n")
     : [
-        businessSnippets.length > 0
+        safeBusinessSnippets.length > 0
           ? [
               "Business context (permission-approved summaries):",
-              ...businessSnippets.map((s) => `- [${s.type}] ${s.text}`),
+              ...safeBusinessSnippets.map((s) => `- [${s.type}] ${s.text}`),
             ].join("\n")
           : "",
         toolResultRuntime,
@@ -208,14 +225,19 @@ export function buildEngineeredPrompt<TResult>(
         .filter((block) => block.length > 0)
         .join("\n\n");
 
+  const safeRuntime = aiDataPolicyService.sanitizeSummary(
+    runtimeInstructions,
+    policySubject,
+  );
+
   return {
     systemInstructions,
-    runtimeInstructions,
+    runtimeInstructions: safeRuntime,
     history,
     userPrompt,
     sections: {
       system: systemInstructions,
-      runtime: runtimeInstructions,
+      runtime: safeRuntime,
       history,
       user: userPrompt,
     },

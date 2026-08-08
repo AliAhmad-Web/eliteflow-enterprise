@@ -1,5 +1,6 @@
-import { prisma } from "@enterprise/database";
 import type { Prisma } from "@enterprise/database";
+
+import { writeAuditLogSafe } from "../../shared/security/write-audit-log.js";
 
 export async function writeCommunicationAudit(input: {
   userId?: string | null;
@@ -7,17 +8,21 @@ export async function writeCommunicationAudit(input: {
   resourceId?: string;
   metadata?: Prisma.InputJsonValue;
 }): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        userId: input.userId ?? null,
-        action: input.action,
-        resource: "communication",
-        resourceId: input.resourceId ?? null,
-        metadata: input.metadata ?? undefined,
-      },
-    });
-  } catch (error) {
-    console.error("[communication] Failed to write audit log:", error);
-  }
+  const metadata =
+    input.metadata &&
+    typeof input.metadata === "object" &&
+    !Array.isArray(input.metadata)
+      ? (input.metadata as Record<string, unknown>)
+      : undefined;
+
+  await writeAuditLogSafe(
+    {
+      userId: input.userId ?? null,
+      action: input.action,
+      resource: "communication",
+      resourceId: input.resourceId ?? null,
+      metadata,
+    },
+    "communication",
+  );
 }

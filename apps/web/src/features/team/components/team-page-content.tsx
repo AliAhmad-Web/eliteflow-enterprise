@@ -80,6 +80,11 @@ import { AdminCreateDialog } from "./admin-create-dialog";
 import { EmployeeProfileView } from "./employee-profile-view";
 import { EmployeeHireDialog } from "./employee-hire-dialog";
 import {
+  LeaveWorkflowStepper,
+  getLeaveWorkflowActionCopy,
+  LEAVE_WORKFLOW_STAGE_LABELS,
+} from "./leave-workflow-stepper";
+import {
   AdminsPanel,
   DepartmentsPanel,
   DirectoryPanel,
@@ -897,15 +902,22 @@ export function TeamPageContent() {
           onResetPassword={(admin) => {
             if (
               window.confirm(
-                `Reset password for ${formatEmployeeName(admin)}? A temporary password will be generated.`,
+                `Reset password for ${formatEmployeeName(admin)}? Their current password will be invalidated and a one-time setup link will be emailed.`,
               )
             ) {
               resetCredentials.mutate(
                 { id: admin.id, sendEmail: true },
                 {
                   onSuccess: (result) => {
+                    const expiry = result.expiresAt
+                      ? `\nLink expires at: ${new Date(result.expiresAt).toLocaleString()}`
+                      : "";
                     window.alert(
-                      `Temporary password: ${result.temporaryPassword}\n\nShare it securely. The admin must change it on next login.`,
+                      result.invitationSent
+                        ? `Password setup link emailed.${expiry}\n\nIf needed, copy the setup URL from the HR response securely.`
+                        : result.passwordSetupUrl
+                          ? `Password setup required.${expiry}\n\nShare this setup link securely (do not post in chat):\n${result.passwordSetupUrl}`
+                          : `Credentials were reset. A password setup link was issued.${expiry}`,
                     );
                   },
                 },
@@ -1496,7 +1508,7 @@ function LeavePanel({
       ) : (
         <Card className="border-border/50">
           <CardContent className="overflow-x-auto p-0">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="border-b border-border/60 text-left text-muted-foreground">
                   {canManage ? (
@@ -1506,6 +1518,7 @@ function LeavePanel({
                   <th className="px-4 py-3 font-medium">Dates</th>
                   <th className="px-4 py-3 font-medium">Days</th>
                   <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Workflow</th>
                   <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -1528,10 +1541,30 @@ function LeavePanel({
                         tone={leaveStatusTone(leave.status)}
                       />
                     </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {LEAVE_WORKFLOW_STAGE_LABELS[
+                        leave.workflowState ??
+                          (leave.status === "APPROVED"
+                            ? "FINAL_APPROVED"
+                            : leave.status === "REJECTED"
+                              ? "FINAL_REJECTED"
+                              : leave.status === "CANCELLED"
+                                ? "CANCELLED"
+                                : "SUBMITTED")
+                      ]}
+                    </td>
                     <td className="px-4 py-3">
                       {canManage && leave.status === "PENDING" ? (
                         <Button size="sm" onClick={() => onReview(leave)}>
                           Review
+                        </Button>
+                      ) : canManage ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onReview(leave)}
+                        >
+                          View stages
                         </Button>
                       ) : (
                         "—"
@@ -2043,45 +2076,84 @@ function LeaveReviewDialog({
   error: unknown;
 }) {
   const [reviewNote, setReviewNote] = useState("");
+  const canAct = leave?.status === "PENDING";
+  const actionCopy = leave
+    ? getLeaveWorkflowActionCopy(leave)
+    : { approveLabel: "Approve", rejectLabel: "Reject", stageHint: "" };
 
   return (
-    <Dialog open={Boolean(leave)} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={Boolean(leave)}
+      onOpenChange={(open) => {
+        if (!open) setReviewNote("");
+        onOpenChange(open);
+      }}
+    >
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Review leave request</DialogTitle>
+          <DialogTitle>
+            {canAct ? "Review leave request" : "Leave workflow"}
+          </DialogTitle>
           <DialogDescription>
             {leave
               ? `${formatEmployeeName(leave.employee)} · ${LEAVE_TYPE_LABELS[leave.type]} · ${leave.days} days`
               : ""}
           </DialogDescription>
         </DialogHeader>
+
+        {leave ? <LeaveWorkflowStepper leave={leave} /> : null}
+
+        {canAct ? (
+          <p className="text-sm text-muted-foreground">{actionCopy.stageHint}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            This leave is no longer pending. Workflow history is shown above.
+          </p>
+        )}
+
         <div className="space-y-2">
           <Label htmlFor="review-note">Note (optional)</Label>
           <Input
             id="review-note"
             value={reviewNote}
             onChange={(e) => setReviewNote(e.target.value)}
+            disabled={!canAct || isPending}
+            maxLength={1000}
           />
           {error ? (
-            <p className="text-sm text-destructive">{mutationError(error)}</p>
+            <p className="text-sm text-destructive" role="alert">
+              {error instanceof ApiClientError && error.status === 401
+                ? "Sign in required."
+                : error instanceof ApiClientError && error.status === 403
+                  ? "You do not have permission to review this leave."
+                  : mutationError(error)}
+            </p>
           ) : null}
         </div>
         <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            disabled={isPending}
-            onClick={() =>
-              onSubmit("REJECTED", reviewNote.trim() || null)
-            }
-          >
-            Reject
-          </Button>
-          <Button
-            disabled={isPending}
-            onClick={() => onSubmit("APPROVED", reviewNote.trim() || null)}
-          >
-            Approve
-          </Button>
+          {canAct ? (
+            <>
+              <Button
+                variant="outline"
+                disabled={isPending}
+                onClick={() =>
+                  onSubmit("REJECTED", reviewNote.trim() || null)
+                }
+              >
+                {isPending ? "Working…" : actionCopy.rejectLabel}
+              </Button>
+              <Button
+                disabled={isPending}
+                onClick={() => onSubmit("APPROVED", reviewNote.trim() || null)}
+              >
+                {isPending ? "Working…" : actionCopy.approveLabel}
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

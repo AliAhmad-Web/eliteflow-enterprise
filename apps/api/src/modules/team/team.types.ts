@@ -12,6 +12,7 @@ import type {
 import type {
   AttendanceDto,
   DepartmentDto,
+  EmployeeDtoView,
   EmployeeGoalDto,
   EmployeeProfileDto,
   LeaveRequestDto,
@@ -19,6 +20,9 @@ import type {
   TeamDto,
   TeamMemberDto,
 } from "@enterprise/shared";
+import { applyEmployeeDtoFieldPolicy } from "@enterprise/shared";
+
+import { encryptionService } from "../../shared/security/encryption.service.js";
 
 type RoleSummary = { code: string; name: string };
 
@@ -27,6 +31,19 @@ type UserSummary = Pick<
   "id" | "firstName" | "lastName" | "email" | "avatarUrl"
 > & {
   role?: RoleSummary | null;
+};
+
+export type EmployeeDtoSource = EmployeeProfile & {
+  user?: UserSummary;
+  department?: (Department & { head?: UserSummary | null }) | null;
+  primaryTeam?: { id: string; name: string } | null;
+  manager?: UserSummary | null;
+  createdBy?: UserSummary | null;
+};
+
+export type ToEmployeeDtoOptions = {
+  /** Defaults to `"public"` — never return RESTRICTED fields unless explicitly `"hr"`. */
+  view?: EmployeeDtoView;
 };
 
 function toUser(user?: UserSummary | null) {
@@ -67,22 +84,23 @@ export function toDepartmentDto(
   };
 }
 
+/**
+ * Map employee row → DTO with field-level policy applied.
+ * Default view is `"public"` so callers must opt into `"hr"` / `"self"`.
+ */
 export function toEmployeeDto(
-  employee: EmployeeProfile & {
-    user?: UserSummary;
-    department?: (Department & { head?: UserSummary | null }) | null;
-    primaryTeam?: { id: string; name: string } | null;
-    manager?: UserSummary | null;
-    createdBy?: UserSummary | null;
-  },
+  employee: EmployeeDtoSource,
+  options?: ToEmployeeDtoOptions,
 ): EmployeeProfileDto {
-  return {
+  const view: EmployeeDtoView = options?.view ?? "public";
+
+  const full: EmployeeProfileDto = {
     id: employee.id,
     userId: employee.userId,
     employeeCode: employee.employeeCode,
     adminCode: employee.adminCode,
     badgeNumber: employee.badgeNumber,
-    qrToken: employee.qrToken,
+    qrToken: encryptionService.decryptIfNeeded(employee.qrToken) ?? null,
     departmentId: employee.departmentId,
     primaryTeamId: employee.primaryTeamId,
     designation: employee.designation,
@@ -96,7 +114,8 @@ export function toEmployeeDto(
     bloodGroup: employee.bloodGroup,
     fatherName: employee.fatherName,
     dateOfBirth: dateOnly(employee.dateOfBirth),
-    nationalId: employee.nationalId,
+    nationalId:
+      encryptionService.decryptIfNeeded(employee.nationalId) ?? null,
     hireDate: dateOnly(employee.hireDate),
     exitDate: dateOnly(employee.exitDate),
     exitReason: employee.exitReason,
@@ -140,6 +159,11 @@ export function toEmployeeDto(
     manager: toUser(employee.manager),
     createdBy: toUser(employee.createdBy),
   };
+
+  return applyEmployeeDtoFieldPolicy(
+    full as unknown as Record<string, unknown>,
+    view,
+  ) as EmployeeProfileDto;
 }
 
 export function toTeamMemberDto(
@@ -180,7 +204,7 @@ export function toTeamDto(
 
 export function toAttendanceDto(
   record: Attendance & {
-    employee?: EmployeeProfile & { user?: UserSummary };
+    employee?: EmployeeDtoSource;
   },
 ): AttendanceDto {
   return {
@@ -195,13 +219,15 @@ export function toAttendanceDto(
     isLate: record.isLate,
     notes: record.notes,
     createdAt: record.createdAt.toISOString(),
-    employee: record.employee ? toEmployeeDto(record.employee) : undefined,
+    employee: record.employee
+      ? toEmployeeDto(record.employee, { view: "public" })
+      : undefined,
   };
 }
 
 export function toLeaveDto(
   leave: LeaveRequest & {
-    employee?: EmployeeProfile & { user?: UserSummary };
+    employee?: EmployeeDtoSource;
   },
 ): LeaveRequestDto {
   return {
@@ -217,13 +243,55 @@ export function toLeaveDto(
     reviewedById: leave.reviewedById,
     reviewedAt: leave.reviewedAt?.toISOString() ?? null,
     createdAt: leave.createdAt.toISOString(),
-    employee: leave.employee ? toEmployeeDto(leave.employee) : undefined,
+    employee: leave.employee
+      ? toEmployeeDto(leave.employee, { view: "public" })
+      : undefined,
+    workflowState: null,
+    workflow: null,
+  };
+}
+
+export function withLeaveWorkflow(
+  dto: LeaveRequestDto,
+  stage: {
+    state: NonNullable<LeaveRequestDto["workflowState"]>;
+    submittedAt: string;
+    expiresAt: string;
+    managerApproverId?: string | null;
+    managerApprovedAt?: string | null;
+    hrApproverId?: string | null;
+    hrApprovedAt?: string | null;
+    finalApproverId?: string | null;
+    finalApprovedAt?: string | null;
+    overrideById?: string | null;
+    overrideAt?: string | null;
+    overrideAction?: "APPROVE" | "REJECT" | null;
+  } | null,
+): LeaveRequestDto {
+  if (!stage) return dto;
+  return {
+    ...dto,
+    workflowState: stage.state,
+    workflow: {
+      state: stage.state,
+      submittedAt: stage.submittedAt,
+      expiresAt: stage.expiresAt,
+      managerApproverId: stage.managerApproverId ?? null,
+      managerApprovedAt: stage.managerApprovedAt ?? null,
+      hrApproverId: stage.hrApproverId ?? null,
+      hrApprovedAt: stage.hrApprovedAt ?? null,
+      finalApproverId: stage.finalApproverId ?? null,
+      finalApprovedAt: stage.finalApprovedAt ?? null,
+      overrideById: stage.overrideById ?? null,
+      overrideAt: stage.overrideAt ?? null,
+      overrideAction: stage.overrideAction ?? null,
+    },
   };
 }
 
 export function toPerformanceDto(
   review: PerformanceReview & {
-    employee?: EmployeeProfile & { user?: UserSummary };
+    employee?: EmployeeDtoSource;
     reviewer?: UserSummary | null;
   },
 ): PerformanceReviewDto {
@@ -249,14 +317,16 @@ export function toPerformanceDto(
     kpiSummary: review.kpiSummary,
     notes: review.notes,
     createdAt: review.createdAt.toISOString(),
-    employee: review.employee ? toEmployeeDto(review.employee) : undefined,
+    employee: review.employee
+      ? toEmployeeDto(review.employee, { view: "public" })
+      : undefined,
     reviewer: toUser(review.reviewer),
   };
 }
 
 export function toGoalDto(
   goal: EmployeeGoal & {
-    employee?: EmployeeProfile & { user?: UserSummary };
+    employee?: EmployeeDtoSource;
   },
 ): EmployeeGoalDto {
   return {
@@ -272,6 +342,8 @@ export function toGoalDto(
     linkedTaskIds: goal.linkedTaskIds ?? [],
     autoProgress: goal.autoProgress ?? true,
     createdAt: goal.createdAt.toISOString(),
-    employee: goal.employee ? toEmployeeDto(goal.employee) : undefined,
+    employee: goal.employee
+      ? toEmployeeDto(goal.employee, { view: "public" })
+      : undefined,
   };
 }

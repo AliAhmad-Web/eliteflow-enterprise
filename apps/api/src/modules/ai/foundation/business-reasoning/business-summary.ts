@@ -1,6 +1,8 @@
-/**
+﻿/**
  * Business summary helpers — compact overview text.
  */
+
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
 
 export function buildBusinessSummary(input: {
   readonly moduleCount: number;
@@ -29,10 +31,12 @@ export function buildBusinessSummary(input: {
     );
   }
 
+  const subject = aiDataPolicyService.subjectFrom({ role: "EMPLOYEE" });
   const highlight =
     input.highlights.find((h) => h.trim().length > 0)?.trim().slice(0, 80) ??
     "";
 
   const base = parts.join("; ") + ".";
-  return highlight ? `${base} Focus: ${highlight}` : base;
+  const withFocus = highlight ? `${base} Focus: ${highlight}` : base;
+  return aiDataPolicyService.sanitizeSummary(withFocus, subject);
 }

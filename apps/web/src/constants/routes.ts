@@ -23,6 +23,7 @@ export const ROUTES = {
   AI_ASSISTANT: "/ai-assistant",
   AI_DOCUMENTS: "/ai-documents",
   FILE_MANAGER: "/file-manager",
+  FILES: "/files",
   TEAM: "/team",
   NOTIFICATIONS: "/notifications",
   MESSAGES: "/messages",

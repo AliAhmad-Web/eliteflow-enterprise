@@ -3,10 +3,13 @@
  */
 
 import type { AiMemoryEntry } from "../memory-entry.js";
+import { freezeMemoryEntry } from "../memory-entry.js";
 import {
   filterEntriesByPermissions,
   resolveMemoryPermissions,
 } from "../memory-permissions.js";
+import { aiDataPolicyService } from "../../policy/ai-data-policy.service.js";
+import { promptSecurityService } from "../../security/index.js";
 import {
   persistentMemoryProvider,
   type PersistentMemoryProvider,
@@ -36,6 +39,8 @@ export interface LoadPersistentMemoryInput {
   readonly conversationId?: string | null;
   readonly privacyMode: boolean;
   readonly permissions?: readonly string[] | null;
+  readonly role?: string | null;
+  readonly explicitRestrictedAccess?: boolean;
   readonly userPrompt?: string | null;
   readonly useCache: boolean;
   readonly enableSearch: boolean;
@@ -91,11 +96,28 @@ export async function loadPersistentMemory(
     permissions: input.permissions,
     privacyMode: false,
   });
-  const entries = filterEntriesByPermissions(
+  const filtered = filterEntriesByPermissions(
     loaded.entries,
     permissions,
     input.permissions,
   );
+
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId: input.userId,
+    role: input.role,
+    permissions: input.permissions,
+    explicitRestrictedAccess: input.explicitRestrictedAccess === true,
+  });
+  const entries = aiDataPolicyService
+    .sanitizeSearchResults(filtered, policySubject)
+    .map((entry) => {
+      const summary = promptSecurityService.sanitizeMemoryText(
+        entry.summary ?? "",
+      );
+      return summary === entry.summary
+        ? entry
+        : freezeMemoryEntry({ ...entry, summary });
+    });
 
   const loadedMemory: AiLoadedMemory = Object.freeze({
     entries,

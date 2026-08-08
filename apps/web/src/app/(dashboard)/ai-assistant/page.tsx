@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { AiAssistantPageContent } from "@/features/ai/components/ai-assistant-page-content";
+import { LazyAiAssistantPage } from "@/components/common/loading/lazy-feature-pages";
 import { ProgressiveBoundary } from "@/features/performance";
 
 export const metadata: Metadata = { title: "AI Assistant" };
@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "AI Assistant" };
 export default function AiAssistantPage() {
   return (
     <ProgressiveBoundary label="Loading AI Assistant">
-      <AiAssistantPageContent />
+      <LazyAiAssistantPage />
     </ProgressiveBoundary>
   );
 }

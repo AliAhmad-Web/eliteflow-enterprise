@@ -48,6 +48,7 @@ import {
   statusBadgeVariant,
 } from "../lib/integration-ui";
 import { ConnectApiKeyDialog } from "./connect-api-key-dialog";
+import { IntegrationsOpsPanel } from "./integrations-ops-panel";
 
 const IntegrationDetailPanel = dynamic(
   () =>
@@ -502,6 +503,8 @@ export function IntegrationsCenterPageContent() {
           tone="bg-emerald-500/10 text-emerald-700"
         />
       </div>
+
+      <IntegrationsOpsPanel canManage={data.canManage} />
 
       {(actionMessage || actionError) && (
         <div

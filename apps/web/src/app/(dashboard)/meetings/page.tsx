@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { MeetingsPageContent } from "@/features/communication/components/meetings-page-content";
+import { LazyMeetingsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Meetings" };
 
 export default function MeetingsPage() {
-  return <MeetingsPageContent />;
+  return <LazyMeetingsPage />;
 }

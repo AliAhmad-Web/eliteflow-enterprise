@@ -1330,8 +1330,8 @@ function HelpDrawer({
             ]
           : step === 4
             ? [
-                "Temporary password is shown once after hire",
-                "New hires must change password on first login",
+                "A password setup link is emailed on hire",
+                "New hires must set a password before signing in",
                 "QR token is used for attendance verification",
               ]
             : [
@@ -1925,17 +1925,26 @@ function StepSecurity({
         />
         <SecurityCard
           icon={KeyRound}
-          title="Temporary Password"
+          title="Password Setup"
           value={
-            hireResult?.temporaryPassword ??
-            (editing ? "Already set — use password reset" : "Generated on hire")
+            hireResult?.passwordSetupRequired
+              ? hireResult.invitationSent
+                ? "Setup link emailed"
+                : hireResult.passwordSetupUrl
+                  ? "Setup link ready"
+                  : "Setup required"
+              : editing
+                ? "Already set — use password reset"
+                : "Setup link issued on hire"
           }
           hint={
-            hireResult?.mustChangePassword
-              ? "Must change password on first login"
-              : "Shown once after creation"
+            hireResult?.expiresAt
+              ? `Expires ${new Date(hireResult.expiresAt).toLocaleString()}`
+              : hireResult?.mustChangePassword
+                ? "Must set password via secure link"
+                : "One-time link — never share in chat"
           }
-          mono={Boolean(hireResult?.temporaryPassword)}
+          mono={false}
         />
         <SecurityCard
           icon={Shield}
@@ -2117,12 +2126,29 @@ function SuccessPanel({ hireResult }: { hireResult: HireEmployeeResult }) {
             {hireResult.companyEmail}
           </p>
         ) : null}
-        <p>
-          <span className="text-muted-foreground">Temporary password: </span>
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-            {hireResult.temporaryPassword}
-          </code>
-        </p>
+        {hireResult.passwordSetupRequired ? (
+          <p>
+            <span className="text-muted-foreground">Password setup: </span>
+            {hireResult.invitationSent
+              ? "Secure setup link emailed to the employee."
+              : hireResult.passwordSetupUrl
+                ? "Setup link ready — share securely out-of-band if email was delayed."
+                : "Password setup required before first sign-in."}
+            {hireResult.expiresAt ? (
+              <span className="block text-xs text-muted-foreground mt-1">
+                Expires {new Date(hireResult.expiresAt).toLocaleString()}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        {hireResult.passwordSetupUrl ? (
+          <p>
+            <span className="text-muted-foreground">Setup link: </span>
+            <code className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              {hireResult.passwordSetupUrl}
+            </code>
+          </p>
+        ) : null}
         {hireResult.qrToken ? (
           <p>
             <span className="text-muted-foreground">QR token: </span>
@@ -2141,8 +2167,8 @@ function SuccessPanel({ hireResult }: { hireResult: HireEmployeeResult }) {
         ) : null}
         <p className="text-muted-foreground">
           {hireResult.invitationSent
-            ? "Email invitation and in-app notification were sent."
-            : "Invitation notification queued. Share the temporary password securely if email delivery is delayed."}
+            ? "Email invitation and in-app notification were sent with a password setup link."
+            : "Invitation notification queued. Share the password setup link securely if email delivery is delayed."}
         </p>
       </div>
     </div>

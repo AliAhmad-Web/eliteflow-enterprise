@@ -1,4 +1,4 @@
-import { prisma, Prisma } from "@enterprise/database";
+import { writeAuditLogSafe } from "../../shared/security/write-audit-log.js";
 
 interface CalendarAuditInput {
   userId?: string | null;
@@ -12,23 +12,18 @@ interface CalendarAuditInput {
 export async function logCalendarAuditEvent(
   input: CalendarAuditInput,
 ): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        userId: input.userId ?? null,
-        action: input.action,
-        resource: "calendar",
-        resourceId: input.resourceId ?? null,
-        metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
-          : undefined,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-      },
-    });
-  } catch (error) {
-    console.error("[calendar] Failed to write audit log:", error);
-  }
+  await writeAuditLogSafe(
+    {
+      userId: input.userId ?? null,
+      action: input.action,
+      resource: "calendar",
+      resourceId: input.resourceId ?? null,
+      metadata: input.metadata,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+    },
+    "calendar",
+  );
 }
 
 export const CALENDAR_AUDIT_ACTIONS = {

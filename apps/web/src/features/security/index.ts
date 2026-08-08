@@ -1,5 +1,22 @@
 export { SecurityCenterPageContent } from "./components/security-center-page-content";
+export { SecurityOpsPanel } from "./components/security-ops-panel";
 export { securityService } from "./services/security.service";
+export {
+  useApiVersioningStatus,
+  useAuditLogs,
+  useBackupValidationStatus,
+  useDisasterRecoveryStatus,
+  useEncryptionAuditStatus,
+  useLoginHistory,
+  useRetentionStatus,
+  useSecurityAlerts,
+  useSecurityDashboard,
+  useSecurityOpsMutations,
+  useSecuritySessions,
+  useSiemStatus,
+  useWebhookSecurityStatus,
+  securityKeys,
+} from "./hooks/use-security";
 export {
   executeRecaptcha,
   isRecaptchaEnabled,

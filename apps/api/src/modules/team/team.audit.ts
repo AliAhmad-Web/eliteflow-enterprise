@@ -1,4 +1,4 @@
-import { prisma, Prisma } from "@enterprise/database";
+import { writeAuditLogSafe } from "../../shared/security/write-audit-log.js";
 
 interface TeamAuditInput {
   userId?: string | null;
@@ -10,23 +10,18 @@ interface TeamAuditInput {
 }
 
 export async function logTeamAuditEvent(input: TeamAuditInput): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        userId: input.userId ?? null,
-        action: input.action,
-        resource: "team",
-        resourceId: input.resourceId ?? null,
-        metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
-          : undefined,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-      },
-    });
-  } catch (error) {
-    console.error("[team] Failed to write audit log:", error);
-  }
+  await writeAuditLogSafe(
+    {
+      userId: input.userId ?? null,
+      action: input.action,
+      resource: "team",
+      resourceId: input.resourceId ?? null,
+      metadata: input.metadata,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+    },
+    "team",
+  );
 }
 
 export const TEAM_AUDIT_ACTIONS = {
@@ -55,6 +50,9 @@ export const TEAM_AUDIT_ACTIONS = {
   ATTENDANCE_CHECK_OUT: "team.attendance.check_out",
   LEAVE_APPLY: "team.leave.apply",
   LEAVE_REVIEW: "team.leave.review",
+  LEAVE_WORKFLOW_SUBMIT: "team.leave.workflow.submit",
+  LEAVE_WORKFLOW_OVERRIDE: "team.leave.workflow.override",
+  LEAVE_WORKFLOW_EXPIRE: "team.leave.workflow.expire",
   PERFORMANCE_CREATE: "team.performance.create",
   PERFORMANCE_UPDATE: "team.performance.update",
   PERFORMANCE_CONFIG_UPDATE: "team.performance.config_update",

@@ -11,6 +11,10 @@ export function extractRequestContext(req: Request): RequestContext {
     "unknown";
 
   const userAgent = req.headers["user-agent"] ?? "unknown";
+  const deviceFingerprint =
+    typeof req.headers["x-device-fingerprint"] === "string"
+      ? req.headers["x-device-fingerprint"]
+      : null;
 
-  return { ipAddress, userAgent };
+  return { ipAddress, userAgent, deviceFingerprint };
 }

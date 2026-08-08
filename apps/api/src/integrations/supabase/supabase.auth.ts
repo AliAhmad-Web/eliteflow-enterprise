@@ -11,6 +11,7 @@ import {
 import { AuthError } from "../../modules/auth/auth.errors.js";
 import {
   assertSupabaseConfig,
+  isSupabaseAdminConfigured,
   supabaseConfig,
 } from "../../config/supabase.config.js";
 import { getSupabaseAdminClient } from "./supabase.client.js";
@@ -275,22 +276,42 @@ export async function verifySupabaseOAuthToken(input: {
   assertSupabaseConfig();
 
   let identity: ReturnType<typeof extractIdentity>;
+  const canUseAdminApi = isSupabaseAdminConfigured();
 
-  try {
-    const client = getSupabaseAdminClient();
-    const { data, error } = await client.auth.getUser(input.supabaseAccessToken);
+  if (canUseAdminApi) {
+    try {
+      const client = getSupabaseAdminClient();
+      const { data, error } = await client.auth.getUser(
+        input.supabaseAccessToken,
+      );
 
-    if (error || !data.user) {
-      throw error ?? new Error("Supabase getUser returned no user");
+      if (error || !data.user) {
+        throw error ?? new Error("Supabase getUser returned no user");
+      }
+
+      identity = extractIdentity(data.user, input.provider);
+    } catch (error) {
+      console.warn(
+        "[oauth] Supabase getUser failed; falling back to local JWT verification:",
+        error,
+      );
+
+      const payload = await verifyAccessTokenLocally(input.supabaseAccessToken);
+
+      if (!payload.sub) {
+        throw new AuthError(
+          "Invalid OAuth token",
+          401,
+          AUTH_ERROR_CODES.OAUTH_TOKEN_INVALID,
+        );
+      }
+
+      identity = extractIdentity(claimsToUser(payload), input.provider);
     }
-
-    identity = extractIdentity(data.user, input.provider);
-  } catch (error) {
+  } else {
     console.warn(
-      "[oauth] Supabase getUser failed; falling back to local JWT verification:",
-      error,
+      "[oauth] SUPABASE_SERVICE_ROLE_KEY is missing or a placeholder — verifying via JWKS/JWT secret",
     );
-
     const payload = await verifyAccessTokenLocally(input.supabaseAccessToken);
 
     if (!payload.sub) {

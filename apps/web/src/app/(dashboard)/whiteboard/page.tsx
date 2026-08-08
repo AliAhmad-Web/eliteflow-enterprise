@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { WhiteboardPageContent } from "@/features/whiteboard/components/whiteboard-page-content";
+import { LazyWhiteboardPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Whiteboard" };
 
 export default function WhiteboardPage() {
-  return <WhiteboardPageContent />;
+  return <LazyWhiteboardPage />;
 }

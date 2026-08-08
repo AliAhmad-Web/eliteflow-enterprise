@@ -12,6 +12,7 @@ import {
 } from "@enterprise/shared";
 import {
   OAuthProvider,
+  Prisma,
   SessionRevokedReason,
   UserStatus,
 } from "@enterprise/database";
@@ -22,10 +23,13 @@ import {
   LOGIN_FAILURE_REASONS,
 } from "./auth.constants.js";
 import { AuthError } from "./auth.errors.js";
-import { logAuthAuditEvent, logLoginAttempt } from "./auth.audit.js";
+import {
+  logAuthAuditEvent,
+  logLoginAttempt,
+  scheduleAuthAuditEvent,
+} from "./auth.audit.js";
 import {
   buildEmailVerificationUrl,
-  buildPasswordResetUrl,
   emailService,
   EmailDeliveryError,
 } from "../../integrations/email/email.service.js";
@@ -39,14 +43,19 @@ import {
   generateOpaqueRefreshToken,
   getAccessTokenExpiresIn,
   getEmailVerificationExpiresAt,
-  getPasswordResetExpiresAt,
   getRefreshTokenExpiresAt,
   hashOpaqueToken,
   hashRefreshToken,
 } from "./auth.tokens.js";
 import { authRepository } from "./auth.repository.js";
+import {
+  PASSWORD_SETUP_PURPOSE,
+  passwordSetupService,
+} from "./password-setup/index.js";
+import { passwordPolicyService } from "../../shared/security/password-policy/index.js";
 import { passwordHistoryService } from "../security/password-history.service.js";
 import { securityRepository } from "../security/security.repository.js";
+import { securityMonitoringService } from "../../shared/security/monitoring/index.js";
 import {
   SECURITY_ERROR_CODES,
   SecurityError,
@@ -71,8 +80,34 @@ import type {
 } from "./auth.types.js";
 import { parseDeviceName, toSafeUser } from "./auth.types.js";
 import { parseDeviceInfo } from "./auth.device.js";
+import {
+  isMfaMandatoryRole,
+  isMfaOptionalRole,
+  mfaService,
+} from "./mfa/index.js";
+import {
+  sessionService,
+  SESSION_AUDIT_ACTIONS,
+  SESSION_INVALID_MESSAGE,
+} from "./session/index.js";
+import { sessionHardeningService } from "../../shared/security/session-hardening/index.js";
+import { deviceManagementService } from "../../shared/security/device-management/index.js";
 
 export class AuthService {
+  /** Bridges rememberMe across MFA challenge → verify (no Redis). */
+  private readonly rememberMePending = new Map<
+    string,
+    { rememberMe: boolean; expiresAt: number }
+  >();
+
+  private consumeRememberMe(otpSessionId: string): boolean {
+    const entry = this.rememberMePending.get(otpSessionId);
+    this.rememberMePending.delete(otpSessionId);
+    if (!entry) return false;
+    if (entry.expiresAt < Date.now()) return false;
+    return entry.rememberMe;
+  }
+
   async signup(input: SignupServiceInput, context: RequestContext) {
     const emailTaken = await authRepository.emailExists(input.email);
     if (emailTaken) {
@@ -141,7 +176,7 @@ export class AuthService {
   }
 
   async login(input: LoginServiceInput, context: RequestContext): Promise<LoginServiceResult> {
-    const user = await authRepository.findUserByEmail(input.email);
+    let user = await authRepository.findUserByEmail(input.email);
 
     if (!user) {
       // Constant-time-ish path: still run a hash verify against a dummy hash.
@@ -176,21 +211,46 @@ export class AuthService {
       );
     }
 
+    user = await this.syncMfaEnrollmentFlag(user);
+
     if (user.twoFactorEnabled) {
+      if (user.twoFactorSecret) {
+        const otpChallenge = await this.issueTotpChallenge(user, context);
+        this.rememberMePending.set(otpChallenge.otpSessionId, {
+          rememberMe: Boolean(input.rememberMe),
+          expiresAt: Date.now() + OTP_RULES.EXPIRY_MINUTES_LOGIN * 60 * 1000,
+        });
+        return {
+          requiresOtp: true,
+          otpSessionId: otpChallenge.otpSessionId,
+          expiresIn: otpChallenge.expiresIn,
+          mfaMethod: "totp",
+        };
+      }
+
+      // Legacy email OTP path when 2FA was flagged without a TOTP secret.
       const otpChallenge = await this.issueOtpChallenge(
         user,
         OtpPurpose.LOGIN_2FA,
         context,
       );
+      this.rememberMePending.set(otpChallenge.otpSessionId, {
+        rememberMe: Boolean(input.rememberMe),
+        expiresAt: Date.now() + OTP_RULES.EXPIRY_MINUTES_LOGIN * 60 * 1000,
+      });
 
       return {
         requiresOtp: true,
         otpSessionId: otpChallenge.otpSessionId,
         expiresIn: otpChallenge.expiresIn,
+        mfaMethod: "email",
       };
     }
 
-    const sessionResult = await this.createUserSession(user, context);
+    const sessionResult = await this.createUserSession(user, context, {
+      rememberMe: Boolean(input.rememberMe),
+      deviceFingerprint: context.deviceFingerprint,
+    });
 
     await authRepository.recordSuccessfulLogin(user.id);
 
@@ -224,8 +284,16 @@ export class AuthService {
     userId: string,
     context: RequestContext,
   ): Promise<void> {
-    await authRepository.revokeSession(sessionId, SessionRevokedReason.LOGOUT);
-    await authRepository.revokeAllSessionTokens(sessionId);
+    await sessionService.revokeSession({
+      sessionId,
+      userId,
+      reason: SessionRevokedReason.LOGOUT,
+      actorUserId: userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      auditAction: SESSION_AUDIT_ACTIONS.REVOKED,
+      metadata: { flow: "logout" },
+    });
 
     await logAuthAuditEvent({
       userId,
@@ -301,11 +369,20 @@ export class AuthService {
 
     if (storedToken.session.revokedAt) {
       throw new AuthError(
-        "Session has been revoked",
+        SESSION_INVALID_MESSAGE,
         401,
-        AUTH_ERROR_CODES.REFRESH_TOKEN_INVALID,
+        AUTH_ERROR_CODES.SESSION_INVALID,
       );
     }
+
+    // Full enterprise session validation on refresh as well
+    await sessionService.validateSession({
+      sessionId: storedToken.sessionId,
+      userId: storedToken.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      touch: true,
+    });
 
     const user = storedToken.user;
     await this.assertUserCanLogin(user, context);
@@ -319,15 +396,14 @@ export class AuthService {
       sessionId: storedToken.sessionId,
     });
 
-    await authRepository.updateSessionActivity(storedToken.sessionId);
-
     // Skip rotation for young tokens. F5 / parallel callers within this window
     // reuse the same refresh cookie — eliminates rotation races that caused
     // logout-on-refresh. Still rotate periodically for theft mitigation.
     const ROTATE_AFTER_MS = 15 * 60 * 1000;
     const tokenAgeMs = Date.now() - storedToken.createdAt.getTime();
     if (tokenAgeMs < ROTATE_AFTER_MS) {
-      await logAuthAuditEvent({
+      // Non-blocking: refresh must not await integrity-chain audit / advisory lock.
+      scheduleAuthAuditEvent({
         userId: user.id,
         action: AUTH_AUDIT_ACTIONS.REFRESH,
         resourceId: storedToken.sessionId,
@@ -343,7 +419,11 @@ export class AuthService {
 
     const newOpaqueToken = generateOpaqueRefreshToken();
     const newTokenHash = hashRefreshToken(newOpaqueToken);
-    const expiresAt = getRefreshTokenExpiresAt();
+    // Preserve remaining refresh lifetime (remember-me aware)
+    const expiresAt =
+      storedToken.expiresAt > new Date()
+        ? storedToken.expiresAt
+        : getRefreshTokenExpiresAt();
 
     const rotated = await authRepository.rotateRefreshToken({
       oldTokenId: storedToken.id,
@@ -356,7 +436,7 @@ export class AuthService {
     // Lost the rotation race — another request already rotated. Issue access
     // token only; the winning request's Set-Cookie is already in the jar.
     if (!rotated) {
-      await logAuthAuditEvent({
+      scheduleAuthAuditEvent({
         userId: user.id,
         action: AUTH_AUDIT_ACTIONS.REFRESH,
         resourceId: storedToken.sessionId,
@@ -370,7 +450,7 @@ export class AuthService {
       };
     }
 
-    await logAuthAuditEvent({
+    scheduleAuthAuditEvent({
       userId: user.id,
       action: AUTH_AUDIT_ACTIONS.REFRESH,
       resourceId: storedToken.sessionId,
@@ -401,23 +481,25 @@ export class AuthService {
   async forgotPassword(email: string, context: RequestContext) {
     const user = await authRepository.findUserByEmail(email);
 
-    if (user && user.passwordHash && user.deletedAt === null) {
-      const opaqueToken = generateOpaqueRefreshToken();
-      const tokenHash = hashOpaqueToken(opaqueToken);
-      const expiresAt = getPasswordResetExpiresAt();
-
-      await authRepository.invalidatePasswordResetTokens(user.id);
-      const resetToken = await authRepository.createPasswordResetToken({
+    // Issue setup token for any active account (including those without a password yet)
+    if (user && user.deletedAt === null) {
+      const setup = await passwordSetupService.createToken({
         userId: user.id,
-        tokenHash,
-        expiresAt,
+        purpose: PASSWORD_SETUP_PURPOSE.FORGOT_PASSWORD,
+        audit: {
+          userId: user.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        },
       });
 
       try {
-        await emailService.sendPasswordResetEmail({
+        await emailService.sendPasswordSetupEmail({
           to: user.email,
           firstName: user.firstName,
-          resetUrl: buildPasswordResetUrl(opaqueToken),
+          setupUrl: setup.setupUrl,
+          expiresInMinutes: setup.expiresInMinutes,
+          kind: "forgot_password",
         });
       } catch (error) {
         console.error("[auth] Password reset email failed:", error);
@@ -435,8 +517,12 @@ export class AuthService {
       await logAuthAuditEvent({
         userId: user.id,
         action: AUTH_AUDIT_ACTIONS.PASSWORD_RESET_REQUESTED,
-        resourceId: resetToken.id,
+        resourceId: setup.tokenId,
         context,
+        metadata: {
+          purpose: PASSWORD_SETUP_PURPOSE.FORGOT_PASSWORD,
+          expiresAt: setup.expiresAt.toISOString(),
+        },
       });
     }
 
@@ -446,38 +532,18 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string, context: RequestContext) {
-    const tokenHash = hashOpaqueToken(token);
-    const storedToken = await authRepository.findPasswordResetTokenByHash(tokenHash);
+    const consumed = await passwordSetupService.consumeToken({
+      rawToken: token,
+      context,
+    });
 
-    if (!storedToken || storedToken.usedAt) {
-      throw new AuthError(
-        AUTH_MESSAGES.RESET_TOKEN_INVALID,
-        400,
-        AUTH_ERROR_CODES.RESET_TOKEN_INVALID,
-      );
-    }
-
-    if (storedToken.expiresAt < new Date()) {
-      throw new AuthError(
-        AUTH_MESSAGES.RESET_TOKEN_INVALID,
-        400,
-        AUTH_ERROR_CODES.RESET_TOKEN_EXPIRED,
-      );
-    }
-
-    if (!storedToken.user.passwordHash || storedToken.user.deletedAt) {
-      throw new AuthError(
-        AUTH_MESSAGES.RESET_TOKEN_INVALID,
-        400,
-        AUTH_ERROR_CODES.RESET_TOKEN_INVALID,
-      );
-    }
+    const currentHash = consumed.user.passwordHash;
 
     try {
       await passwordHistoryService.assertNotReused(
-        storedToken.userId,
+        consumed.userId,
         password,
-        storedToken.user.passwordHash,
+        currentHash,
       );
     } catch (error) {
       if (
@@ -500,21 +566,39 @@ export class AuthService {
       parallelism: 1,
     });
 
-    await passwordHistoryService.recordPasswordChange(
-      storedToken.userId,
-      storedToken.user.passwordHash,
-    );
-    await authRepository.updateUserPassword(storedToken.userId, passwordHash);
-    await authRepository.markPasswordResetTokenUsed(storedToken.id);
-    await authRepository.revokeAllUserSessions(
-      storedToken.userId,
-      SessionRevokedReason.PASSWORD_CHANGE,
+    if (currentHash) {
+      await passwordHistoryService.recordPasswordChange(
+        consumed.userId,
+        currentHash,
+      );
+    }
+    await authRepository.updateUserPassword(consumed.userId, passwordHash);
+    await sessionService.revokeAllSessions({
+      userId: consumed.userId,
+      reason: SessionRevokedReason.PASSWORD_CHANGE,
+      actorUserId: consumed.userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      auditAction: SESSION_AUDIT_ACTIONS.PASSWORD_CHANGED,
+      metadata: { flow: "password_setup_or_reset" },
+    });
+
+    await passwordPolicyService.completePasswordChange(consumed.userId, {
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+
+    await passwordSetupService.markCompleted(
+      consumed.tokenId,
+      consumed.userId,
+      context,
+      PASSWORD_SETUP_PURPOSE.FORGOT_PASSWORD,
     );
 
     await logAuthAuditEvent({
-      userId: storedToken.userId,
+      userId: consumed.userId,
       action: AUTH_AUDIT_ACTIONS.PASSWORD_RESET_COMPLETED,
-      resourceId: storedToken.id,
+      resourceId: consumed.tokenId,
       context,
     });
 
@@ -630,15 +714,69 @@ export class AuthService {
       );
     }
 
-    const isValid = verifyOtpCodeHash(code, otpSession.codeHash);
+    const userForChallenge = otpSession.user;
+    const usesTotp =
+      otpSession.purpose === OtpPurpose.LOGIN_2FA &&
+      Boolean(userForChallenge.twoFactorSecret);
 
-    if (!isValid) {
-      await this.handleFailedOtpAttempt(otpSession, context);
-      throw new AuthError(
-        AUTH_MESSAGES.OTP_INVALID,
-        400,
-        AUTH_ERROR_CODES.OTP_INVALID,
-      );
+    let recoveryUsed = false;
+
+    if (usesTotp) {
+      const factor = await mfaService.verifyLoginFactor({
+        encryptedSecret: userForChallenge.twoFactorSecret as string,
+        recoveryCodes: mfaService.parseRecoveryCodes(
+          userForChallenge.recoveryCodes,
+        ),
+        lastStep: userForChallenge.twoFactorLastStep ?? null,
+        code,
+      });
+
+      if (!factor.ok) {
+        await this.handleFailedOtpAttempt(otpSession, context);
+        await logAuthAuditEvent({
+          userId: userForChallenge.id,
+          action: AUTH_AUDIT_ACTIONS.MFA_FAILURE,
+          resourceId: otpSession.id,
+          metadata: { purpose: OtpPurpose.LOGIN_2FA, method: "totp" },
+          context,
+        });
+        void securityMonitoringService.reportMfaFailure({
+          userId: userForChallenge.id,
+          resource: "auth",
+          resourceId: otpSession.id,
+          message: "MFA verification failed",
+          metadata: { method: "totp" },
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        });
+        throw new AuthError(
+          AUTH_MESSAGES.OTP_INVALID,
+          400,
+          AUTH_ERROR_CODES.OTP_INVALID,
+        );
+      }
+
+      if (factor.method === "totp") {
+        await authRepository.updateUserMfa(userForChallenge.id, {
+          twoFactorLastStep: factor.step,
+        });
+      } else {
+        recoveryUsed = true;
+        await authRepository.updateUserMfa(userForChallenge.id, {
+          recoveryCodes: factor.updatedRecoveryCodes as unknown as Prisma.InputJsonValue,
+        });
+      }
+    } else {
+      const isValid = verifyOtpCodeHash(code, otpSession.codeHash);
+
+      if (!isValid) {
+        await this.handleFailedOtpAttempt(otpSession, context);
+        throw new AuthError(
+          AUTH_MESSAGES.OTP_INVALID,
+          400,
+          AUTH_ERROR_CODES.OTP_INVALID,
+        );
+      }
     }
 
     await authRepository.markOtpVerificationUsed(otpSession.id);
@@ -647,7 +785,11 @@ export class AuthService {
       const user = otpSession.user;
       await this.assertUserCanLogin(user, context);
 
-      const sessionResult = await this.createUserSession(user, context);
+      const rememberMe = this.consumeRememberMe(otpSessionId);
+      const sessionResult = await this.createUserSession(user, context, {
+        rememberMe,
+        deviceFingerprint: context.deviceFingerprint,
+      });
 
       await authRepository.recordSuccessfulLogin(user.id);
 
@@ -662,15 +804,37 @@ export class AuthService {
         userId: user.id,
         action: AUTH_AUDIT_ACTIONS.OTP_VERIFIED,
         resourceId: otpSession.id,
-        metadata: { purpose: OtpPurpose.LOGIN_2FA },
+        metadata: {
+          purpose: OtpPurpose.LOGIN_2FA,
+          method: usesTotp ? (recoveryUsed ? "recovery" : "totp") : "email",
+        },
         context,
       });
+
+      if (usesTotp) {
+        await logAuthAuditEvent({
+          userId: user.id,
+          action: AUTH_AUDIT_ACTIONS.MFA_SUCCESS,
+          resourceId: otpSession.id,
+          metadata: { method: recoveryUsed ? "recovery" : "totp" },
+          context,
+        });
+      }
+
+      if (recoveryUsed) {
+        await logAuthAuditEvent({
+          userId: user.id,
+          action: AUTH_AUDIT_ACTIONS.MFA_RECOVERY_USED,
+          resourceId: otpSession.id,
+          context,
+        });
+      }
 
       await logAuthAuditEvent({
         userId: user.id,
         action: AUTH_AUDIT_ACTIONS.LOGIN,
         resourceId: sessionResult.sessionId,
-        metadata: { method: "otp" },
+        metadata: { method: usesTotp ? "mfa" : "otp" },
         context,
       });
 
@@ -740,6 +904,27 @@ export class AuthService {
       );
     }
 
+    if (
+      otpSession.purpose === OtpPurpose.LOGIN_2FA &&
+      otpSession.user.twoFactorSecret
+    ) {
+      const challenge = await this.issueTotpChallenge(otpSession.user, context);
+
+      await logAuthAuditEvent({
+        userId: otpSession.userId,
+        action: AUTH_AUDIT_ACTIONS.OTP_RESENT,
+        resourceId: challenge.otpSessionId,
+        metadata: {
+          previousOtpSessionId: otpSession.id,
+          purpose: otpSession.purpose,
+          method: "totp",
+        },
+        context,
+      });
+
+      return challenge;
+    }
+
     const challenge = await this.issueOtpChallenge(
       otpSession.user,
       otpSession.purpose as OtpPurpose,
@@ -788,13 +973,25 @@ export class AuthService {
     this.assertOAuthConfigured();
 
     const identity = await verifySupabaseOAuthToken(input);
-    const user = await this.resolveOAuthUser(
+    let user = await this.resolveOAuthUser(
       identity,
       context,
       input.intent ?? "login",
     );
 
+    user = await this.syncMfaEnrollmentFlag(user);
+
     if (user.twoFactorEnabled) {
+      if (user.twoFactorSecret) {
+        const otpChallenge = await this.issueTotpChallenge(user, context);
+        return {
+          requiresOtp: true,
+          otpSessionId: otpChallenge.otpSessionId,
+          expiresIn: otpChallenge.expiresIn,
+          mfaMethod: "totp",
+        };
+      }
+
       const otpChallenge = await this.issueOtpChallenge(
         user,
         OtpPurpose.LOGIN_2FA,
@@ -805,6 +1002,7 @@ export class AuthService {
         requiresOtp: true,
         otpSessionId: otpChallenge.otpSessionId,
         expiresIn: otpChallenge.expiresIn,
+        mfaMethod: "email",
       };
     }
 
@@ -989,8 +1187,19 @@ export class AuthService {
       );
     }
 
-    await authRepository.revokeSession(sessionId, SessionRevokedReason.LOGOUT);
-    await authRepository.revokeAllSessionTokens(sessionId);
+    await sessionService.revokeSession({
+      sessionId,
+      userId,
+      reason: SessionRevokedReason.LOGOUT,
+      actorUserId: userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      auditAction: SESSION_AUDIT_ACTIONS.REVOKED,
+      metadata: {
+        isCurrent: this.isCurrentSession(sessionId, currentSessionId),
+        flow: "user_revoke_session",
+      },
+    });
 
     await logAuthAuditEvent({
       userId,
@@ -1010,11 +1219,16 @@ export class AuthService {
     currentSessionId: string,
     context: RequestContext,
   ): Promise<{ message: string; revokedCount: number }> {
-    const revokedCount = await authRepository.revokeOtherUserSessions(
+    const revokedCount = await sessionService.revokeAllSessions({
       userId,
-      currentSessionId,
-      SessionRevokedReason.LOGOUT,
-    );
+      exceptSessionId: currentSessionId,
+      reason: SessionRevokedReason.LOGOUT,
+      actorUserId: userId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      auditAction: SESSION_AUDIT_ACTIONS.REVOKED,
+      metadata: { flow: "logout_all_others" },
+    });
 
     await logAuthAuditEvent({
       userId,
@@ -1085,20 +1299,20 @@ export class AuthService {
 
   async cleanupExpiredSessions(): Promise<{
     idleSessions: number;
+    absoluteSessions: number;
     expiredRefreshTokens: number;
     deletedRevokedSessions: number;
     deletedAuditLogs: number;
   }> {
     const now = new Date();
-    const idleBefore = new Date(
-      now.getTime() - TOKEN_EXPIRATION.IDLE_SESSION_DAYS * 24 * 60 * 60 * 1000,
-    );
     const revokedBefore = new Date(
       now.getTime() -
         TOKEN_EXPIRATION.REVOKED_SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1000,
     );
 
-    const idleSessions = await authRepository.cleanupIdleSessions(idleBefore);
+    const { idleSessions, absoluteSessions } =
+      await sessionService.cleanupExpiredSessions();
+
     const expiredRefreshTokens =
       await authRepository.deleteExpiredRefreshTokens(now);
     const deletedRevokedSessions =
@@ -1113,10 +1327,13 @@ export class AuthService {
       deletedAuditLogs = await authRepository.deleteOldAuditLogs(auditBefore);
     }
 
-    if (idleSessions > 0) {
+    if (idleSessions > 0 || absoluteSessions > 0) {
       await logAuthAuditEvent({
         action: AUTH_AUDIT_ACTIONS.SESSION_EXPIRED,
-        metadata: { idleSessions, idleBefore: idleBefore.toISOString() },
+        metadata: {
+          idleSessions,
+          absoluteSessions,
+        },
         context: { ipAddress: "system", userAgent: "session-cleanup-job" },
       });
     }
@@ -1125,6 +1342,7 @@ export class AuthService {
       action: AUTH_AUDIT_ACTIONS.SESSION_CLEANUP,
       metadata: {
         idleSessions,
+        absoluteSessions,
         expiredRefreshTokens,
         deletedRevokedSessions,
         deletedAuditLogs,
@@ -1134,6 +1352,7 @@ export class AuthService {
 
     return {
       idleSessions,
+      absoluteSessions,
       expiredRefreshTokens,
       deletedRevokedSessions,
       deletedAuditLogs,
@@ -1402,7 +1621,9 @@ export class AuthService {
   ): Promise<LoginSessionResult> {
     await this.assertUserCanLogin(user, context);
 
-    const sessionResult = await this.createUserSession(user, context);
+    const sessionResult = await this.createUserSession(user, context, {
+      deviceFingerprint: context.deviceFingerprint,
+    });
 
     await authRepository.recordSuccessfulLogin(user.id);
 
@@ -1438,6 +1659,280 @@ export class AuthService {
       },
       refreshToken: sessionResult.refreshToken,
     };
+  }
+
+  private async issueTotpChallenge(
+    user: Pick<UserWithRoleAndPermissions, "id">,
+    context: RequestContext,
+  ): Promise<OtpChallengeResult> {
+    const placeholder = generateOtpCode();
+    const codeHash = hashOtpCode(`totp:${placeholder}:${Date.now()}`);
+    const expiresAt = getOtpExpiresAt(OtpPurpose.LOGIN_2FA);
+
+    await authRepository.invalidateOtpVerifications(
+      user.id,
+      OtpPurpose.LOGIN_2FA,
+    );
+
+    const otpSession = await authRepository.createOtpVerification({
+      userId: user.id,
+      codeHash,
+      purpose: OtpPurpose.LOGIN_2FA,
+      expiresAt,
+    });
+
+    await logAuthAuditEvent({
+      userId: user.id,
+      action: AUTH_AUDIT_ACTIONS.OTP_SENT,
+      resourceId: otpSession.id,
+      metadata: { purpose: OtpPurpose.LOGIN_2FA, method: "totp" },
+      context,
+    });
+
+    return {
+      otpSessionId: otpSession.id,
+      expiresIn: getOtpExpiresInSeconds(OtpPurpose.LOGIN_2FA),
+    };
+  }
+
+  private async syncMfaEnrollmentFlag(
+    user: UserWithRoleAndPermissions,
+  ): Promise<UserWithRoleAndPermissions> {
+    const roleCode = user.role.code;
+    const mandatory = isMfaMandatoryRole(roleCode);
+    const shouldRequire = mandatory && !user.twoFactorEnabled;
+    const current = Boolean(user.mfaEnrollmentRequired);
+
+    if (shouldRequire === current) {
+      return user;
+    }
+
+    await authRepository.updateUserMfa(user.id, {
+      mfaEnrollmentRequired: shouldRequire,
+    });
+
+    return { ...user, mfaEnrollmentRequired: shouldRequire };
+  }
+
+  async getMfaStatus(userId: string) {
+    const user = await authRepository.findUserById(userId);
+    if (!user || user.deletedAt) {
+      throw new AuthError(
+        "User not found",
+        404,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    const recoveryCodes = mfaService.parseRecoveryCodes(user.recoveryCodes);
+    const remaining = recoveryCodes.filter((entry) => !entry.usedAt).length;
+
+    return {
+      enabled: Boolean(user.twoFactorEnabled && user.twoFactorSecret),
+      enrollmentRequired: Boolean(user.mfaEnrollmentRequired),
+      canEnroll: isMfaOptionalRole(user.role.code),
+      recoveryCodesRemaining: user.twoFactorEnabled ? remaining : undefined,
+    };
+  }
+
+  async setupMfa(userId: string, context: RequestContext) {
+    const user = await authRepository.findUserById(userId);
+    if (!user || user.deletedAt) {
+      throw new AuthError(
+        "User not found",
+        404,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    if (!isMfaOptionalRole(user.role.code)) {
+      throw new AuthError(
+        AUTH_MESSAGES.MFA_NOT_AVAILABLE,
+        403,
+        AUTH_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      throw new AuthError(
+        AUTH_MESSAGES.MFA_ALREADY_ENABLED,
+        409,
+        AUTH_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const setup = await mfaService.beginSetup(user.id, user.email);
+
+    await logAuthAuditEvent({
+      userId: user.id,
+      action: AUTH_AUDIT_ACTIONS.OTP_SENT,
+      resourceId: user.id,
+      metadata: { purpose: "mfa_setup" },
+      context,
+    });
+
+    return setup;
+  }
+
+  async enableMfa(
+    userId: string,
+    code: string,
+    context: RequestContext,
+    currentSessionId?: string,
+  ): Promise<{ message: string }> {
+    const user = await authRepository.findUserById(userId);
+    if (!user || user.deletedAt) {
+      throw new AuthError(
+        "User not found",
+        404,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    if (!isMfaOptionalRole(user.role.code)) {
+      throw new AuthError(
+        AUTH_MESSAGES.MFA_NOT_AVAILABLE,
+        403,
+        AUTH_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      throw new AuthError(
+        AUTH_MESSAGES.MFA_ALREADY_ENABLED,
+        409,
+        AUTH_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    let enabled: {
+      encryptedSecret: string;
+      recoveryCodes: ReturnType<typeof mfaService.parseRecoveryCodes>;
+    };
+
+    try {
+      enabled = await mfaService.enableMFA(userId, code);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      await logAuthAuditEvent({
+        userId,
+        action: AUTH_AUDIT_ACTIONS.MFA_FAILURE,
+        resourceId: userId,
+        metadata: { action: "enable" },
+        context,
+      });
+
+      if (message === "MFA_SETUP_EXPIRED") {
+        throw new AuthError(
+          AUTH_MESSAGES.MFA_SETUP_EXPIRED,
+          400,
+          AUTH_ERROR_CODES.OTP_EXPIRED,
+        );
+      }
+
+      throw new AuthError(
+        AUTH_MESSAGES.OTP_INVALID,
+        400,
+        AUTH_ERROR_CODES.OTP_INVALID,
+      );
+    }
+
+    await authRepository.updateUserMfa(userId, {
+      twoFactorEnabled: true,
+      twoFactorSecret: enabled.encryptedSecret,
+      recoveryCodes: enabled.recoveryCodes as unknown as Prisma.InputJsonValue,
+      twoFactorLastStep: null,
+      mfaEnrollmentRequired: false,
+    });
+
+    // MFA state change — revoke other sessions + rebind current (hardening)
+    await sessionHardeningService.rotateAfterMfaEnable({
+      userId,
+      currentSessionId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+
+    await logAuthAuditEvent({
+      userId,
+      action: AUTH_AUDIT_ACTIONS.MFA_ENABLED,
+      resourceId: userId,
+      context,
+    });
+
+    return { message: AUTH_MESSAGES.MFA_ENABLED };
+  }
+
+  async disableMfa(
+    userId: string,
+    code: string,
+    context: RequestContext,
+    currentSessionId?: string,
+  ): Promise<{ message: string }> {
+    const user = await authRepository.findUserById(userId);
+    if (!user || user.deletedAt) {
+      throw new AuthError(
+        "User not found",
+        404,
+        AUTH_ERROR_CODES.TOKEN_INVALID,
+      );
+    }
+
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new AuthError(
+        AUTH_MESSAGES.MFA_NOT_ENABLED,
+        400,
+        AUTH_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const verified = await mfaService.verifyForDisable({
+      encryptedSecret: user.twoFactorSecret,
+      recoveryCodes: mfaService.parseRecoveryCodes(user.recoveryCodes),
+      lastStep: user.twoFactorLastStep ?? null,
+      code,
+    });
+
+    if (!verified.ok) {
+      await logAuthAuditEvent({
+        userId,
+        action: AUTH_AUDIT_ACTIONS.MFA_FAILURE,
+        resourceId: userId,
+        metadata: { action: "disable" },
+        context,
+      });
+      throw new AuthError(
+        AUTH_MESSAGES.OTP_INVALID,
+        400,
+        AUTH_ERROR_CODES.OTP_INVALID,
+      );
+    }
+
+    const enrollmentRequired = isMfaMandatoryRole(user.role.code);
+    const cleared = mfaService.disableMFA(userId);
+
+    await authRepository.updateUserMfa(userId, {
+      ...cleared,
+      mfaEnrollmentRequired: enrollmentRequired,
+    });
+
+    // MFA reset — invalidate all sessions (including current) to force re-auth
+    await sessionHardeningService.rotateAfterMfaDisable({
+      userId,
+      currentSessionId,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
+
+    await logAuthAuditEvent({
+      userId,
+      action: AUTH_AUDIT_ACTIONS.MFA_DISABLED,
+      resourceId: userId,
+      metadata: { method: verified.method },
+      context,
+    });
+
+    return { message: AUTH_MESSAGES.MFA_DISABLED };
   }
 
   private async issueOtpChallenge(
@@ -1736,6 +2231,16 @@ export class AuthService {
       resourceId: user.id,
       context,
     });
+
+    void securityMonitoringService.reportFailedLogin({
+      userId: user.id,
+      resource: "auth",
+      resourceId: user.id,
+      message: "Failed login attempt",
+      metadata: { failedLoginCount: nextFailedCount, locked: Boolean(lockedUntil) },
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
   }
 
   private async handleRefreshTokenReuse(
@@ -1752,31 +2257,62 @@ export class AuthService {
       resourceId: sessionId,
       context,
     });
+
+    void securityMonitoringService.reportSessionAnomaly({
+      userId,
+      resource: "session",
+      resourceId: sessionId,
+      message: "Refresh token reuse detected",
+      metadata: { reason: "token_reuse" },
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+    });
   }
 
   private async createUserSession(
     user: UserWithRoleAndPermissions,
     context: RequestContext,
+    options?: { rememberMe?: boolean; deviceFingerprint?: string | null },
   ): Promise<AuthSessionResult> {
-    const activeSessions = await authRepository.countActiveSessions(user.id);
-    if (activeSessions >= TOKEN_EXPIRATION.MAX_CONCURRENT_SESSIONS) {
-      await authRepository.revokeOldestSession(user.id);
-    }
+    const rememberMe = Boolean(options?.rememberMe);
 
-    const session = await authRepository.createSession({
+    const created = await sessionService.createSession({
       userId: user.id,
       deviceName: parseDeviceName(context.userAgent),
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
+      deviceFingerprint: options?.deviceFingerprint,
+      rememberMe,
+    });
+
+    // Remember-me + fingerprint → trusted device (never bypasses auth).
+    if (rememberMe && options?.deviceFingerprint) {
+      void sessionHardeningService.rememberDevice({
+        userId: user.id,
+        deviceFingerprint: options.deviceFingerprint,
+        label: parseDeviceName(context.userAgent),
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+    }
+
+    // Device Management — register after SessionService creates the session.
+    void deviceManagementService.registerDevice({
+      userId: user.id,
+      deviceFingerprint: options?.deviceFingerprint,
+      userAgent: context.userAgent,
+      ipAddress: context.ipAddress,
+      sessionId: created.sessionId,
+      label: parseDeviceName(context.userAgent),
     });
 
     const opaqueRefreshToken = generateOpaqueRefreshToken();
     const tokenHash = hashRefreshToken(opaqueRefreshToken);
-    const expiresAt = getRefreshTokenExpiresAt();
+    const expiresAt = sessionService.getRefreshTokenExpiresAt(rememberMe);
 
     await authRepository.createRefreshToken({
       tokenHash,
-      sessionId: session.id,
+      sessionId: created.sessionId,
       userId: user.id,
       expiresAt,
     });
@@ -1784,10 +2320,12 @@ export class AuthService {
     await logAuthAuditEvent({
       userId: user.id,
       action: AUTH_AUDIT_ACTIONS.SESSION_CREATED,
-      resourceId: session.id,
+      resourceId: created.sessionId,
       metadata: {
-        deviceName: session.deviceName,
+        deviceName: parseDeviceName(context.userAgent),
         ipAddress: context.ipAddress,
+        rememberMe,
+        expiresAt: created.expiresAt.toISOString(),
       },
       context,
     });
@@ -1798,14 +2336,14 @@ export class AuthService {
       email: user.email,
       role: user.role.code as UserRole,
       permissions,
-      sessionId: session.id,
+      sessionId: created.sessionId,
     });
 
     return {
       accessToken,
       refreshToken: opaqueRefreshToken,
       expiresIn: getAccessTokenExpiresIn(),
-      sessionId: session.id,
+      sessionId: created.sessionId,
     };
   }
 }

@@ -5,6 +5,8 @@
 import type { AiMemoryEntry } from "../memory-entry.js";
 import type { AiMemoryEmbedding } from "./memory-embedding.js";
 import { clampSimilarity, cosineSimilarity } from "./memory-similarity.js";
+import { aiDataPolicyService } from "../../policy/ai-data-policy.service.js";
+import { freezeMemoryEntry } from "../memory-entry.js";
 
 export interface SimilarityHit {
   readonly entry: AiMemoryEntry;
@@ -18,6 +20,10 @@ export interface SimilaritySearchInput {
   readonly embeddings: ReadonlyMap<string, AiMemoryEmbedding>;
   readonly topK?: number;
   readonly threshold?: number;
+  readonly role?: string | null;
+  readonly permissions?: readonly string[] | null;
+  readonly userId?: string | null;
+  readonly explicitRestrictedAccess?: boolean;
 }
 
 export interface SimilaritySearchResult {
@@ -50,7 +56,27 @@ export function searchSimilarMemories(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const hits = Object.freeze(scored.slice(0, topK));
+  const topHits = scored.slice(0, topK);
+
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId: input.userId,
+    role: input.role,
+    permissions: input.permissions,
+    explicitRestrictedAccess: input.explicitRestrictedAccess === true,
+  });
+
+  const hits = Object.freeze(
+    topHits.map((hit) => {
+      const [scrubbed] = aiDataPolicyService.sanitizeSearchResults(
+        [hit.entry],
+        policySubject,
+      );
+      return Object.freeze({
+        ...hit,
+        entry: scrubbed ? freezeMemoryEntry(scrubbed) : hit.entry,
+      });
+    }),
+  );
   const confidence =
     hits.length === 0
       ? 0

@@ -1,5 +1,4 @@
 import {
-  AUTH_HEADERS,
   INVOICES_API_PREFIX,
   type CreateInvoiceInput,
   type Invoice,
@@ -9,9 +8,8 @@ import {
   type UpdateInvoiceInput,
 } from "@enterprise/shared";
 
-import { useAuthStore } from "@/features/auth/stores/auth.store";
-import { apiRequest } from "@/services/api/api-client";
-import { ApiClientError, getApiBaseUrl } from "@/services/api/api-error";
+import { apiRequest, authenticatedFetch } from "@/services/api/api-client";
+import { ApiClientError } from "@/services/api/api-error";
 
 function toQueryString(query: ListInvoicesQueryInput): string {
   const params = new URLSearchParams();
@@ -74,20 +72,9 @@ export const invoicesService = {
   },
 
   async downloadPdf(id: string): Promise<{ blob: Blob; filename: string }> {
-    const token = useAuthStore.getState().accessToken;
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers[AUTH_HEADERS.AUTHORIZATION] =
-        `${AUTH_HEADERS.BEARER_PREFIX}${token}`;
-    }
-
-    const response = await fetch(
-      `${getApiBaseUrl()}${INVOICES_API_PREFIX}/${id}/pdf`,
-      {
-        method: "GET",
-        credentials: "include",
-        headers,
-      },
+    const response = await authenticatedFetch(
+      `${INVOICES_API_PREFIX}/${id}/pdf`,
+      { method: "GET" },
     );
 
     if (!response.ok) {

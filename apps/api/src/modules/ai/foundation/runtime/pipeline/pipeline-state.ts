@@ -179,6 +179,8 @@ export interface AiRuntimePipelineState<TResult = unknown> {
   /** Set by Prompt Engineering Stage. */
   readonly engineeredPrompt?: AiEngineeredPrompt;
   readonly providerRequest?: AiProviderRequest;
+  /** Pre-provider budget gate result (when AI_BUDGET_ENABLED). */
+  readonly budgetValidation?: import("../../budget/ai-budget.types.js").AiBudgetValidationResult;
   readonly result?: TResult;
   readonly foundationResponse?: AiFoundationResponse;
 }

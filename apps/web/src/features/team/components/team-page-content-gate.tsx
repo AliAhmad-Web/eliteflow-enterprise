@@ -4,9 +4,6 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
 import { LoadingState } from "@/components/common/feedback/loading-state";
-import { isPerformanceAdvBundleEnabled } from "@/features/performance";
-
-import { TeamPageContent as TeamPageContentEager } from "./team-page-content";
 
 const TeamPageContentLazy = dynamic(
   () => import("./team-page-content").then((m) => m.TeamPageContent),
@@ -19,11 +16,8 @@ const TeamPageContentLazy = dynamic(
 );
 
 /**
- * Team shell: eager by default; dynamic import when PERFORMANCE_ADV_BUNDLE is ON.
- *
- * Always wait for client mount before rendering query-driven content. Team stats
- * are restored from localStorage only in the browser, which otherwise causes a
- * hydration mismatch (server LoadingState vs client StatCards).
+ * Always dynamically import Team (~77KB). Wait for client mount before rendering
+ * query-driven content to avoid hydration mismatch with localStorage-backed stats.
  */
 export function TeamPageContentGate() {
   const [mounted, setMounted] = useState(false);
@@ -38,8 +32,5 @@ export function TeamPageContentGate() {
     );
   }
 
-  if (isPerformanceAdvBundleEnabled()) {
-    return <TeamPageContentLazy />;
-  }
-  return <TeamPageContentEager />;
+  return <TeamPageContentLazy />;
 }

@@ -24,6 +24,14 @@ model User {
   failedLoginCount  Int        @default(0) @map("failed_login_count")
   lockedUntil       DateTime?  @map("locked_until")
   twoFactorEnabled  Boolean    @default(false) @map("two_factor_enabled")
+  /// AES-GCM encrypted TOTP secret (enterprise EncryptionService payload).
+  twoFactorSecret   String?    @map("two_factor_secret") @db.Text
+  /// Hashed one-time recovery codes (JSON array of { hash, usedAt }).
+  recoveryCodes     Json?      @map("recovery_codes")
+  /// Last verified TOTP time-step (replay prevention).
+  twoFactorLastStep Int?       @map("two_factor_last_step")
+  /// Soft flag — privileged roles should enroll MFA (not a hard lock).
+  mfaEnrollmentRequired Boolean @default(false) @map("mfa_enrollment_required")
   companyId         String?    @map("company_id") @db.Uuid
   createdAt         DateTime   @default(now()) @map("created_at")
   updatedAt         DateTime   @updatedAt @map("updated_at")

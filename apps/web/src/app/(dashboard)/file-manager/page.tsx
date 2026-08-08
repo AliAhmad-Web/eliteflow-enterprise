@@ -1,9 +1,14 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { FileManagerPageContent } from "@/features/files/components/file-manager-page-content";
+import { LazyFileManagerPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "File Manager" };
 
 export default function FileManagerPage() {
-  return <FileManagerPageContent />;
+  return (
+    <Suspense fallback={null}>
+      <LazyFileManagerPage />
+    </Suspense>
+  );
 }

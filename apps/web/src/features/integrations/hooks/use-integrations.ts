@@ -19,6 +19,10 @@ export const integrationsKeys = {
     [...integrationsKeys.all, "logs", filters] as const,
   history: (filters: Partial<ListSyncHistoryQueryInput>) =>
     [...integrationsKeys.all, "history", filters] as const,
+  queue: (idOrSlug?: string | null) =>
+    [...integrationsKeys.all, "queue", idOrSlug ?? "all"] as const,
+  webhookMonitor: (idOrSlug?: string | null) =>
+    [...integrationsKeys.all, "webhooks-monitor", idOrSlug ?? "all"] as const,
 };
 
 export function useIntegrationsOverview(
@@ -50,7 +54,9 @@ export function useIntegrationBySlug(slug: string | null | undefined) {
 
 export function useIntegrationLogs(
   filters: Partial<ListIntegrationLogsQueryInput> = {},
+  options: { enabled?: boolean } = {},
 ) {
+  const { enabled = true } = options;
   return useQuery({
     queryKey: integrationsKeys.logs(filters),
     queryFn: () =>
@@ -59,6 +65,7 @@ export function useIntegrationLogs(
         pageSize: 10,
         ...filters,
       }),
+    enabled,
   });
 }
 
@@ -80,6 +87,38 @@ export function useMonitoringOverview(poll = false) {
   return useQuery({
     queryKey: [...integrationsKeys.all, "monitoring"] as const,
     queryFn: () => integrationsService.monitoringOverview(),
+    refetchInterval: poll ? 15_000 : false,
+  });
+}
+
+export function useSyncQueueOverview(
+  idOrSlug?: string | null,
+  options: { enabled?: boolean; poll?: boolean } = {},
+) {
+  const { enabled = true, poll = true } = options;
+  return useQuery({
+    queryKey: integrationsKeys.queue(idOrSlug),
+    queryFn: () =>
+      idOrSlug
+        ? integrationsService.queueForIntegration(idOrSlug)
+        : integrationsService.queueOverview(),
+    enabled,
+    refetchInterval: poll ? 15_000 : false,
+  });
+}
+
+export function useWebhookMonitorOverview(
+  idOrSlug?: string | null,
+  options: { enabled?: boolean; poll?: boolean } = {},
+) {
+  const { enabled = true, poll = true } = options;
+  return useQuery({
+    queryKey: integrationsKeys.webhookMonitor(idOrSlug),
+    queryFn: () =>
+      idOrSlug
+        ? integrationsService.webhookMonitorForIntegration(idOrSlug)
+        : integrationsService.webhookMonitor(),
+    enabled,
     refetchInterval: poll ? 15_000 : false,
   });
 }

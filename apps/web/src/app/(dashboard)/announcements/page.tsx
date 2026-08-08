@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { AnnouncementsPageContent } from "@/features/communication/components/announcements-page-content";
+import { LazyAnnouncementsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Announcements" };
 
 export default function AnnouncementsPage() {
-  return <AnnouncementsPageContent />;
+  return <LazyAnnouncementsPage />;
 }

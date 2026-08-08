@@ -14,6 +14,16 @@ export const PASSWORD_RULES = {
   SPECIAL_CHAR_PATTERN: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/,
   /** Number of previous password hashes retained to prevent reuse */
   HISTORY_COUNT: 5,
+  /**
+   * Minimum hours before a password may be changed again (0 = disabled).
+   * Forced / required password changes bypass this rule.
+   */
+  MIN_AGE_HOURS: 24,
+  /**
+   * Maximum password age in days before a change is required (0 = disabled).
+   * Aligns with Zero Trust password-age guidance (90 days).
+   */
+  MAX_AGE_DAYS: 90,
 } as const;
 
 // =============================================================================
@@ -35,20 +45,44 @@ export const OTP_RULES = {
 export const TOKEN_EXPIRATION = {
   /** Access token lifetime in seconds (15 minutes) */
   ACCESS_TOKEN_SECONDS: 15 * 60,
-  /** Refresh token lifetime in seconds (7 days) */
-  REFRESH_TOKEN_SECONDS: 7 * 24 * 60 * 60,
+  /** Refresh token lifetime in seconds (1 day — normal login). */
+  REFRESH_TOKEN_SECONDS: 1 * 24 * 60 * 60,
+  /** Refresh token lifetime when remember-me is enabled (30 days). */
+  REFRESH_TOKEN_SECONDS_REMEMBER_ME: 30 * 24 * 60 * 60,
   /** Email verification token lifetime in hours */
   EMAIL_VERIFICATION_HOURS: 24,
-  /** Password reset token lifetime in hours */
-  PASSWORD_RESET_HOURS: 1,
+  /**
+   * Password setup / one-time reset token lifetime in minutes (enterprise default).
+   * Used by PasswordSetupService for hire, invitation, admin reset, and forgot-password.
+   */
+  PASSWORD_SETUP_MINUTES: 30,
+  /**
+   * @deprecated Prefer PASSWORD_SETUP_MINUTES. Kept for backward-compatible imports.
+   * Value equals PASSWORD_SETUP_MINUTES / 60 (0.5 hours).
+   */
+  PASSWORD_RESET_HOURS: 0.5,
   /** Account lockout duration in minutes */
   ACCOUNT_LOCKOUT_MINUTES: 15,
   /** Maximum failed login attempts before lockout */
   MAX_FAILED_LOGIN_ATTEMPTS: 5,
   /** Maximum concurrent device sessions per user */
-  MAX_CONCURRENT_SESSIONS: 10,
-  /** Idle session expiry in days */
+  MAX_CONCURRENT_SESSIONS: 5,
+  /**
+   * Idle timeout — no activity for this many minutes → session revoked.
+   * Enforced on every authenticated request via SessionService.validateSession.
+   */
+  IDLE_SESSION_MINUTES: 30,
+  /**
+   * @deprecated Prefer IDLE_SESSION_MINUTES for request-time idle checks.
+   * Cleanup job still uses day-scale retention windows separately.
+   */
   IDLE_SESSION_DAYS: 30,
+  /** Absolute session lifetime in days (non-remember-me). */
+  ABSOLUTE_SESSION_DAYS: 7,
+  /** Absolute session lifetime in days when remember-me is enabled. */
+  ABSOLUTE_SESSION_DAYS_REMEMBER_ME: 30,
+  /** Throttle for lastActiveAt updates (seconds). */
+  SESSION_ACTIVITY_TOUCH_SECONDS: 60,
   /** How long to retain revoked sessions before hard-delete (days) */
   REVOKED_SESSION_RETENTION_DAYS: 30,
   /** How long to retain audit logs before cleanup (days); 0 = never delete */
@@ -85,8 +119,12 @@ export const RATE_LIMIT = {
 export const AUTH_COOKIES = {
   REFRESH_TOKEN: "__Secure-refresh-token",
   REFRESH_TOKEN_DEV: "refresh-token",
-  CSRF_TOKEN: "__Host-csrf-token",
-  CSRF_TOKEN_DEV: "csrf-token",
+  /** Enterprise CSRF double-submit cookie (Phase 2 Step 2). */
+  CSRF_TOKEN: "XSRF-TOKEN",
+  CSRF_TOKEN_DEV: "XSRF-TOKEN",
+  /** @deprecated legacy names — still accepted server-side during migration */
+  CSRF_TOKEN_LEGACY: "__Host-csrf-token",
+  CSRF_TOKEN_DEV_LEGACY: "csrf-token",
 } as const;
 
 // =============================================================================
@@ -171,6 +209,13 @@ export const AUTH_ERROR_CODES = {
   CSRF_INVALID: "AUTH_CSRF_INVALID",
   VALIDATION_ERROR: "VALIDATION_ERROR",
   INTERNAL_ERROR: "INTERNAL_ERROR",
+  /**
+   * Authenticated caller must change password before accessing protected APIs.
+   * Generic message only — do not leak reason details to the client.
+   */
+  PASSWORD_CHANGE_REQUIRED: "AUTH_PASSWORD_CHANGE_REQUIRED",
+  /** Server-side session is missing, revoked, expired, or otherwise invalid. */
+  SESSION_INVALID: "AUTH_SESSION_INVALID",
 } as const;
 
 export type AuthErrorCode =

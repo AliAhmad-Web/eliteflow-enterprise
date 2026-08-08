@@ -1,8 +1,16 @@
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 
-import { ActiveSessionsPanel } from "@/features/auth/components/active-sessions-panel";
 import { ROUTES } from "@/constants/routes";
+
+const ActiveSessionsPanel = dynamic(
+  () =>
+    import("@/features/auth/components/active-sessions-panel").then(
+      (m) => m.ActiveSessionsPanel,
+    ),
+  { loading: () => null },
+);
 
 export const metadata: Metadata = { title: "Active Sessions" };
 

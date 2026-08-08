@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isAttachmentUrlSchemeAllowed } from "../utils/attachment-url.js";
 import { uuidSchema } from "./common.schema.js";
 
 export const CONVERSATION_TYPES = [
@@ -66,7 +67,14 @@ export type ActivityEntityTypeValue = z.infer<typeof activityEntityTypeSchema>;
 
 const attachmentInputSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
-  fileUrl: z.string().trim().url().max(2048),
+  fileUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine(
+      isAttachmentUrlSchemeAllowed,
+      "Forbidden attachment URL scheme. Use a File Manager file.",
+    ),
   mimeType: z.string().trim().max(120).optional().nullable(),
   sizeBytes: z.number().int().nonnegative().optional().nullable(),
   managedFileId: uuidSchema.optional().nullable(),

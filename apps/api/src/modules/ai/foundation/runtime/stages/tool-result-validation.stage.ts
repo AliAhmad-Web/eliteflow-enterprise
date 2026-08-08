@@ -31,6 +31,10 @@ export const toolResultValidationStage: AiPipelineStage = {
       policy: state.policy,
       activeContext: state.activeContext,
       permissions: state.contextHints?.permissions,
+      role: state.activeContext.user?.role ?? state.contextHints?.role,
+      userId: state.userId,
+      explicitRestrictedAccess:
+        state.contextHints?.explicitRestrictedAccess === true,
       catalog: state.discoveredTools,
       confidenceByToolId,
     });

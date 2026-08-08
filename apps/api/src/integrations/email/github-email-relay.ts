@@ -11,7 +11,9 @@ import { emailConfig } from "../../config/email.config.js";
 
 const WORKFLOW_FILE = "send-transactional-email.yml";
 const POLL_INTERVAL_MS = 2_000;
-const POLL_TIMEOUT_MS = 90_000;
+/** Must stay under the web client's default 45s request timeout. */
+const POLL_TIMEOUT_MS = 35_000;
+const GITHUB_FETCH_TIMEOUT_MS = 12_000;
 
 export function isGithubEmailRelayConfigured(): boolean {
   return Boolean(
@@ -45,7 +47,10 @@ async function listRecentWorkflowRuns(
 ): Promise<WorkflowRun[]> {
   const response = await fetch(
     `https://api.github.com/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?event=repository_dispatch&per_page=15`,
-    { headers: githubHeaders(token) },
+    {
+      headers: githubHeaders(token),
+      signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
+    },
   );
 
   if (!response.ok) {
@@ -134,6 +139,7 @@ export async function sendViaGithubEmailRelay(input: {
         nonce,
       },
     }),
+    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
   });
 
   if (!response.ok) {

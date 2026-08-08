@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { AdminPageClient } from "@/features/dashboard/components/admin-page-client";
+import { LazyAdminPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = {
   title: "Admin Console",
 };
 
 export default function AdminPage() {
-  return <AdminPageClient />;
+  return <LazyAdminPage />;
 }

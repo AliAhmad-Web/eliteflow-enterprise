@@ -1,11 +1,13 @@
 import {
   WHITEBOARDS_API_PREFIX,
+  type CreateWhiteboardCommentInput,
   type CreateWhiteboardInput,
   type DuplicateWhiteboardInput,
   type ListWhiteboardsQueryInput,
   type RenameWhiteboardInput,
   type UpdateWhiteboardInput,
   type WhiteboardAiRequestInput,
+  type WhiteboardCommentDto,
   type WhiteboardDto,
   type WhiteboardListResponse,
   type WhiteboardVersionDto,
@@ -94,6 +96,20 @@ export const whiteboardsService = {
   runAi(id: string, input: WhiteboardAiRequestInput) {
     return apiRequest<{ action: string; result: string }>(
       `${WHITEBOARDS_API_PREFIX}/${id}/ai`,
+      { method: "POST", auth: true, body: input },
+    );
+  },
+
+  listComments(id: string) {
+    return apiRequest<WhiteboardCommentDto[]>(
+      `${WHITEBOARDS_API_PREFIX}/${id}/comments`,
+      { auth: true },
+    );
+  },
+
+  addComment(id: string, input: CreateWhiteboardCommentInput) {
+    return apiRequest<WhiteboardCommentDto>(
+      `${WHITEBOARDS_API_PREFIX}/${id}/comments`,
       { method: "POST", auth: true, body: input },
     );
   },

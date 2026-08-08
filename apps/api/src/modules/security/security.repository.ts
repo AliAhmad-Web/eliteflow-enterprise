@@ -2,8 +2,10 @@ import {
   prisma,
   Prisma,
   type SecurityEventCategory,
+  type SecurityIncidentStatus,
   type SecuritySeverity,
 } from "@enterprise/database";
+import { sanitizeAuditMetadata } from "@enterprise/shared";
 
 export const securityRepository = {
   async countActiveSessions(userId?: string): Promise<number> {
@@ -61,6 +63,7 @@ export const securityRepository = {
         email: true,
         passwordHash: true,
         passwordChangedAt: true,
+        mustChangePassword: true,
         lastLoginAt: true,
         twoFactorEnabled: true,
         failedLoginCount: true,
@@ -306,6 +309,42 @@ export const securityRepository = {
     });
   },
 
+  async listSecurityIncidents(input: {
+    skip: number;
+    take: number;
+    severity?: SecuritySeverity;
+    status?: SecurityIncidentStatus;
+    type?: string;
+    unresolvedOnly?: boolean;
+  }) {
+    const where: Prisma.SecurityIncidentWhereInput = {
+      ...(input.severity ? { severity: input.severity } : {}),
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.type
+        ? { type: { contains: input.type, mode: "insensitive" } }
+        : {}),
+      ...(input.unresolvedOnly
+        ? { status: { in: ["OPEN", "INVESTIGATING"] } }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      prisma.securityIncident.findMany({
+        where,
+        orderBy: { lastSeenAt: "desc" },
+        skip: input.skip,
+        take: input.take,
+      }),
+      prisma.securityIncident.count({ where }),
+    ]);
+
+    return { items, total };
+  },
+
+  async findSecurityIncident(incidentId: string) {
+    return prisma.securityIncident.findUnique({ where: { id: incidentId } });
+  },
+
   async createSecurityEvent(input: {
     userId?: string | null;
     severity: SecuritySeverity;
@@ -324,7 +363,8 @@ export const securityRepository = {
         eventType: input.eventType,
         message: input.message,
         metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
+          ? ((sanitizeAuditMetadata(input.metadata) ??
+              undefined) as Prisma.InputJsonValue)
           : undefined,
         ipAddress: input.ipAddress ?? null,
         userAgent: input.userAgent ?? null,

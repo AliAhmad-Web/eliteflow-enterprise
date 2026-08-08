@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, memo } from "react";
+import dynamic from "next/dynamic";
 
 import { AppFooter } from "@/components/layout/app-footer";
 import { AppHeader } from "@/components/layout/app-header";
@@ -9,8 +10,15 @@ import { DashboardRouteWarmup } from "@/components/layout/dashboard-route-warmup
 import { KeepAliveOutlet } from "@/components/layout/keep-alive-outlet";
 import { NavigationProgress } from "@/components/layout/navigation-progress";
 import { RightPanel } from "@/components/layout/right-panel";
-import { MustChangePasswordGate } from "@/features/auth/components/must-change-password-gate";
 import { useUiStore } from "@/stores/ui.store";
+
+const MustChangePasswordGate = dynamic(
+  () =>
+    import("@/features/auth/components/must-change-password-gate").then(
+      (m) => m.MustChangePasswordGate,
+    ),
+  { ssr: false, loading: () => null },
+);
 
 interface DashboardShellProps {
   children: React.ReactNode;

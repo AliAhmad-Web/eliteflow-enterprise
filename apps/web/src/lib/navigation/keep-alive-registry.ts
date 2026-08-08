@@ -163,6 +163,15 @@ const KEEP_ALIVE_DYNAMIC_PATTERNS: DynamicKeepAlivePattern[] = [
       return { default: NotificationKeepAlivePage };
     },
   },
+  {
+    test: /^\/files\/([^/]+)$/,
+    load: async () => {
+      const mod = await import(
+        "@/features/files/components/file-viewer/file-viewer-page-content"
+      );
+      return { default: mod.FileViewerPageContent };
+    },
+  },
 ];
 
 export const KEEP_ALIVE_ROUTES = Object.keys(KEEP_ALIVE_LOADERS);

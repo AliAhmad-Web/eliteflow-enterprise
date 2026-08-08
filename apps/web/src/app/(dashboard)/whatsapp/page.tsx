@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { WhatsappPageContent } from "@/features/communication/components/whatsapp-page-content";
+import { LazyWhatsappPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "WhatsApp" };
 
 export default function WhatsappPage() {
-  return <WhatsappPageContent />;
+  return <LazyWhatsappPage />;
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isAttachmentUrlSchemeAllowed } from "../utils/attachment-url.js";
 import { uuidSchema } from "./common.schema.js";
 
 export const EMPLOYEE_STATUSES = [
@@ -107,6 +108,40 @@ export const employeeStatusSchema = z.enum(EMPLOYEE_STATUSES);
 export const attendanceStatusSchema = z.enum(ATTENDANCE_STATUSES);
 export const leaveTypeSchema = z.enum(LEAVE_TYPES);
 export const leaveRequestStatusSchema = z.enum(LEAVE_REQUEST_STATUSES);
+
+/** Multi-stage leave approval workflow (mirrors API leave-approval workflow). */
+export const LEAVE_WORKFLOW_STATES = [
+  "DRAFT",
+  "SUBMITTED",
+  "MANAGER_APPROVED",
+  "MANAGER_REJECTED",
+  "HR_APPROVED",
+  "HR_REJECTED",
+  "FINAL_APPROVED",
+  "FINAL_REJECTED",
+  "CANCELLED",
+  "EXPIRED",
+] as const;
+
+export const leaveWorkflowStateSchema = z.enum(LEAVE_WORKFLOW_STATES);
+export type LeaveWorkflowStateValue = z.infer<typeof leaveWorkflowStateSchema>;
+
+export const leaveWorkflowStageDtoSchema = z.object({
+  state: leaveWorkflowStateSchema,
+  submittedAt: z.string(),
+  expiresAt: z.string(),
+  managerApproverId: uuidSchema.nullable().optional(),
+  managerApprovedAt: z.string().nullable().optional(),
+  hrApproverId: uuidSchema.nullable().optional(),
+  hrApprovedAt: z.string().nullable().optional(),
+  finalApproverId: uuidSchema.nullable().optional(),
+  finalApprovedAt: z.string().nullable().optional(),
+  overrideById: uuidSchema.nullable().optional(),
+  overrideAt: z.string().nullable().optional(),
+  overrideAction: z.enum(["APPROVE", "REJECT"]).nullable().optional(),
+});
+export type LeaveWorkflowStageDto = z.infer<typeof leaveWorkflowStageDtoSchema>;
+
 export const performanceRatingSchema = z.enum(PERFORMANCE_RATINGS);
 export const goalStatusSchema = z.enum(GOAL_STATUSES);
 export const employeeGenderSchema = z.enum(EMPLOYEE_GENDERS);
@@ -247,7 +282,10 @@ export type ResetEmployeeCredentialsInput = z.infer<
 >;
 
 export const resetEmployeeCredentialsResultSchema = z.object({
-  temporaryPassword: z.string(),
+  passwordSetupRequired: z.literal(true),
+  /** One-time setup link for authorized HR only — omitted when unauthorized. Never log. */
+  passwordSetupUrl: z.string().url().optional(),
+  expiresAt: z.string().datetime(),
   mustChangePassword: z.boolean(),
   invitationSent: z.boolean(),
 });
@@ -526,11 +564,19 @@ export type GoalIdParamsInput = z.infer<typeof goalIdParamsSchema>;
 export const createEmployeeDocumentSchema = z.object({
   type: documentTypeSchema,
   title: z.string().trim().min(1).max(200),
-  fileUrl: z.string().url().max(2048),
+  fileUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine(
+      isAttachmentUrlSchemeAllowed,
+      "Forbidden attachment URL scheme. Use a File Manager file.",
+    ),
   fileName: z.string().trim().max(255).optional().nullable(),
   mimeType: z.string().trim().max(100).optional().nullable(),
   fileSize: z.coerce.number().int().min(0).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
+  managedFileId: uuidSchema.optional().nullable(),
 });
 export type CreateEmployeeDocumentInput = z.infer<typeof createEmployeeDocumentSchema>;
 
@@ -577,6 +623,12 @@ export const departmentDtoSchema = z.object({
 });
 export type DepartmentDto = z.infer<typeof departmentDtoSchema>;
 
+/**
+ * Superset employee profile DTO.
+ * RESTRICTED fields (salary, nationalId, qrToken) are optional and omitted by
+ * the server unless the actor has HR field access (team:manage / admin).
+ * Directory/list responses use the public field policy (minimum fields).
+ */
 export const employeeProfileDtoSchema = z.object({
   id: uuidSchema,
   userId: uuidSchema,
@@ -590,23 +642,25 @@ export const employeeProfileDtoSchema = z.object({
   employmentType: employmentTypeSchema.optional(),
   gender: employeeGenderSchema.nullable().optional(),
   dateOfBirth: z.string().nullable().optional(),
+  /** RESTRICTED — HR/Admin only; omitted for public/self views. */
   nationalId: z.string().nullable().optional(),
   hireDate: z.string().nullable(),
   phone: z.string().nullable(),
   workLocation: z.string().nullable(),
   address: z.string().nullable().optional(),
+  /** RESTRICTED — HR/Admin only; omitted for public/self and all list APIs. */
   salary: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
   photoUrl: z.string().nullable().optional(),
   skills: z.array(z.string()),
   experienceYears: z.number().nullable(),
   bio: z.string().nullable(),
-  documentUrls: z.array(z.string()),
-  emergencyContactName: z.string().nullable(),
-  emergencyContactPhone: z.string().nullable(),
-  emergencyContactRelation: z.string().nullable(),
-  annualLeaveBalance: z.number().int(),
-  sickLeaveBalance: z.number().int(),
+  documentUrls: z.array(z.string()).optional(),
+  emergencyContactName: z.string().nullable().optional(),
+  emergencyContactPhone: z.string().nullable().optional(),
+  emergencyContactRelation: z.string().nullable().optional(),
+  annualLeaveBalance: z.number().int().optional(),
+  sickLeaveBalance: z.number().int().optional(),
   fatherName: z.string().nullable().optional(),
   maritalStatus: maritalStatusSchema.nullable().optional(),
   bloodGroup: z.string().nullable().optional(),
@@ -618,6 +672,7 @@ export const employeeProfileDtoSchema = z.object({
   casualLeaveBalance: z.number().int().optional(),
   medicalLeaveBalance: z.number().int().optional(),
   badgeNumber: z.string().nullable().optional(),
+  /** RESTRICTED — HR/Admin only; omitted for public/self views. */
   qrToken: z.string().nullable().optional(),
   lifecycleStage: lifecycleStageSchema.optional(),
   exitDate: z.string().nullable().optional(),
@@ -638,6 +693,42 @@ export const employeeProfileDtoSchema = z.object({
   createdBy: userSummarySchema.nullable().optional(),
 });
 export type EmployeeProfileDto = z.infer<typeof employeeProfileDtoSchema>;
+
+/** Directory / list employee shape (no RESTRICTED or confidential personal block). */
+export type EmployeePublicDto = Omit<
+  EmployeeProfileDto,
+  | "salary"
+  | "nationalId"
+  | "qrToken"
+  | "notes"
+  | "personalEmail"
+  | "address"
+  | "city"
+  | "country"
+  | "emergencyContactName"
+  | "emergencyContactPhone"
+  | "emergencyContactRelation"
+  | "dateOfBirth"
+  | "gender"
+  | "maritalStatus"
+  | "bloodGroup"
+  | "fatherName"
+  | "exitReason"
+  | "documentUrls"
+  | "annualLeaveBalance"
+  | "casualLeaveBalance"
+  | "sickLeaveBalance"
+  | "medicalLeaveBalance"
+>;
+
+/** Authenticated employee viewing own profile (no salary / nationalId / qrToken). */
+export type EmployeeSelfDto = Omit<
+  EmployeeProfileDto,
+  "salary" | "nationalId" | "qrToken"
+>;
+
+/** HR/Admin authorized profile including RESTRICTED fields. */
+export type EmployeeHrDto = EmployeeProfileDto;
 
 export const performanceScoreSnapshotDtoSchema = z.object({
   id: uuidSchema,
@@ -782,7 +873,10 @@ export type PerformanceMonthlyReportDto = z.infer<
 
 export const hireEmployeeResultSchema = z.object({
   employee: employeeProfileDtoSchema,
-  temporaryPassword: z.string(),
+  passwordSetupRequired: z.literal(true),
+  /** One-time setup link for authorized HR only — omitted when unauthorized. Never log. */
+  passwordSetupUrl: z.string().url().optional(),
+  expiresAt: z.string().datetime(),
   invitationSent: z.boolean(),
   qrToken: z.string().optional().nullable(),
   companyEmail: z.string().optional().nullable(),
@@ -793,7 +887,10 @@ export type HireEmployeeResult = z.infer<typeof hireEmployeeResultSchema>;
 
 export const createAdminResultSchema = z.object({
   employee: employeeProfileDtoSchema,
-  temporaryPassword: z.string(),
+  passwordSetupRequired: z.literal(true),
+  /** One-time setup link for authorized HR only — omitted when unauthorized. Never log. */
+  passwordSetupUrl: z.string().url().optional(),
+  expiresAt: z.string().datetime(),
   invitationSent: z.boolean(),
   qrToken: z.string().optional().nullable(),
   companyEmail: z.string().optional().nullable(),
@@ -857,6 +954,10 @@ export const leaveRequestDtoSchema = z.object({
   reviewedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   employee: employeeProfileDtoSchema.optional(),
+  /** Current multi-stage workflow state (optional for backward compatibility). */
+  workflowState: leaveWorkflowStateSchema.nullable().optional(),
+  /** Stage timestamps / approvers when workflow store has a record. */
+  workflow: leaveWorkflowStageDtoSchema.nullable().optional(),
 });
 export type LeaveRequestDto = z.infer<typeof leaveRequestDtoSchema>;
 

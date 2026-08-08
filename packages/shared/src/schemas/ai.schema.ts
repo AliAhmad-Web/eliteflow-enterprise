@@ -164,11 +164,61 @@ export type AiMessageDto = z.infer<typeof aiMessageSchema>;
 export type AiConversationDto = z.infer<typeof aiConversationSchema>;
 export type AiDocumentDto = z.infer<typeof aiDocumentSchema>;
 
+/** Structured human-confirmation dialog payload (additive; no provider redesign). */
+export const aiConfirmationRiskLevelSchema = z.enum([
+  "LOW",
+  "MEDIUM",
+  "HIGH",
+  "CRITICAL",
+]);
+
+export const aiConfirmationRequiredSchema = z.object({
+  confirmationRequired: z.literal(true),
+  confirmationId: z.string().min(1),
+  expiresAt: z.string(),
+  action: z.string(),
+  summary: z.string(),
+  riskLevel: aiConfirmationRiskLevelSchema,
+  toolId: z.string().optional(),
+});
+
+export type AiConfirmationRequiredDto = z.infer<
+  typeof aiConfirmationRequiredSchema
+>;
+
 export const aiChatResponseSchema = z.object({
   conversation: aiConversationSchema,
   userMessage: aiMessageSchema,
   assistantMessage: aiMessageSchema,
   provider: z.string(),
+  /** When true, frontend must show the human approval dialog before tool side effects. */
+  confirmationRequired: z.boolean().optional(),
+  confirmationId: z.string().optional(),
+  expiresAt: z.string().optional(),
+  action: z.string().optional(),
+  summary: z.string().optional(),
+  riskLevel: aiConfirmationRiskLevelSchema.optional(),
+  /** All pending confirmations from this turn (supports multi-tool). */
+  confirmations: z.array(aiConfirmationRequiredSchema).optional(),
 });
 
 export type AiChatResponseDto = z.infer<typeof aiChatResponseSchema>;
+
+export const aiConfirmationIdParamsSchema = z.object({
+  id: z.string().uuid("Invalid confirmation id"),
+});
+
+export type AiConfirmationIdParamsInput = z.infer<
+  typeof aiConfirmationIdParamsSchema
+>;
+
+export const aiConfirmationDecisionResponseSchema = z.object({
+  confirmationId: z.string(),
+  status: z.enum(["approved", "rejected"]),
+  toolId: z.string().optional(),
+  output: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type AiConfirmationDecisionResponseDto = z.infer<
+  typeof aiConfirmationDecisionResponseSchema
+>;

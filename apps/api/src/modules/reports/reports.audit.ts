@@ -1,4 +1,7 @@
 import { prisma, Prisma } from "@enterprise/database";
+import { sanitizeAuditMetadata } from "@enterprise/shared";
+
+import { logger } from "../../shared/security/logger.js";
 
 interface ReportsAuditInput {
   userId?: string | null;
@@ -13,6 +16,7 @@ export async function logReportsAuditEvent(
   input: ReportsAuditInput,
 ): Promise<void> {
   try {
+    const metadata = sanitizeAuditMetadata(input.metadata);
     await prisma.reportAudit.create({
       data: {
         userId: input.userId ?? null,
@@ -20,13 +24,13 @@ export async function logReportsAuditEvent(
         category: input.category as never,
         format: input.format as never,
         savedReportId: input.savedReportId ?? null,
-        metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
+        metadata: metadata
+          ? (metadata as Prisma.InputJsonValue)
           : undefined,
       },
     });
   } catch (error) {
-    console.error("[reports] Failed to write audit log:", error);
+    logger.error("[reports] Failed to write audit log:", error);
   }
 }
 

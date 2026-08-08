@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isAttachmentUrlSchemeAllowed } from "../utils/attachment-url.js";
 import { uuidSchema } from "./common.schema.js";
 
 export const PROJECT_STATUSES = [
@@ -62,10 +63,14 @@ const attachmentInputSchema = z.object({
   fileUrl: z
     .string({ required_error: "File URL is required" })
     .trim()
-    .url("Please enter a valid file URL")
-    .max(2048, "File URL must not exceed 2048 characters"),
+    .max(2048, "File URL must not exceed 2048 characters")
+    .refine(
+      isAttachmentUrlSchemeAllowed,
+      "Forbidden attachment URL scheme. Use a File Manager file.",
+    ),
   mimeType: optionalText("MIME type", 120),
   sizeBytes: z.coerce.number().int().min(0).nullable().optional(),
+  managedFileId: uuidSchema.optional().nullable(),
 });
 
 export const projectFieldsSchema = z.object({

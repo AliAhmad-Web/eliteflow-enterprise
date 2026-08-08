@@ -6,6 +6,7 @@ import {
   prisma,
   UserStatus,
   Prisma,
+  SessionRevokedReason,
 } from "@enterprise/database";
 import type {
   AssignDepartmentEmployeesInput,
@@ -26,6 +27,7 @@ import type {
   HireEmployeeInput,
   HireEmployeeResult,
   LeaveListResponse,
+  LeaveRequestDto,
   ListAttendanceQueryInput,
   ListEmployeesQueryInput,
   ListLeavesQueryInput,
@@ -45,13 +47,37 @@ import type {
   UpdatePerformanceScoringConfigInput,
 } from "@enterprise/shared";
 import { UserRole } from "@enterprise/shared";
+import {
+  applyCredentialRevealPolicy,
+  applyPromotionDtoFieldPolicy,
+  resolveEmployeeDtoView,
+} from "@enterprise/shared";
+import { encryptionService } from "../../shared/security/encryption.service.js";
 import { performanceEngineService } from "./performance-engine.service.js";
 import { queuePerformanceRecalc } from "./performance-recalc.queue.js";
-import * as argon2 from "argon2";
 
+import { attachmentSecurityService } from "../files/attachment-security.service.js";
 import { notificationDispatcher } from "../notifications/notification.dispatcher.js";
+import {
+  PASSWORD_SETUP_PURPOSE,
+  passwordSetupService,
+  type PasswordSetupPurpose,
+} from "../auth/password-setup/index.js";
+import {
+  passwordPolicyService,
+  PASSWORD_CHANGE_REASONS,
+} from "../../shared/security/password-policy/index.js";
+import {
+  sessionService,
+  SESSION_AUDIT_ACTIONS,
+} from "../auth/session/index.js";
+import { emailService } from "../../integrations/email/email.service.js";
 import { TEAM_AUDIT_ACTIONS, logTeamAuditEvent } from "./team.audit.js";
 import { TEAM_ERROR_CODES, TeamError } from "./team.errors.js";
+import { sodPolicyService } from "../../shared/security/sod/index.js";
+import type { SodActorContext } from "../../shared/security/sod/index.js";
+import { leaveApprovalWorkflowService } from "./workflows/index.js";
+import { getLeaveWorkflowStage } from "./workflows/leave-approval.store.js";
 import { teamRepository } from "./team.repository.js";
 import {
   toAttendanceDto,
@@ -61,7 +87,10 @@ import {
   toLeaveDto,
   toPerformanceDto,
   toTeamDto,
+  withLeaveWorkflow,
+  type EmployeeDtoSource,
 } from "./team.types.js";
+import type { LeaveRequest as PrismaLeaveRequest } from "@enterprise/database";
 
 export interface TeamActor {
   userId: string;
@@ -70,6 +99,15 @@ export interface TeamActor {
   permissions: string[];
   ipAddress?: string | null;
   userAgent?: string | null;
+}
+
+function toSodActor(actor: TeamActor): SodActorContext {
+  return {
+    userId: actor.userId,
+    role: actor.role,
+    ipAddress: actor.ipAddress,
+    userAgent: actor.userAgent,
+  };
 }
 
 function isSuperAdmin(actor: TeamActor): boolean {
@@ -86,6 +124,35 @@ function isClient(actor: TeamActor): boolean {
 
 function hasPermission(actor: TeamActor, key: string): boolean {
   return actor.permissions.includes(key) || actor.permissions.includes("*");
+}
+
+async function enrichLeaveDto(
+  leave: PrismaLeaveRequest & { employee?: EmployeeDtoSource },
+): Promise<LeaveRequestDto> {
+  const dto = toLeaveDto(leave);
+  const stage = await getLeaveWorkflowStage(leave.id);
+  if (stage) {
+    return withLeaveWorkflow(dto, stage);
+  }
+
+  // Fallback when stage store has no record (e.g. legacy leave).
+  const fallbackState =
+    leave.status === "PENDING"
+      ? "SUBMITTED"
+      : leave.status === "APPROVED"
+        ? "FINAL_APPROVED"
+        : leave.status === "REJECTED"
+          ? "FINAL_REJECTED"
+          : leave.status === "CANCELLED"
+            ? "CANCELLED"
+            : null;
+
+  if (!fallbackState) return dto;
+  return withLeaveWorkflow(dto, {
+    state: fallbackState,
+    submittedAt: leave.createdAt.toISOString(),
+    expiresAt: leave.createdAt.toISOString(),
+  });
 }
 
 function assertTeamAccess(actor: TeamActor): void {
@@ -118,6 +185,88 @@ function parseDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
+function encryptNationalId(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === null || value === undefined) return value;
+  return encryptionService.encryptIfNeeded(value) ?? null;
+}
+
+function encryptQrToken(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === null || value === undefined) return value;
+  return encryptionService.encryptIfNeeded(value) ?? null;
+}
+
+function decryptQrToken(value: string | null | undefined): string | null {
+  return encryptionService.decryptIfNeeded(value) ?? null;
+}
+
+function toNumberOrNull(
+  value: { toNumber?: () => number } | number | null | undefined,
+): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return value;
+  if (typeof value.toNumber === "function") return value.toNumber();
+  return Number(value);
+}
+
+function employeeViewForActor(
+  actor: TeamActor,
+  subjectUserId: string,
+  forcePublic = false,
+) {
+  return resolveEmployeeDtoView(
+    {
+      userId: actor.userId,
+      role: actor.role,
+      permissions: actor.permissions,
+    },
+    { userId: subjectUserId },
+    { forcePublic },
+  );
+}
+
+function mapPromotionForActor(
+  row: {
+    id: string;
+    employeeId: string;
+    effectiveDate: Date;
+    oldDesignation: string | null;
+    newDesignation: string;
+    oldSalary: unknown;
+    newSalary: unknown;
+    reason: string | null;
+    actedById: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  actor: TeamActor,
+) {
+  const base = {
+    id: row.id,
+    employeeId: row.employeeId,
+    effectiveDate: row.effectiveDate.toISOString().slice(0, 10),
+    oldDesignation: row.oldDesignation,
+    newDesignation: row.newDesignation,
+    oldSalary: toNumberOrNull(
+      row.oldSalary as { toNumber?: () => number } | number | null,
+    ),
+    newSalary: toNumberOrNull(
+      row.newSalary as { toNumber?: () => number } | number | null,
+    ),
+    reason: row.reason,
+    createdById: row.actedById,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+  return applyPromotionDtoFieldPolicy(
+    base as unknown as Record<string, unknown>,
+    { role: actor.role, permissions: actor.permissions },
+  );
+}
+
 function utcToday(): Date {
   const now = new Date();
   return new Date(
@@ -132,15 +281,6 @@ function countLeaveDays(start: Date, end: Date): number {
 
 function expectedCheckInHour(): number {
   return 9;
-}
-
-function generateTemporaryPassword(): string {
-  const raw = randomBytes(9).toString("base64url");
-  return `Ef!${raw.slice(0, 10)}`;
-}
-
-async function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, { type: argon2.argon2id });
 }
 
 const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
@@ -286,26 +426,36 @@ async function sendHireInvitation(input: {
   userId: string;
   email: string;
   firstName: string;
-  temporaryPassword: string;
   employeeCode: string;
   createdById: string;
   isAdmin: boolean;
+  setupUrl: string;
+  expiresAt: Date;
+  expiresInMinutes: number;
+  purpose: PasswordSetupPurpose;
 }): Promise<boolean> {
   const appUrl = (process.env.APP_URL ?? process.env.WEB_APP_URL ?? "").replace(
     /\/$/,
     "",
   );
   const loginUrl = appUrl ? `${appUrl}/login` : "/login";
-  const activationHint =
-    "On first login you will be required to change your temporary password.";
+  const expiryHint = `Your password setup link expires in ${input.expiresInMinutes} minutes and can only be used once.`;
   try {
+    await emailService.sendPasswordSetupEmail({
+      to: input.email,
+      firstName: input.firstName,
+      setupUrl: input.setupUrl,
+      expiresInMinutes: input.expiresInMinutes,
+      kind: input.isAdmin ? "admin_create" : "invitation",
+    });
+
     await notificationDispatcher.notify({
       title: input.isAdmin
         ? "Your EliteFlow admin account is ready"
         : "Welcome to EliteFlow — complete your onboarding",
       body: input.isAdmin
-        ? `Hi ${input.firstName}, your admin account (${input.employeeCode}) has been created. Login: ${loginUrl}. Temporary password: ${input.temporaryPassword}. ${activationHint}`
-        : `Hi ${input.firstName}, welcome aboard. Your employee account (${input.employeeCode}) is ready. Login: ${loginUrl}. Temporary password: ${input.temporaryPassword}. ${activationHint} Policy documents and the employee handbook are available after sign-in.`,
+        ? `Hi ${input.firstName}, your admin account (${input.employeeCode}) has been created. Check your email for a secure password setup link. ${expiryHint} Login: ${loginUrl}.`
+        : `Hi ${input.firstName}, welcome aboard. Your employee account (${input.employeeCode}) is ready. Check your email for a secure password setup link. ${expiryHint} Login: ${loginUrl}. Policy documents and the employee handbook are available after sign-in.`,
       category: NotificationCategory.SYSTEM,
       priority: NotificationPriority.HIGH,
       linkUrl: loginUrl,
@@ -313,12 +463,14 @@ async function sendHireInvitation(input: {
       entityId: input.userId,
       audience: { type: "INDIVIDUAL", userId: input.userId },
       createdById: input.createdById,
-      sendEmail: true,
+      sendEmail: false,
       metadata: {
-        temporaryPassword: input.temporaryPassword,
         employeeCode: input.employeeCode,
         email: input.email,
         loginUrl,
+        passwordSetupRequired: true,
+        expiresAt: input.expiresAt.toISOString(),
+        purpose: input.purpose,
         template: input.isAdmin ? "admin_welcome" : "employee_welcome",
         includeHandbook: !input.isAdmin,
       },
@@ -391,6 +543,12 @@ export class TeamService {
 
   async createDepartment(input: CreateDepartmentInput, actor: TeamActor) {
     assertOrgStructure(actor);
+    if (input.headId) {
+      await sodPolicyService.assertDepartmentHeadAssignment(
+        toSodActor(actor),
+        input.headId,
+      );
+    }
     const department = await teamRepository.createDepartment({
       ...input,
       createdById: actor.userId,
@@ -415,6 +573,13 @@ export class TeamService {
     const existing = await teamRepository.getDepartment(id);
     if (!existing) {
       throw new TeamError("Department not found", 404, TEAM_ERROR_CODES.NOT_FOUND);
+    }
+    if (input.headId) {
+      await sodPolicyService.assertDepartmentHeadAssignment(
+        toSodActor(actor),
+        input.headId,
+        id,
+      );
     }
     const department = await teamRepository.updateDepartment(id, {
       ...input,
@@ -535,7 +700,9 @@ export class TeamService {
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
 
     return {
-      items: items.map(toEmployeeDto),
+      items: items.map((employee) =>
+        toEmployeeDto(employee, { view: "public" }),
+      ),
       pagination: {
         page: query.page,
         limit: query.limit,
@@ -559,7 +726,9 @@ export class TeamService {
     ) {
       throw new TeamError("Permission denied", 403, TEAM_ERROR_CODES.FORBIDDEN);
     }
-    return toEmployeeDto(employee);
+    return toEmployeeDto(employee, {
+      view: employeeViewForActor(actor, employee.userId),
+    });
   }
 
   async createEmployee(input: CreateEmployeeProfileInput, actor: TeamActor) {
@@ -569,6 +738,13 @@ export class TeamService {
         "Department assignment is required",
         400,
         TEAM_ERROR_CODES.VALIDATION,
+      );
+    }
+    if (input.salary !== undefined && input.salary !== null) {
+      await sodPolicyService.assertSalaryMutation(
+        toSodActor(actor),
+        input.userId,
+        "create",
       );
     }
     const employeeCode =
@@ -584,7 +760,7 @@ export class TeamService {
       employmentType: input.employmentType,
       gender: input.gender ?? null,
       dateOfBirth: input.dateOfBirth ? parseDateOnly(input.dateOfBirth) : null,
-      nationalId: input.nationalId ?? null,
+      nationalId: encryptNationalId(input.nationalId) ?? null,
       hireDate: input.hireDate ? parseDateOnly(input.hireDate) : null,
       phone: input.phone ?? null,
       workLocation: input.workLocation ?? null,
@@ -618,7 +794,9 @@ export class TeamService {
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
-    return toEmployeeDto(employee);
+    return toEmployeeDto(employee, {
+      view: employeeViewForActor(actor, employee.userId),
+    });
   }
 
   async hireEmployee(
@@ -657,8 +835,6 @@ export class TeamService {
       );
     }
 
-    const temporaryPassword = generateTemporaryPassword();
-    const passwordHash = await hashPassword(temporaryPassword);
     const qrToken = randomBytes(16).toString("hex");
     const companyEmail =
       input.companyEmail?.trim().toLowerCase() ||
@@ -699,7 +875,7 @@ export class TeamService {
                 phone: normalizePhone(input.phone),
                 avatarUrl: input.photoUrl ?? null,
                 designation: input.designation ?? null,
-                passwordHash,
+                passwordHash: null,
                 roleId: role.id,
                 status: UserStatus.ACTIVE,
                 emailVerified: true,
@@ -715,7 +891,7 @@ export class TeamService {
                 userId: user.id,
                 employeeCode,
                 badgeNumber,
-                qrToken,
+                qrToken: encryptQrToken(qrToken) ?? null,
                 departmentId: input.departmentId,
                 primaryTeamId: input.primaryTeamId ?? null,
                 designation: input.designation ?? null,
@@ -731,7 +907,7 @@ export class TeamService {
                 dateOfBirth: input.dateOfBirth
                   ? parseDateOnly(input.dateOfBirth)
                   : null,
-                nationalId: input.nationalId ?? null,
+                nationalId: encryptNationalId(input.nationalId) ?? null,
                 hireDate: input.hireDate
                   ? parseDateOnly(input.hireDate)
                   : utcToday(),
@@ -794,7 +970,7 @@ export class TeamService {
                   eventType: "INVITATION_QUEUED",
                   title: "Invitation queued",
                   description:
-                    "Welcome email and temporary credentials prepared.",
+                    "Welcome email and password setup link prepared.",
                   actedById: actor.userId,
                 },
               ],
@@ -863,34 +1039,72 @@ export class TeamService {
       );
     }
 
+    const setup = await passwordSetupService.createToken({
+      userId: employee.userId,
+      purpose: PASSWORD_SETUP_PURPOSE.INVITATION,
+      audit: {
+        userId: employee.userId,
+        actorUserId: actor.userId,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+        metadata: { flow: "employee_hire", employeeCode },
+      },
+    });
+
+    await passwordPolicyService.markPasswordChangeRequired(
+      employee.userId,
+      PASSWORD_CHANGE_REASONS.NEW_ACCOUNT,
+      {
+        actorUserId: actor.userId,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+      },
+    );
+
     const invitationSent = await sendHireInvitation({
       userId: employee.userId,
       email: input.email,
       firstName: input.firstName,
-      temporaryPassword,
       employeeCode,
       createdById: actor.userId,
       isAdmin: false,
+      setupUrl: setup.setupUrl,
+      expiresAt: setup.expiresAt,
+      expiresInMinutes: setup.expiresInMinutes,
+      purpose: PASSWORD_SETUP_PURPOSE.INVITATION,
     });
 
     await logTeamAuditEvent({
       userId: actor.userId,
       action: TEAM_AUDIT_ACTIONS.EMPLOYEE_HIRE,
       resourceId: employee.id,
-      metadata: { employeeCode, email: input.email },
+      metadata: {
+        employeeCode,
+        email: input.email,
+        passwordSetupRequired: true,
+        invitationSent,
+        expiresAt: setup.expiresAt.toISOString(),
+      },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
 
-    return {
-      employee: toEmployeeDto(employee),
-      temporaryPassword,
-      invitationSent,
-      qrToken,
-      companyEmail,
-      badgeNumber,
-      mustChangePassword: true,
-    };
+    return applyCredentialRevealPolicy(
+      {
+        employee: toEmployeeDto(employee, {
+          view: employeeViewForActor(actor, employee.userId),
+        }),
+        passwordSetupRequired: true as const,
+        passwordSetupUrl: setup.setupUrl,
+        expiresAt: setup.expiresAt.toISOString(),
+        invitationSent,
+        qrToken,
+        companyEmail,
+        badgeNumber,
+        mustChangePassword: true,
+      },
+      { role: actor.role, permissions: actor.permissions },
+    );
   }
 
   async createAdmin(
@@ -929,8 +1143,6 @@ export class TeamService {
       );
     }
 
-    const temporaryPassword = generateTemporaryPassword();
-    const passwordHash = await hashPassword(temporaryPassword);
     const qrToken = randomBytes(16).toString("hex");
     const companyEmail =
       input.companyEmail?.trim().toLowerCase() ||
@@ -959,7 +1171,7 @@ export class TeamService {
             phone: normalizePhone(input.phone),
             avatarUrl: input.photoUrl ?? null,
             designation: input.designation ?? "Administrator",
-            passwordHash,
+            passwordHash: null,
             roleId: role.id,
             status: UserStatus.ACTIVE,
             emailVerified: true,
@@ -976,7 +1188,7 @@ export class TeamService {
             employeeCode,
             adminCode,
             badgeNumber,
-            qrToken,
+            qrToken: encryptQrToken(qrToken) ?? null,
             departmentId: input.departmentId,
             primaryTeamId: input.primaryTeamId ?? null,
             designation: input.designation ?? "Administrator",
@@ -992,7 +1204,7 @@ export class TeamService {
             dateOfBirth: input.dateOfBirth
               ? parseDateOnly(input.dateOfBirth)
               : null,
-            nationalId: input.nationalId ?? null,
+            nationalId: encryptNationalId(input.nationalId) ?? null,
             hireDate: input.hireDate
               ? parseDateOnly(input.hireDate)
               : utcToday(),
@@ -1059,15 +1271,40 @@ export class TeamService {
       { maxWait: 15_000, timeout: 30_000 },
     );
 
+    const setup = await passwordSetupService.createToken({
+      userId: employee.userId,
+      purpose: PASSWORD_SETUP_PURPOSE.ADMIN_CREATE,
+      audit: {
+        userId: employee.userId,
+        actorUserId: actor.userId,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+        metadata: { flow: "admin_create", adminCode },
+      },
+    });
+
+    await passwordPolicyService.markPasswordChangeRequired(
+      employee.userId,
+      PASSWORD_CHANGE_REASONS.NEW_ACCOUNT,
+      {
+        actorUserId: actor.userId,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+      },
+    );
+
     const invitationSent = sendInvitation
       ? await sendHireInvitation({
           userId: employee.userId,
           email: input.email,
           firstName: input.firstName,
-          temporaryPassword,
           employeeCode: adminCode,
           createdById: actor.userId,
           isAdmin: true,
+          setupUrl: setup.setupUrl,
+          expiresAt: setup.expiresAt,
+          expiresInMinutes: setup.expiresInMinutes,
+          purpose: PASSWORD_SETUP_PURPOSE.ADMIN_CREATE,
         })
       : false;
 
@@ -1082,20 +1319,30 @@ export class TeamService {
         permissionPreset: input.permissionPreset,
         sendInvitation,
         enableTwoFactor: Boolean(input.enableTwoFactor),
+        passwordSetupRequired: true,
+        invitationSent,
+        expiresAt: setup.expiresAt.toISOString(),
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
 
-    return {
-      employee: toEmployeeDto(employee),
-      temporaryPassword,
-      invitationSent,
-      qrToken,
-      companyEmail,
-      badgeNumber,
-      mustChangePassword: requirePasswordChange,
-    };
+    return applyCredentialRevealPolicy(
+      {
+        employee: toEmployeeDto(employee, {
+          view: employeeViewForActor(actor, employee.userId),
+        }),
+        passwordSetupRequired: true as const,
+        passwordSetupUrl: setup.setupUrl,
+        expiresAt: setup.expiresAt.toISOString(),
+        invitationSent,
+        qrToken,
+        companyEmail,
+        badgeNumber,
+        mustChangePassword: requirePasswordChange,
+      },
+      { role: actor.role, permissions: actor.permissions },
+    );
   }
 
   async resetEmployeeCredentials(
@@ -1103,7 +1350,9 @@ export class TeamService {
     input: { sendEmail?: boolean },
     actor: TeamActor,
   ): Promise<{
-    temporaryPassword: string;
+    passwordSetupRequired: true;
+    passwordSetupUrl?: string;
+    expiresAt: string;
     mustChangePassword: boolean;
     invitationSent: boolean;
   }> {
@@ -1118,30 +1367,94 @@ export class TeamService {
       );
     }
 
-    const temporaryPassword = generateTemporaryPassword();
-    const passwordHash = await hashPassword(temporaryPassword);
-
+    // Invalidate current password — user must complete setup link
     await prisma.user.update({
       where: { id: employee.userId },
       data: {
-        passwordHash,
+        passwordHash: null,
         mustChangePassword: true,
         passwordChangedAt: null,
       },
     });
 
+    await sessionService.revokeAllSessions({
+      userId: employee.userId,
+      reason: SessionRevokedReason.PASSWORD_CHANGE,
+      actorUserId: actor.userId,
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+      auditAction: SESSION_AUDIT_ACTIONS.PASSWORD_CHANGED,
+      metadata: { flow: "admin_reset_credentials" },
+    });
+
+    const setup = await passwordSetupService.createToken({
+      userId: employee.userId,
+      purpose: PASSWORD_SETUP_PURPOSE.ADMIN_RESET,
+      audit: {
+        userId: employee.userId,
+        actorUserId: actor.userId,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+        metadata: { flow: "admin_reset_credentials" },
+      },
+    });
+
+    await passwordPolicyService.markPasswordChangeRequired(
+      employee.userId,
+      PASSWORD_CHANGE_REASONS.ADMIN_RESET,
+      {
+        actorUserId: actor.userId,
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+      },
+    );
+
     const sendEmail = input.sendEmail !== false;
-    const invitationSent = sendEmail
-      ? await sendHireInvitation({
-          userId: employee.userId,
-          email: employee.user.email,
+    let invitationSent = false;
+    if (sendEmail) {
+      try {
+        await emailService.sendPasswordSetupEmail({
+          to: employee.user.email,
           firstName: employee.user.firstName,
-          temporaryPassword,
-          employeeCode: employee.adminCode ?? employee.employeeCode,
+          setupUrl: setup.setupUrl,
+          expiresInMinutes: setup.expiresInMinutes,
+          kind: "admin_reset",
+        });
+        invitationSent = true;
+      } catch (error) {
+        console.error("[team] Failed to send credential reset email:", error);
+        invitationSent = false;
+      }
+
+      try {
+        const appUrl = (
+          process.env.APP_URL ??
+          process.env.WEB_APP_URL ??
+          ""
+        ).replace(/\/$/, "");
+        const loginUrl = appUrl ? `${appUrl}/login` : "/login";
+        await notificationDispatcher.notify({
+          title: "Password reset required",
+          body: `Hi ${employee.user.firstName}, an administrator reset your credentials. Check your email for a secure password setup link (expires in ${setup.expiresInMinutes} minutes).`,
+          category: NotificationCategory.SYSTEM,
+          priority: NotificationPriority.HIGH,
+          linkUrl: loginUrl,
+          entityType: "EmployeeProfile",
+          entityId: employee.userId,
+          audience: { type: "INDIVIDUAL", userId: employee.userId },
           createdById: actor.userId,
-          isAdmin: Boolean(employee.adminCode),
-        })
-      : false;
+          sendEmail: false,
+          metadata: {
+            employeeCode: employee.adminCode ?? employee.employeeCode,
+            passwordSetupRequired: true,
+            expiresAt: setup.expiresAt.toISOString(),
+            purpose: PASSWORD_SETUP_PURPOSE.ADMIN_RESET,
+          },
+        });
+      } catch (error) {
+        console.error("[team] Failed to send credential reset notification:", error);
+      }
+    }
 
     await logTeamAuditEvent({
       userId: actor.userId,
@@ -1151,16 +1464,23 @@ export class TeamService {
         targetUserId: employee.userId,
         adminCode: employee.adminCode,
         invitationSent,
+        passwordSetupRequired: true,
+        expiresAt: setup.expiresAt.toISOString(),
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
 
-    return {
-      temporaryPassword,
-      mustChangePassword: true,
-      invitationSent,
-    };
+    return applyCredentialRevealPolicy(
+      {
+        passwordSetupRequired: true as const,
+        passwordSetupUrl: setup.setupUrl,
+        expiresAt: setup.expiresAt.toISOString(),
+        mustChangePassword: true,
+        invitationSent,
+      },
+      { role: actor.role, permissions: actor.permissions },
+    );
   }
 
   async updateEmployee(
@@ -1178,6 +1498,31 @@ export class TeamService {
     const isSelf = existing.userId === actor.userId;
     if (!canManage && !isSelf) {
       throw new TeamError("Permission denied", 403, TEAM_ERROR_CODES.FORBIDDEN);
+    }
+
+    if (canManage) {
+      if (input.salary !== undefined) {
+        await sodPolicyService.assertSalaryMutation(
+          toSodActor(actor),
+          existing.userId,
+          "update",
+          id,
+        );
+      }
+
+      const isTerminating =
+        input.status === "TERMINATED" ||
+        input.lifecycleStage === "EXITING" ||
+        input.lifecycleStage === "EXITED" ||
+        (input.exitDate !== undefined && input.exitDate !== null);
+
+      if (isTerminating) {
+        await sodPolicyService.assertTermination(
+          toSodActor(actor),
+          existing.userId,
+          id,
+        );
+      }
     }
 
     if (input.phone !== undefined) {
@@ -1216,7 +1561,7 @@ export class TeamService {
               }
             : {}),
           ...(input.nationalId !== undefined
-            ? { nationalId: input.nationalId }
+            ? { nationalId: encryptNationalId(input.nationalId) ?? null }
             : {}),
           ...(input.hireDate !== undefined
             ? { hireDate: input.hireDate ? parseDateOnly(input.hireDate) : null }
@@ -1361,9 +1706,11 @@ export class TeamService {
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
-    return toEmployeeDto(
-      (await teamRepository.getEmployee(id)) ?? employee,
-    );
+    const updated =
+      (await teamRepository.getEmployee(id)) ?? employee;
+    return toEmployeeDto(updated, {
+      view: employeeViewForActor(actor, updated.userId),
+    });
   }
 
   async deleteEmployee(id: string, actor: TeamActor) {
@@ -1372,6 +1719,19 @@ export class TeamService {
     if (!existing) {
       throw new TeamError("Employee not found", 404, TEAM_ERROR_CODES.NOT_FOUND);
     }
+
+    // SoD: cannot terminate / soft-delete yourself (includes privileged accounts).
+    await sodPolicyService.assertTermination(
+      toSodActor(actor),
+      existing.userId,
+      id,
+    );
+    await sodPolicyService.assertAdminDeletion(
+      toSodActor(actor),
+      existing.userId,
+      id,
+    );
+
     await teamRepository.softDeleteEmployee(id, actor.userId);
     await logTeamAuditEvent({
       userId: actor.userId,
@@ -1715,7 +2075,7 @@ export class TeamService {
       take: query.limit,
     });
     return {
-      items: items.map(toLeaveDto),
+      items: await Promise.all(items.map((leave) => enrichLeaveDto(leave))),
       pagination: {
         page: query.page,
         limit: query.limit,
@@ -1731,116 +2091,58 @@ export class TeamService {
     const profile = await this.requireOwnProfile(actor);
     const start = parseDateOnly(input.startDate);
     const end = parseDateOnly(input.endDate);
-    const days = countLeaveDays(start, end);
+
+    const precheck = await leaveApprovalWorkflowService.assertCanSubmit({
+      actor,
+      employeeId: profile.id,
+      subjectUserId: profile.userId,
+      type: input.type,
+      reason: input.reason,
+      start,
+      end,
+      balances: {
+        annualLeaveBalance: profile.annualLeaveBalance,
+        casualLeaveBalance: profile.casualLeaveBalance,
+        sickLeaveBalance: profile.sickLeaveBalance,
+        medicalLeaveBalance: profile.medicalLeaveBalance,
+      },
+      employeeShift: profile.shift,
+    });
 
     const leave = await teamRepository.createLeave({
       employeeId: profile.id,
       type: input.type,
       startDate: start,
       endDate: end,
-      days,
+      days: precheck.billableDays,
       reason: input.reason,
       createdById: actor.userId,
     });
 
-    await logTeamAuditEvent({
-      userId: actor.userId,
-      action: TEAM_AUDIT_ACTIONS.LEAVE_APPLY,
-      resourceId: leave.id,
-      ipAddress: actor.ipAddress,
-      userAgent: actor.userAgent,
+    await leaveApprovalWorkflowService.onSubmitted({
+      leave,
+      actor,
+      billableDays: precheck.billableDays,
     });
-    return toLeaveDto(leave);
+
+    return enrichLeaveDto(leave);
   }
 
   async reviewLeave(id: string, input: ReviewLeaveInput, actor: TeamActor) {
     assertManage(actor);
-    const existing = await teamRepository.getLeave(id);
-    if (!existing) {
-      throw new TeamError("Leave request not found", 404, TEAM_ERROR_CODES.NOT_FOUND);
-    }
-    if (existing.status !== "PENDING") {
-      throw new TeamError(
-        "Leave request already reviewed",
-        409,
-        TEAM_ERROR_CODES.CONFLICT,
-      );
-    }
 
-    const leave = await teamRepository.reviewLeave(id, {
-      status: input.status,
+    const { leave, result } = await leaveApprovalWorkflowService.review({
+      leaveId: id,
+      decision: input.status,
       reviewNote: input.reviewNote,
-      reviewedById: actor.userId,
+      actor,
     });
 
-    if (input.status === "APPROVED") {
-      const employee = existing.employee;
-      if (employee) {
-        if (existing.type === "ANNUAL") {
-          await teamRepository.updateEmployee(employee.id, {
-            annualLeaveBalance: Math.max(
-              0,
-              employee.annualLeaveBalance - existing.days,
-            ),
-            updatedById: actor.userId,
-          });
-        } else if (existing.type === "SICK") {
-          await teamRepository.updateEmployee(employee.id, {
-            sickLeaveBalance: Math.max(
-              0,
-              employee.sickLeaveBalance - existing.days,
-            ),
-            updatedById: actor.userId,
-          });
-        }
-        await prisma.employeeTimelineEvent.create({
-          data: {
-            employeeId: employee.id,
-            eventType: "LEAVE_APPROVED",
-            title: "Leave approved",
-            description: `${existing.type} leave · ${existing.days} day(s)`,
-            actedById: actor.userId,
-          },
-        });
-        queuePerformanceRecalc(employee.id);
-        try {
-          await notificationDispatcher.notify({
-            title: "Leave approved",
-            body: `Your ${existing.type.toLowerCase()} leave request was approved.`,
-            category: NotificationCategory.SYSTEM,
-            priority: NotificationPriority.NORMAL,
-            linkUrl: "/team",
-            entityType: "LeaveRequest",
-            entityId: id,
-            audience: { type: "INDIVIDUAL", userId: employee.userId },
-            createdById: actor.userId,
-            sendEmail: true,
-          });
-        } catch (error) {
-          console.error("[team] Failed to notify leave approval:", error);
-        }
-      }
-    } else if (input.status === "REJECTED" && existing.employee) {
-      await prisma.employeeTimelineEvent.create({
-        data: {
-          employeeId: existing.employee.id,
-          eventType: "LEAVE_REJECTED",
-          title: "Leave rejected",
-          description: existing.type,
-          actedById: actor.userId,
-        },
-      });
+    if (result.finalized && leave.employee) {
+      queuePerformanceRecalc(leave.employee.id);
     }
 
-    await logTeamAuditEvent({
-      userId: actor.userId,
-      action: TEAM_AUDIT_ACTIONS.LEAVE_REVIEW,
-      resourceId: id,
-      metadata: { status: input.status },
-      ipAddress: actor.ipAddress,
-      userAgent: actor.userAgent,
-    });
-    return toLeaveDto(leave);
+    return withLeaveWorkflow(toLeaveDto(leave), result.stageRecord);
   }
 
   async listPerformance(actor: TeamActor): Promise<PerformanceListResponse> {
@@ -2198,13 +2500,25 @@ export class TeamService {
       mimeType?: string | null;
       fileSize?: number | null;
       notes?: string | null;
+      managedFileId?: string | null;
     },
     actor: TeamActor,
   ) {
     assertManage(actor);
     await this.assertCanViewEmployee(employeeId, actor);
 
-    if (input.mimeType && !ALLOWED_DOCUMENT_MIME_TYPES.has(input.mimeType)) {
+    const secured = await attachmentSecurityService.secureAttachment(
+      {
+        fileName: input.fileName ?? input.title,
+        fileUrl: input.fileUrl,
+        mimeType: input.mimeType,
+        sizeBytes: input.fileSize,
+        managedFileId: input.managedFileId,
+      },
+      actor,
+    );
+
+    if (secured.mimeType && !ALLOWED_DOCUMENT_MIME_TYPES.has(secured.mimeType)) {
       throw new TeamError(
         "Unsupported document type. Use PDF, Word, or image files.",
         400,
@@ -2212,7 +2526,7 @@ export class TeamService {
         [{ field: "mimeType", message: "Unsupported file type" }],
       );
     }
-    if (input.fileSize != null && input.fileSize > MAX_DOCUMENT_BYTES) {
+    if (secured.sizeBytes != null && secured.sizeBytes > MAX_DOCUMENT_BYTES) {
       throw new TeamError(
         "Document exceeds the 15 MB size limit",
         400,
@@ -2220,18 +2534,16 @@ export class TeamService {
         [{ field: "fileSize", message: "File too large (max 15 MB)" }],
       );
     }
-    // Future-ready virus scan hook — no-op until scanner is wired.
-    void input.fileUrl;
 
     const doc = await prisma.employeeDocument.create({
       data: {
         employeeId,
         type: input.type as never,
         title: input.title,
-        fileUrl: input.fileUrl,
-        fileName: input.fileName ?? null,
-        mimeType: input.mimeType ?? null,
-        fileSize: input.fileSize ?? null,
+        fileUrl: secured.fileUrl,
+        fileName: secured.fileName,
+        mimeType: secured.mimeType,
+        fileSize: secured.sizeBytes,
         notes: input.notes ?? null,
         uploadedById: actor.userId,
       },
@@ -2349,6 +2661,23 @@ export class TeamService {
     if (!employee) {
       throw new TeamError("Employee not found", 404, TEAM_ERROR_CODES.NOT_FOUND);
     }
+
+    const affectsCompensation =
+      input.newSalary !== undefined && input.newSalary !== null;
+    await sodPolicyService.assertPromotion(
+      toSodActor(actor),
+      employee.userId,
+      { affectsCompensation, resourceId: employeeId },
+    );
+    if (affectsCompensation) {
+      await sodPolicyService.assertSalaryMutation(
+        toSodActor(actor),
+        employee.userId,
+        "update",
+        employeeId,
+      );
+    }
+
     const promotion = await prisma.$transaction(async (tx) => {
       const row = await tx.employeePromotion.create({
         data: {
@@ -2390,7 +2719,7 @@ export class TeamService {
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
-    return promotion;
+    return mapPromotionForActor(promotion, actor);
   }
 
   async createHrTransfer(
@@ -2472,10 +2801,11 @@ export class TeamService {
   async listPromotions(employeeId: string, actor: TeamActor) {
     assertTeamAccess(actor);
     await this.assertCanViewEmployee(employeeId, actor);
-    return prisma.employeePromotion.findMany({
+    const rows = await prisma.employeePromotion.findMany({
       where: { employeeId, deletedAt: null },
       orderBy: { effectiveDate: "desc" },
     });
+    return rows.map((row) => mapPromotionForActor(row, actor));
   }
 
   async listTransfers(employeeId: string, actor: TeamActor) {
@@ -2494,8 +2824,11 @@ export class TeamService {
       throw new TeamError("Employee not found", 404, TEAM_ERROR_CODES.NOT_FOUND);
     }
     await this.assertCanViewEmployee(employeeId, actor);
-    const qrPayload = `/team?employee=${employee.id}&token=${employee.qrToken ?? employee.id}`;
-    const dto = toEmployeeDto(employee);
+    const plainQr = decryptQrToken(employee.qrToken);
+    const qrPayload = `/team?employee=${employee.id}&token=${plainQr ?? employee.id}`;
+    const dto = toEmployeeDto(employee, {
+      view: employeeViewForActor(actor, employee.userId),
+    });
     const name = `${employee.user?.firstName ?? ""} ${employee.user?.lastName ?? ""}`.trim();
     const frontHtml = `<!DOCTYPE html><html><head><title>ID Card - ${employee.employeeCode}</title>
 <style>body{font-family:Segoe UI,Arial,sans-serif;background:#0b1220;color:#e8eefc;margin:0;padding:24px}

@@ -5,6 +5,7 @@
 
 import type { AiMemoryEntry } from "../memory-entry.js";
 import type { AiMemoryType } from "../memory-types.js";
+import { aiDataPolicyService } from "../../policy/ai-data-policy.service.js";
 import type { AiMemoryIndex } from "./memory-index.js";
 
 export interface MemorySearchQuery {
@@ -12,6 +13,10 @@ export interface MemorySearchQuery {
   readonly types?: readonly AiMemoryType[];
   readonly tags?: readonly string[];
   readonly maxResults?: number;
+  readonly role?: string | null;
+  readonly permissions?: readonly string[] | null;
+  readonly explicitRestrictedAccess?: boolean;
+  readonly userId?: string | null;
 }
 
 export interface MemorySearchResult {
@@ -71,8 +76,19 @@ export function searchMemoryEntries(
   const ranked = [...matched].sort((a, b) => b.recency - a.recency);
   const sliced = ranked.slice(0, maxResults);
 
+  const policySubject = aiDataPolicyService.subjectFrom({
+    userId: query.userId,
+    role: query.role,
+    permissions: query.permissions,
+    explicitRestrictedAccess: query.explicitRestrictedAccess === true,
+  });
+  const sanitized = aiDataPolicyService.sanitizeSearchResults(
+    sliced,
+    policySubject,
+  );
+
   return Object.freeze({
-    entries: Object.freeze(sliced),
+    entries: Object.freeze(sanitized),
     matched: matched.length,
     querySummary: [
       tokens.length > 0 ? `text:${tokens.length}` : "text:none",

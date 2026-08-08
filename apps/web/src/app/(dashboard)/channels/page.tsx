@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { ChannelsPageContent } from "@/features/communication/components/channels-page-content";
+import { LazyChannelsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Channels" };
 
 export default function ChannelsPage() {
-  return <ChannelsPageContent />;
+  return <LazyChannelsPage />;
 }

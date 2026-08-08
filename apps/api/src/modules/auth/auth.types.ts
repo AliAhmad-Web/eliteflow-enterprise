@@ -14,6 +14,8 @@ export interface UserWithRoleAndPermissions extends User {
 export interface RequestContext {
   ipAddress: string;
   userAgent: string;
+  /** Optional client device fingerprint from `x-device-fingerprint`. */
+  deviceFingerprint?: string | null;
 }
 
 export interface AuthSessionResult {
@@ -33,12 +35,14 @@ export interface SignupServiceInput {
 export interface LoginServiceInput {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }
 
 export interface LoginOtpChallengeResult {
   requiresOtp: true;
   otpSessionId: string;
   expiresIn: number;
+  mfaMethod: "totp" | "email";
 }
 
 export interface LoginSessionResult {
@@ -101,6 +105,10 @@ export function toSafeUser(user: SafeUserMapperInput): SafeUser {
     permissions: user.role.rolePermissions.map((rp) => rp.permission.key),
     mustChangePassword: Boolean(
       (user as { mustChangePassword?: boolean }).mustChangePassword,
+    ),
+    twoFactorEnabled: Boolean(user.twoFactorEnabled),
+    mfaEnrollmentRequired: Boolean(
+      (user as { mfaEnrollmentRequired?: boolean }).mfaEnrollmentRequired,
     ),
     createdAt: user.createdAt.toISOString(),
   };

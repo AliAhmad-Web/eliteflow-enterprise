@@ -27,9 +27,9 @@ export function getSupabaseBrowserClient(): SupabaseClient {
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: true,
-          // Browser SPA OAuth uses the implicit grant by default. Forcing PKCE
-          // without SSR cookie storage breaks the callback (missing code verifier).
-          flowType: "implicit",
+          // PKCE returns ?code= (query) which survives Next.js better than
+          // implicit #access_token hashes that get stripped during hydration.
+          flowType: "pkce",
         },
       },
     );

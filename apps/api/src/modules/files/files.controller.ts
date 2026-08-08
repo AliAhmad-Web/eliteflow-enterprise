@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import multer from "multer";
 
 import type {
   CreateFolderInput,
@@ -18,13 +17,18 @@ import { prisma } from "@enterprise/database";
 import { successResponse } from "../../shared/utils/api-response.js";
 import { extractRequestContext } from "../auth/auth.utils.js";
 import { FILES_ERROR_CODES, FilesError } from "./files.errors.js";
+import {
+  applyFileDeliveryHeaders,
+  resolveFileDeliveryHeaders,
+} from "./files.preview-security.js";
 import { filesService, type FilesActor } from "./files.service.js";
-import { getMaxUploadBytes } from "./files.validation-rules.js";
+import {
+  cleanupRequestTempUploads,
+  handleMultipartUpload,
+  uploadMiddleware,
+} from "./files.upload-middleware.js";
 
-export const uploadMiddleware = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: getMaxUploadBytes(), files: 20 },
-});
+export { handleMultipartUpload, uploadMiddleware };
 
 async function getActor(req: Request): Promise<FilesActor> {
   if (!req.auth) {
@@ -141,18 +145,26 @@ export class FilesController {
       }
     }
 
-    const result = await filesService.uploadFiles(
-      uploaded.map((file) => ({
-        originalname: file.originalname,
-        mimetype: file.mimetype,
-        buffer: file.buffer,
-        size: file.size,
-      })),
-      { folderId, projectId, clientId, tags },
-      actor,
-    );
+    try {
+      const result = await filesService.uploadFiles(
+        uploaded.map((file) => ({
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          // Disk-backed multer: stream path instead of in-memory buffer.
+          tempPath: file.path,
+          buffer: file.buffer?.length ? file.buffer : undefined,
+        })),
+        { folderId, projectId, clientId, tags },
+        actor,
+      );
 
-    res.status(201).json(successResponse(result, "Files uploaded successfully"));
+      res
+        .status(201)
+        .json(successResponse(result, "Files uploaded successfully"));
+    } finally {
+      await cleanupRequestTempUploads(req);
+    }
   }
 
   async updateFile(req: Request, res: Response): Promise<void> {
@@ -220,31 +232,25 @@ export class FilesController {
       return;
     }
 
-    res.setHeader(
-      "Content-Type",
-      result.file.mimeType || "application/octet-stream",
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(result.file.name)}"`,
-    );
-    res.setHeader("Content-Length", String(result.sizeBytes));
+    const headers = resolveFileDeliveryHeaders({
+      mode: "download",
+      extension: result.file.extension,
+      fileName: result.file.name,
+    });
+    applyFileDeliveryHeaders(res, headers, result.sizeBytes);
     result.stream.pipe(res);
   }
 
   async preview(req: Request, res: Response): Promise<void> {
     const params = req.params as unknown as FileIdParamsInput;
-    const result = await filesService.download(params.id, await getActor(req));
+    const result = await filesService.preview(params.id, await getActor(req));
 
-    res.setHeader(
-      "Content-Type",
-      result.file.mimeType || "application/octet-stream",
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${encodeURIComponent(result.file.name)}"`,
-    );
-    res.setHeader("Content-Length", String(result.sizeBytes));
+    const headers = resolveFileDeliveryHeaders({
+      mode: "preview",
+      extension: result.file.extension,
+      fileName: result.file.name,
+    });
+    applyFileDeliveryHeaders(res, headers, result.sizeBytes);
     result.stream.pipe(res);
   }
 

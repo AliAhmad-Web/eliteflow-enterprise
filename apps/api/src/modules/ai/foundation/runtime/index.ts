@@ -52,6 +52,7 @@ export {
   memoryPlatformStage,
   promptEngineeringStage,
   providerRequestStage,
+  budgetValidationStage,
   providerStage,
   responseStage,
   memorySaveStage,

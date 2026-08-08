@@ -51,6 +51,7 @@ export { memoryConsolidationStage } from "./memory-consolidation.stage.js";
 export { memoryPlatformStage } from "./memory-platform.stage.js";
 export { promptEngineeringStage } from "./prompt-engineering.stage.js";
 export { providerRequestStage } from "./provider-request.stage.js";
+export { budgetValidationStage } from "./budget-validation.stage.js";
 export { providerStage } from "./provider.stage.js";
 export { responseStage } from "./response.stage.js";
 export { memorySaveStage } from "./memory-save.stage.js";

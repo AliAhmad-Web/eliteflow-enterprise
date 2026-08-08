@@ -4,16 +4,20 @@
 
 /// Device/browser session for multi-device login tracking.
 model Session {
-  id            String                @id @default(uuid()) @db.Uuid
-  userId        String                @map("user_id") @db.Uuid
-  deviceName    String                @map("device_name") @db.VarChar(200)
-  ipAddress     String                @map("ip_address") @db.VarChar(45)
-  userAgent     String                @map("user_agent") @db.VarChar(1024)
-  lastActiveAt  DateTime              @default(now()) @map("last_active_at")
-  revokedAt     DateTime?             @map("revoked_at")
-  revokedReason SessionRevokedReason? @map("revoked_reason")
-  createdAt     DateTime              @default(now()) @map("created_at")
-  updatedAt     DateTime              @updatedAt @map("updated_at")
+  id              String                @id @default(uuid()) @db.Uuid
+  userId          String                @map("user_id") @db.Uuid
+  deviceName      String                @map("device_name") @db.VarChar(200)
+  ipAddress       String                @map("ip_address") @db.VarChar(45)
+  userAgent       String                @map("user_agent") @db.VarChar(1024)
+  /// Optional client fingerprint hash (device id / derived). Never log raw value.
+  fingerprintHash String?               @map("fingerprint_hash") @db.VarChar(128)
+  /// Absolute session expiry (remember-me aware).
+  expiresAt       DateTime?             @map("expires_at")
+  lastActiveAt    DateTime              @default(now()) @map("last_active_at")
+  revokedAt       DateTime?             @map("revoked_at")
+  revokedReason   SessionRevokedReason? @map("revoked_reason")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
@@ -21,6 +25,7 @@ model Session {
   @@index([userId, revokedAt])
   @@index([userId, lastActiveAt])
   @@index([revokedAt, lastActiveAt])
+  @@index([expiresAt])
   @@map("sessions")
 }
 

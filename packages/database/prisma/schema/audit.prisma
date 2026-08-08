@@ -14,12 +14,19 @@ model AuditLog {
   userAgent  String?  @map("user_agent") @db.VarChar(1024)
   createdAt  DateTime @default(now()) @map("created_at")
 
+  /// Tamper-evident chain fields (Phase 3 Step 8). Nullable for legacy rows.
+  eventHash           String?   @map("event_hash") @db.VarChar(64)
+  previousHash        String?   @map("previous_hash") @db.VarChar(64)
+  hashVersion         Int       @default(1) @map("hash_version")
+  timestampIntegrity  DateTime? @map("timestamp_integrity")
+
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([resource, resourceId])
   @@index([createdAt])
+  @@index([createdAt, id])
   @@map("audit_logs")
 }
 

@@ -828,13 +828,9 @@ function EmailWorkspaceInner() {
           message: draft.body.slice(0, 2000) || " ",
           syncToEntity: true,
         });
-        let processed = false;
-        try {
-          await processQueue.mutateAsync();
-          processed = true;
-        } catch {
-          // server may already flush queue after reply notify
-        }
+        let processed = true;
+        // Server already flushes a small email batch on create/reply — do not block UI on full queue.
+        void processQueue.mutateAsync().catch(() => {});
         const threadId = selectedMessage.threadId;
         const sentLocal: EmailMessage = {
           ...draftToEmailMessage(draft),
@@ -964,13 +960,9 @@ function EmailWorkspaceInner() {
           recipientLabels: matched.map((m) => m.label),
         },
       });
-      let processed = false;
-      try {
-        await processQueue.mutateAsync();
-        processed = true;
-      } catch {
-        // queue may already have been processed server-side after create
-      }
+      let processed = true;
+      // Server auto-flushes the just-queued email; backlog drains in background.
+      void processQueue.mutateAsync().catch(() => {});
 
       const sentLocal: EmailMessage = {
         ...draftToEmailMessage(draft),

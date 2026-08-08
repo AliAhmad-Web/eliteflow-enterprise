@@ -46,6 +46,7 @@ import {
   isOrgAdmin,
 } from "./communication.types.js";
 import { notificationDispatcher } from "../notifications/index.js";
+import { attachmentSecurityService } from "../files/attachment-security.service.js";
 
 function messagesLink(conversationId: string, messageId?: string): string {
   const params = new URLSearchParams({ c: conversationId });
@@ -751,13 +752,20 @@ export class CommunicationService {
   ) {
     await this._assertMember(conversationId, actor);
 
+    const attachments = input.attachments?.length
+      ? await attachmentSecurityService.secureAttachments(
+          input.attachments,
+          actor,
+        )
+      : undefined;
+
     const msg = await communicationRepository.createMessage({
       conversationId,
       senderId: actor.userId,
       body: input.body,
       kind: input.kind ?? MessageKind.TEXT,
       parentId: input.parentId,
-      attachments: input.attachments,
+      attachments,
     });
 
     const mentionIds = extractMentionUserIds(
@@ -1195,13 +1203,20 @@ export class CommunicationService {
       }
     }
 
+    const attachments = input.attachments?.length
+      ? await attachmentSecurityService.secureAttachments(
+          input.attachments,
+          actor,
+        )
+      : undefined;
+
     const comment = await communicationRepository.createComment({
       entityType: input.entityType,
       entityId: input.entityId,
       authorId: actor.userId,
       body: input.body,
       parentId: input.parentId,
-      attachments: input.attachments,
+      attachments,
     });
 
     const mentionIds = extractMentionUserIds(

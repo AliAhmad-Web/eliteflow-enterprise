@@ -1,10 +1,19 @@
 import {
   SECURITY_API_PREFIX,
   type ActiveDeviceListResponse,
+  type ApiVersioningStatusResponse,
+  type AuditChainVerifyResponse,
+  type AuditExportResponse,
+  type BackupValidationReportResponse,
+  type BackupValidationStatusResponse,
   type ChangePasswordInput,
   type ChangePasswordSecurityResponse,
   type ContactFormInput,
   type ContactFormResponse,
+  type DisasterRecoveryTestReportResponse,
+  type DisasterRecoveryTestStatusResponse,
+  type EncryptionAuditReportResponse,
+  type EncryptionAuditStatusResponse,
   type ListActiveSessionsQueryInput,
   type ListLoginHistoryQueryInput,
   type ListSecurityEventsQueryInput,
@@ -12,11 +21,17 @@ import {
   type LoginHistoryListResponse,
   type PasswordHistoryListResponse,
   type PasswordStatusDto,
+  type RetentionRunReportDto,
+  type RetentionStatusResponse,
+  type RunBackupValidationInput,
   type SecurityAuditLogListResponse,
   type SecurityDashboardDto,
   type SecurityEventListResponse,
+  type SiemStatusResponse,
+  type SiemTestResponse,
   type UnlockAccountInput,
   type UnlockAccountResponse,
+  type WebhookSecurityStatusResponse,
 } from "@enterprise/shared";
 
 import { apiRequest } from "@/services/api/api-client";
@@ -162,6 +177,109 @@ export const securityService = {
   csrfToken() {
     return apiRequest<{ csrfToken: string }>(
       `${SECURITY_API_PREFIX}/csrf-token`,
+    );
+  },
+
+  /** Admin / Super Admin — audit integrity */
+  verifyAuditChain() {
+    return apiRequest<AuditChainVerifyResponse>(
+      `${SECURITY_API_PREFIX}/audit/verify`,
+      { auth: true },
+    );
+  },
+
+  exportAuditLogs() {
+    return apiRequest<AuditExportResponse>(
+      `${SECURITY_API_PREFIX}/audit/export`,
+      { auth: true },
+    );
+  },
+
+  getRetentionStatus() {
+    return apiRequest<RetentionStatusResponse>(
+      `${SECURITY_API_PREFIX}/retention/status`,
+      { auth: true },
+    );
+  },
+
+  runRetentionProcessor() {
+    return apiRequest<RetentionRunReportDto>(
+      `${SECURITY_API_PREFIX}/retention/run`,
+      {
+        method: "POST",
+        auth: true,
+        body: {},
+      },
+    );
+  },
+
+  getSiemStatus() {
+    return apiRequest<SiemStatusResponse>(`${SECURITY_API_PREFIX}/siem/status`, {
+      auth: true,
+    });
+  },
+
+  testSiemConnectivity() {
+    return apiRequest<SiemTestResponse>(`${SECURITY_API_PREFIX}/siem/test`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    });
+  },
+
+  getBackupValidationStatus() {
+    return apiRequest<BackupValidationStatusResponse>(
+      `${SECURITY_API_PREFIX}/backup-validation/status`,
+      { auth: true },
+    );
+  },
+
+  runBackupValidation(input: Partial<RunBackupValidationInput> = {}) {
+    return apiRequest<BackupValidationReportResponse>(
+      `${SECURITY_API_PREFIX}/backup-validation/run`,
+      { method: "POST", auth: true, body: input },
+    );
+  },
+
+  getEncryptionAuditStatus() {
+    return apiRequest<EncryptionAuditStatusResponse>(
+      `${SECURITY_API_PREFIX}/encryption-audit/status`,
+      { auth: true },
+    );
+  },
+
+  runEncryptionAudit() {
+    return apiRequest<EncryptionAuditReportResponse>(
+      `${SECURITY_API_PREFIX}/encryption-audit/run`,
+      { method: "POST", auth: true, body: {} },
+    );
+  },
+
+  getDisasterRecoveryStatus() {
+    return apiRequest<DisasterRecoveryTestStatusResponse>(
+      `${SECURITY_API_PREFIX}/disaster-recovery/status`,
+      { auth: true },
+    );
+  },
+
+  runDisasterRecoveryTest() {
+    return apiRequest<DisasterRecoveryTestReportResponse>(
+      `${SECURITY_API_PREFIX}/disaster-recovery/run`,
+      { method: "POST", auth: true, body: {} },
+    );
+  },
+
+  getWebhookSecurityStatus() {
+    return apiRequest<WebhookSecurityStatusResponse>(
+      `${SECURITY_API_PREFIX}/webhooks/status`,
+      { auth: true },
+    );
+  },
+
+  getApiVersioningStatus() {
+    return apiRequest<ApiVersioningStatusResponse>(
+      `${SECURITY_API_PREFIX}/api-versioning/status`,
+      { auth: true },
     );
   },
 };

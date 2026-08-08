@@ -25,8 +25,30 @@ Env-based flags for EliteFlow security hardening.
 | `SECURITY_PERMISSION_REFRESH` | `NEXT_PUBLIC_SECURITY_PERMISSION_REFRESH` | `false` | 2 |
 | `SECURITY_UPLOAD_HARDENING` | `NEXT_PUBLIC_SECURITY_UPLOAD_HARDENING` | `false` | 2 |
 | `SECURITY_REQUEST_VALIDATION` | `NEXT_PUBLIC_SECURITY_REQUEST_VALIDATION` | `false` | deferred |
+| `SECURITY_SIEM_ENABLED` | `SIEM_ENABLED` (alias) | `false` | SIEM |
 
 API also reads the same names without `NEXT_PUBLIC_` for server-side controls.
+
+### Enterprise SIEM (API only — never expose secrets to the web app)
+
+Outbound security-event export. Defaults **OFF**. Do not enable in production until a real HTTPS sink and credentials are configured.
+
+| Env | Purpose |
+|-----|---------|
+| `SECURITY_SIEM_ENABLED` / `SIEM_ENABLED` | Master enable switch |
+| `SIEM_PROVIDERS` | Comma list: `SPLUNK,SENTINEL,ELASTIC,QRADAR,DATADOG,GENERIC_WEBHOOK` |
+| `SIEM_<PROVIDER>_ENDPOINT` / `_URL` | HTTPS ingest URL |
+| `SIEM_<PROVIDER>_API_KEY` / `_HEC_TOKEN` / `_BEARER_TOKEN` | Auth credential (server-only) |
+| `SIEM_<PROVIDER>_AUTH_MODE` | `API_KEY` \| `BEARER` \| `NONE` |
+| `SIEM_<PROVIDER>_SIGNING_SECRET` / `SIEM_WEBHOOK_SIGNING_SECRET` | Optional outbound HMAC |
+| `SIEM_REQUEST_TIMEOUT_MS` | Outbound HTTP timeout (default `10000`) |
+| `SIEM_MAX_RETRIES` | Bounded retries before DLQ (default `5`) |
+
+**Production free-tier target:** **Axiom** (Personal) via `GENERIC_WEBHOOK`  
+(Better Stack was first choice; signup may be temporarily unavailable.)  
+See [docs/security/SIEM_PRODUCTION.md](../../../../docs/security/SIEM_PRODUCTION.md) for account setup, Railway variables, test procedure, and disable/rotate steps.
+
+Admin APIs: `GET /api/v1/security/siem/status`, `POST /api/v1/security/siem/test` (Admin / Super Admin).
 
 ### Session hint signing (optional)
 

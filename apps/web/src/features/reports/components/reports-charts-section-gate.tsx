@@ -2,15 +2,7 @@
 
 import dynamic from "next/dynamic";
 
-import {
-  isPerformanceAdvBundleEnabled,
-  isPerformanceBundleOptimizationEnabled,
-} from "@/features/performance";
-
-import {
-  ReportsChartsSection as ReportsChartsSectionEager,
-  type ReportsChartsSectionProps,
-} from "./reports-charts-section";
+import type { ReportsChartsSectionProps } from "./reports-charts-section";
 
 const ReportsChartsSectionLazy = dynamic(
   () =>
@@ -18,16 +10,7 @@ const ReportsChartsSectionLazy = dynamic(
   { loading: () => null },
 );
 
-/**
- * Presentation charts: eager by default; lazy-split when Task 1.4
- * PERFORMANCE_BUNDLE_OPTIMIZATION or Phase 5 PERFORMANCE_ADV_BUNDLE is ON.
- */
+/** Always lazy-split presentation charts (no eager sibling import). */
 export function ReportsChartsSectionGate(props: ReportsChartsSectionProps) {
-  if (
-    isPerformanceBundleOptimizationEnabled() ||
-    isPerformanceAdvBundleEnabled()
-  ) {
-    return <ReportsChartsSectionLazy {...props} />;
-  }
-  return <ReportsChartsSectionEager {...props} />;
+  return <ReportsChartsSectionLazy {...props} />;
 }

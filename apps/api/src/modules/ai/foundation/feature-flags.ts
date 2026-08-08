@@ -779,3 +779,11 @@ export function isAiMemoryHealthEnabled(): boolean {
 export function isAiMemoryDiagnosticsEnabled(): boolean {
   return parseEnvFlag(process.env.AI_MEMORY_DIAGNOSTICS, false);
 }
+
+/**
+ * When enabled, every AI provider call is budget-aware (validate → estimate → record).
+ * Default: enabled. Rollback: AI_BUDGET_ENABLED=false
+ */
+export function isAiBudgetFeatureEnabled(): boolean {
+  return parseEnvFlag(process.env.AI_BUDGET_ENABLED, true);
+}

@@ -4,6 +4,12 @@ import type {
   PasswordHistoryItemDto,
   SecurityAuditLogDto,
   SecurityEventDto,
+  SecurityIncidentDto,
+} from "@enterprise/shared";
+import {
+  maskEmail,
+  sanitizeAuditMetadata,
+  sanitizeForLogging,
 } from "@enterprise/shared";
 
 function displayName(
@@ -12,6 +18,11 @@ function displayName(
 ): string | null {
   const name = [firstName, lastName].filter(Boolean).join(" ").trim();
   return name || null;
+}
+
+function safeMetadata(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  return sanitizeAuditMetadata(metadata as Record<string, unknown>) ?? null;
 }
 
 export function toLoginHistoryDto(row: {
@@ -26,7 +37,7 @@ export function toLoginHistoryDto(row: {
 }): LoginHistoryDto {
   return {
     id: row.id,
-    email: row.email,
+    email: maskEmail(row.email),
     userId: row.userId,
     ipAddress: row.ipAddress,
     userAgent: row.userAgent,
@@ -56,7 +67,7 @@ export function toActiveDeviceDto(
   return {
     id: row.id,
     userId: row.userId,
-    userEmail: row.user?.email ?? null,
+    userEmail: row.user?.email ? maskEmail(row.user.email) : null,
     userName: row.user
       ? displayName(row.user.firstName, row.user.lastName)
       : null,
@@ -79,6 +90,11 @@ export function toAuditLogDto(row: {
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: Date;
+  eventHash?: string | null;
+  previousHash?: string | null;
+  hashVersion?: number | null;
+  timestampIntegrity?: Date | null;
+  verificationStatus?: SecurityAuditLogDto["verificationStatus"];
   user?: {
     email: string;
     firstName: string;
@@ -88,20 +104,23 @@ export function toAuditLogDto(row: {
   return {
     id: row.id,
     userId: row.userId,
-    userEmail: row.user?.email ?? null,
+    userEmail: row.user?.email ? maskEmail(row.user.email) : null,
     userName: row.user
       ? displayName(row.user.firstName, row.user.lastName)
       : null,
     action: row.action,
     resource: row.resource,
     resourceId: row.resourceId,
-    metadata:
-      row.metadata && typeof row.metadata === "object"
-        ? (row.metadata as Record<string, unknown>)
-        : null,
+    metadata: safeMetadata(row.metadata),
     ipAddress: row.ipAddress,
     userAgent: row.userAgent,
     createdAt: row.createdAt.toISOString(),
+    hash: row.eventHash ?? null,
+    previousHash: row.previousHash ?? null,
+    chainVersion: row.hashVersion ?? undefined,
+    hashVersion: row.hashVersion ?? undefined,
+    timestampIntegrity: row.timestampIntegrity?.toISOString() ?? null,
+    verificationStatus: row.verificationStatus,
   };
 }
 
@@ -119,21 +138,56 @@ export function toSecurityEventDto(row: {
   createdAt: Date;
   user?: { email: string } | null;
 }): SecurityEventDto {
+  const message = sanitizeForLogging({ message: row.message }).message as string;
   return {
     id: row.id,
     userId: row.userId,
-    userEmail: row.user?.email ?? null,
+    userEmail: row.user?.email ? maskEmail(row.user.email) : null,
     severity: row.severity,
     category: row.category,
     eventType: row.eventType,
-    message: row.message,
-    metadata:
-      row.metadata && typeof row.metadata === "object"
-        ? (row.metadata as Record<string, unknown>)
-        : null,
+    message,
+    metadata: safeMetadata(row.metadata),
     ipAddress: row.ipAddress,
     userAgent: row.userAgent,
     resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toSecurityIncidentDto(row: {
+  id: string;
+  type: string;
+  severity: SecurityIncidentDto["severity"];
+  status: SecurityIncidentDto["status"];
+  actorUserId: string | null;
+  resource: string | null;
+  resourceId: string | null;
+  count: number;
+  message: string;
+  metadata: unknown;
+  windowStartedAt: Date;
+  lastSeenAt: Date;
+  resolvedAt: Date | null;
+  resolvedById: string | null;
+  createdAt: Date;
+}): SecurityIncidentDto {
+  const message = sanitizeForLogging({ message: row.message }).message as string;
+  return {
+    id: row.id,
+    type: row.type,
+    severity: row.severity,
+    status: row.status,
+    actorUserId: row.actorUserId,
+    resource: row.resource,
+    resourceId: row.resourceId,
+    count: row.count,
+    message,
+    metadata: safeMetadata(row.metadata),
+    windowStartedAt: row.windowStartedAt.toISOString(),
+    lastSeenAt: row.lastSeenAt.toISOString(),
+    resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    resolvedById: row.resolvedById,
     createdAt: row.createdAt.toISOString(),
   };
 }

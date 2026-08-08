@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { RATE_LIMIT, RECAPTCHA } from "@enterprise/shared";
+import { RATE_LIMIT, RECAPTCHA, changePasswordSchema } from "@enterprise/shared";
 
 import { authenticate } from "../../middleware/auth.middleware.js";
 import { requireRecaptcha } from "../../middleware/recaptcha.middleware.js";
@@ -13,10 +13,14 @@ import {
 } from "../../middleware/rate-limit.middleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
+import { securityController } from "../security/security.controller.js";
 import { authController } from "./auth.controller.js";
 import {
   forgotPasswordSchema,
   loginSchema,
+  mfaDisableSchema,
+  mfaEnableSchema,
+  mfaStepUpSchema,
   oauthCallbackSchema,
   oauthLinkSchema,
   oauthUnlinkSchema,
@@ -80,6 +84,19 @@ authRouter.get(
   "/me",
   authenticate,
   asyncHandler((req, res) => authController.me(req, res)),
+);
+
+/** Alias for forced-password-change allow-list (delegates to Security module). */
+authRouter.post(
+  "/change-password",
+  authenticate,
+  rateLimit({
+    name: "auth.change-password",
+    ...RATE_LIMIT.CHANGE_PASSWORD,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(changePasswordSchema),
+  asyncHandler((req, res) => securityController.changePassword(req, res)),
 );
 
 authRouter.post(
@@ -245,6 +262,66 @@ authRouter.patch(
   validate(renameSessionParamsSchema, "params"),
   validate(renameSessionSchema),
   asyncHandler((req, res) => authController.renameSession(req, res)),
+);
+
+authRouter.get(
+  "/mfa/status",
+  authenticate,
+  rateLimit({
+    name: "auth.mfa-status",
+    ...RATE_LIMIT.GLOBAL_API,
+    keyGenerator: rateLimitByUser,
+  }),
+  asyncHandler((req, res) => authController.mfaStatus(req, res)),
+);
+
+authRouter.post(
+  "/mfa/setup",
+  authenticate,
+  rateLimit({
+    name: "auth.mfa-setup",
+    max: 5,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  asyncHandler((req, res) => authController.mfaSetup(req, res)),
+);
+
+authRouter.post(
+  "/mfa/enable",
+  authenticate,
+  rateLimit({
+    name: "auth.mfa-enable",
+    ...RATE_LIMIT.VERIFY_OTP,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(mfaEnableSchema),
+  asyncHandler((req, res) => authController.mfaEnable(req, res)),
+);
+
+authRouter.post(
+  "/mfa/disable",
+  authenticate,
+  rateLimit({
+    name: "auth.mfa-disable",
+    ...RATE_LIMIT.VERIFY_OTP,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(mfaDisableSchema),
+  asyncHandler((req, res) => authController.mfaDisable(req, res)),
+);
+
+/** Zero Trust step-up MFA (reuses existing TOTP/recovery). */
+authRouter.post(
+  "/mfa/step-up",
+  authenticate,
+  rateLimit({
+    name: "auth.mfa-step-up",
+    ...RATE_LIMIT.VERIFY_OTP,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(mfaStepUpSchema),
+  asyncHandler((req, res) => authController.mfaStepUp(req, res)),
 );
 
 export { authRouter };

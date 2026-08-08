@@ -1,4 +1,4 @@
-import { prisma, Prisma } from "@enterprise/database";
+import { writeAuditLogSafe } from "../../shared/security/write-audit-log.js";
 
 interface FilesAuditInput {
   userId?: string | null;
@@ -10,23 +10,18 @@ interface FilesAuditInput {
 }
 
 export async function logFilesAuditEvent(input: FilesAuditInput): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        userId: input.userId ?? null,
-        action: input.action,
-        resource: "files",
-        resourceId: input.resourceId ?? null,
-        metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
-          : undefined,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-      },
-    });
-  } catch (error) {
-    console.error("[files] Failed to write audit log:", error);
-  }
+  await writeAuditLogSafe(
+    {
+      userId: input.userId ?? null,
+      action: input.action,
+      resource: "files",
+      resourceId: input.resourceId ?? null,
+      metadata: input.metadata,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+    },
+    "files",
+  );
 }
 
 export const FILES_AUDIT_ACTIONS = {

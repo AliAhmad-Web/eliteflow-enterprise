@@ -3,6 +3,9 @@
  */
 
 import type { AiMemoryEntry } from "../memory-entry.js";
+import { freezeMemoryEntry } from "../memory-entry.js";
+import { aiDataPolicyService } from "../../policy/ai-data-policy.service.js";
+import { promptSecurityService } from "../../security/index.js";
 import { cleanupPersistentMemory } from "./memory-cleanup.js";
 import { runMemoryJob } from "./memory-background-jobs.js";
 import {
@@ -44,7 +47,33 @@ export async function savePersistentMemory(
     });
   }
 
-  const plan = planMemorySync(input.entries, { maxBatch: 20 });
+  // Never persist RESTRICTED secrets/HR fields in AI memory (always redact on write).
+  const scrubbedEntries = aiDataPolicyService.sanitizeAIMemory(
+    input.entries,
+    aiDataPolicyService.subjectFrom({
+      userId: input.userId,
+      role: "EMPLOYEE",
+      permissions: [],
+      explicitRestrictedAccess: false,
+    }),
+  );
+
+  // Prompt security — reject poisoned / injected memory summaries.
+  const securedEntries = scrubbedEntries.map((entry) => {
+    const summary = promptSecurityService.assertSafeMemoryWrite(
+      entry.summary ?? "",
+      {
+        userId: input.userId,
+        conversationId: input.conversationId ?? null,
+        surface: "memory_write",
+      },
+    );
+    return summary === entry.summary
+      ? entry
+      : freezeMemoryEntry({ ...entry, summary });
+  });
+
+  const plan = planMemorySync(securedEntries, { maxBatch: 20 });
   const provider = input.provider ?? persistentMemoryProvider;
   const background = input.background === true;
   let memoryKeys: readonly string[] = Object.freeze([]);

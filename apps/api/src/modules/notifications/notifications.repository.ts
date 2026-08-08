@@ -381,7 +381,10 @@ export class NotificationsRepository {
     });
   }
 
-  async claimPendingQueue(limit = 20) {
+  async claimPendingQueue(
+    limit = 20,
+    options?: { order?: "asc" | "desc" },
+  ) {
     const now = new Date();
     const channels: NotificationChannel[] = [
       NotificationChannel.EMAIL,
@@ -398,7 +401,7 @@ export class NotificationsRepository {
           in: channels,
         },
       },
-      orderBy: { scheduledFor: "asc" },
+      orderBy: { scheduledFor: options?.order ?? "asc" },
       take: limit,
     });
 
@@ -436,6 +439,21 @@ export class NotificationsRepository {
         status: NotificationQueueStatus.FAILED,
         processedAt: new Date(),
         lastError: error.slice(0, 1000),
+      },
+    });
+  }
+
+  /** Return PROCESSING items to PENDING when a flush budget is exhausted. */
+  async releaseQueueToPending(ids: string[]) {
+    if (ids.length === 0) return { count: 0 };
+    return prisma.notificationQueue.updateMany({
+      where: {
+        id: { in: ids },
+        status: NotificationQueueStatus.PROCESSING,
+      },
+      data: {
+        status: NotificationQueueStatus.PENDING,
+        scheduledFor: new Date(),
       },
     });
   }

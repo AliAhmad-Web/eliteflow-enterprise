@@ -1,4 +1,4 @@
-import { prisma, Prisma } from "@enterprise/database";
+import { writeAuditLogSafe } from "../../shared/security/write-audit-log.js";
 
 interface InvoiceAuditInput {
   userId?: string | null;
@@ -12,23 +12,18 @@ interface InvoiceAuditInput {
 export async function logInvoiceAuditEvent(
   input: InvoiceAuditInput,
 ): Promise<void> {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        userId: input.userId ?? null,
-        action: input.action,
-        resource: "invoice",
-        resourceId: input.resourceId ?? null,
-        metadata: input.metadata
-          ? (input.metadata as Prisma.InputJsonValue)
-          : undefined,
-        ipAddress: input.ipAddress ?? null,
-        userAgent: input.userAgent ?? null,
-      },
-    });
-  } catch (error) {
-    console.error("[invoices] Failed to write audit log:", error);
-  }
+  await writeAuditLogSafe(
+    {
+      userId: input.userId ?? null,
+      action: input.action,
+      resource: "invoice",
+      resourceId: input.resourceId ?? null,
+      metadata: input.metadata,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+    },
+    "invoices",
+  );
 }
 
 export const INVOICE_AUDIT_ACTIONS = {

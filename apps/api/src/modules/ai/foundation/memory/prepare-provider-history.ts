@@ -5,6 +5,8 @@ import type {
   AiAgentHistoryDepth,
   AiAgentContextWindowPreference,
 } from "../agents/ai-agent-memory-strategy.js";
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
+import type { AiDataPolicySubject } from "../policy/ai-data-policy.types.js";
 
 const DEFAULT_MAX_MESSAGES = 40;
 const DEFAULT_MAX_HISTORY_TOKENS = 12_000;
@@ -236,6 +238,8 @@ export interface PrepareProviderHistoryInput {
    * behavior is preserved exactly.
    */
   readonly agentMemoryStrategy?: AiAgentMemoryStrategy | null;
+  /** Optional AI data-policy subject for RESTRICTED scrubbing of ASSISTANT/SYSTEM turns. */
+  readonly dataPolicySubject?: AiDataPolicySubject | null;
 }
 
 /**
@@ -251,35 +255,54 @@ export interface PrepareProviderHistoryInput {
 export function prepareProviderHistory(
   input: PrepareProviderHistoryInput,
 ): AiMemoryMessage[] {
-  const { conversationHistory, policy, agentMemoryStrategy } = input;
+  const { conversationHistory, policy, agentMemoryStrategy, dataPolicySubject } =
+    input;
 
   if (!policy.historyEnabled || policy.privacyMode) {
     return [];
   }
 
-  if (!agentMemoryStrategy) {
-    return applySlidingWindow(conversationHistory, policy);
-  }
+  let history: AiMemoryMessage[];
 
-  if (agentMemoryStrategy.memoryMode === "minimal") {
+  if (!agentMemoryStrategy) {
+    history = applySlidingWindow(conversationHistory, policy);
+  } else if (agentMemoryStrategy.memoryMode === "minimal") {
     const recentUserTurns = conversationHistory
       .filter((message) => message.role === "USER")
       .slice(-4);
-    return applySlidingWindow(recentUserTurns, policy, {
+    history = applySlidingWindow(recentUserTurns, policy, {
+      maxMessages: resolveStrategyMaxMessages(agentMemoryStrategy),
+      tokenBudget: resolveStrategyTokenBudget(policy, agentMemoryStrategy),
+    });
+  } else {
+    const retained = applyRetentionFilters(
+      conversationHistory,
+      agentMemoryStrategy,
+    );
+    const sanitized = applyPrivacySanitization(retained, agentMemoryStrategy);
+    const compacted = applySummarizeThreshold(sanitized, agentMemoryStrategy);
+
+    history = applySlidingWindow(compacted, policy, {
       maxMessages: resolveStrategyMaxMessages(agentMemoryStrategy),
       tokenBudget: resolveStrategyTokenBudget(policy, agentMemoryStrategy),
     });
   }
 
-  const retained = applyRetentionFilters(
-    conversationHistory,
-    agentMemoryStrategy,
-  );
-  const sanitized = applyPrivacySanitization(retained, agentMemoryStrategy);
-  const compacted = applySummarizeThreshold(sanitized, agentMemoryStrategy);
+  if (!dataPolicySubject) {
+    return history;
+  }
 
-  return applySlidingWindow(compacted, policy, {
-    maxMessages: resolveStrategyMaxMessages(agentMemoryStrategy),
-    tokenBudget: resolveStrategyTokenBudget(policy, agentMemoryStrategy),
+  // Scrub ASSISTANT/SYSTEM only — USER history content stays unmodified.
+  return history.map((message) => {
+    if (message.role === "USER") {
+      return message;
+    }
+    return {
+      ...message,
+      content: aiDataPolicyService.sanitizeSummary(
+        message.content,
+        dataPolicySubject,
+      ),
+    };
   });
 }

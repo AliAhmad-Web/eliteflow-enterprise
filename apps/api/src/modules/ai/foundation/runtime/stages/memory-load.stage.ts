@@ -58,6 +58,9 @@ export const memoryLoadStage: AiPipelineStage = {
         state.activeContext.conversationId,
       privacyMode,
       permissions: state.contextHints?.permissions,
+      role: state.activeContext.user?.role ?? state.contextHints?.role,
+      explicitRestrictedAccess:
+        state.contextHints?.explicitRestrictedAccess === true,
       userPrompt: state.prompt,
       useCache: isAiMemoryCacheEnabled(),
       enableSearch: isAiMemorySearchEnabled(),

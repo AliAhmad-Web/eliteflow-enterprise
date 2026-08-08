@@ -1,5 +1,4 @@
 import {
-  AUTH_HEADERS,
   TEAM_API_PREFIX,
   type AssignDepartmentEmployeesInput,
   type Attendance,
@@ -56,9 +55,8 @@ import {
   type UpdateTeamInput,
 } from "@enterprise/shared";
 
-import { useAuthStore } from "@/features/auth/stores/auth.store";
-import { apiRequest } from "@/services/api/api-client";
-import { ApiClientError, getApiBaseUrl } from "@/services/api/api-error";
+import { apiRequest, authenticatedFetch } from "@/services/api/api-client";
+import { ApiClientError } from "@/services/api/api-error";
 
 import type {
   ListGoalsQueryInput,
@@ -188,7 +186,9 @@ export const teamService = {
     input: { sendEmail?: boolean } = {},
   ) {
     return apiRequest<{
-      temporaryPassword: string;
+      passwordSetupRequired: true;
+      passwordSetupUrl?: string;
+      expiresAt: string;
       mustChangePassword: boolean;
       invitationSent: boolean;
     }>(`${TEAM_API_PREFIX}/employees/${id}/reset-credentials`, {
@@ -493,20 +493,9 @@ export const teamService = {
   },
 
   async exportDirectoryCsv(): Promise<{ blob: Blob; filename: string }> {
-    const token = useAuthStore.getState().accessToken;
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers[AUTH_HEADERS.AUTHORIZATION] =
-        `${AUTH_HEADERS.BEARER_PREFIX}${token}`;
-    }
-
-    const response = await fetch(
-      `${getApiBaseUrl()}${TEAM_API_PREFIX}/employees/export/csv`,
-      {
-        method: "GET",
-        credentials: "include",
-        headers,
-      },
+    const response = await authenticatedFetch(
+      `${TEAM_API_PREFIX}/employees/export/csv`,
+      { method: "GET" },
     );
 
     if (!response.ok) {

@@ -73,6 +73,13 @@ export const toolExecutionStage: AiPipelineStage = {
         userId: state.userId,
         role: state.activeContext.user?.role ?? state.contextHints?.role,
         permissions: state.contextHints?.permissions,
+        explicitRestrictedAccess:
+          state.contextHints?.explicitRestrictedAccess === true,
+        sessionId: state.contextHints?.sessionId ?? null,
+        tenantId:
+          state.contextHints?.tenantId ??
+          state.activeContext.organization?.organizationId ??
+          null,
         activeContext: state.activeContext,
         policy: state.policy,
         prompt: state.prompt,

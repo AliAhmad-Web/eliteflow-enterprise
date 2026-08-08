@@ -221,14 +221,20 @@ function EmailAutomationWorkspaceInner(props: {
         audienceType: "INDIVIDUAL",
         metadata: { source: "communication_email_automation_test" },
       });
-      let processNote = "";
-      try {
-        const processed = await processQueue.mutateAsync();
-        processNote = ` Delivered via queue (processed ${processed.processed}, sent ${processed.sent}, failed ${processed.failed}).`;
-      } catch {
-        processNote =
-          " Queued — process the email queue to complete delivery.";
-      }
+      let processNote =
+        " Delivery started — the server flushes the email queue after create.";
+      void processQueue.mutateAsync().then(
+        (processed) => {
+          setActionMessage(
+            `Test email created (in-app ${result.created}, queued ${result.queued}). Delivered via queue (processed ${processed.processed}, sent ${processed.sent}, failed ${processed.failed}).`,
+          );
+          void queueQuery.refetch();
+          void failedQuery.refetch();
+        },
+        () => {
+          /* server-side flush may already have handled delivery */
+        },
+      );
       setActionMessage(
         `Test email created (in-app ${result.created}, queued ${result.queued}).${processNote}`,
       );

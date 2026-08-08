@@ -19,6 +19,7 @@ import {
 } from "@enterprise/shared";
 
 import { setAiPreferredProvider, setAiProviderModel } from "../ai/providers/ai-runtime-config.js";
+import { encryptionService } from "../../shared/security/encryption.service.js";
 import { encryptSecret } from "./settings.crypto.js";
 import {
   logSettingsAuditEvent,
@@ -212,8 +213,11 @@ export class SettingsService {
       state: input.state,
       postalCode: input.postalCode,
       country: input.country,
-      taxNumber: input.taxNumber,
-      registrationNumber: input.registrationNumber,
+      taxNumber:
+        encryptionService.encryptIfNeeded(input.taxNumber ?? null) ?? null,
+      registrationNumber:
+        encryptionService.encryptIfNeeded(input.registrationNumber ?? null) ??
+        null,
       currency: input.currency,
       timezone: input.timezone,
       emailFromName: input.emailFromName,

@@ -1,14 +1,20 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { memo } from "react";
 
-import { NotificationBell } from "@/features/notifications";
 import { HeaderQuickActions } from "@/components/layout/header-quick-actions";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { SearchBar } from "@/components/layout/search-bar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserProfileMenu } from "@/components/layout/user-profile-menu";
 import { cn } from "@/lib/utils";
+
+const NotificationBell = dynamic(
+  () =>
+    import("@/features/notifications").then((m) => m.NotificationBell),
+  { ssr: false, loading: () => <span className="inline-block size-9" aria-hidden /> },
+);
 
 interface AppHeaderProps {
   className?: string;

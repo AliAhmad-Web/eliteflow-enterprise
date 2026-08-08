@@ -31,6 +31,8 @@ function getActor(req: Request): AiActor {
     userId: req.auth.userId,
     role: req.auth.role,
     email: req.auth.email,
+    permissions: req.auth.permissions,
+    sessionId: req.auth.sessionId,
     ipAddress: context.ipAddress,
     userAgent: context.userAgent,
   };
@@ -149,6 +151,24 @@ export class AiController {
         "Document deleted successfully",
       ),
     );
+  }
+
+  async approveToolConfirmation(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as { id: string };
+    const result = await aiService.approveToolConfirmation(
+      params.id,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Confirmation approved"));
+  }
+
+  async rejectToolConfirmation(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as { id: string };
+    const result = await aiService.rejectToolConfirmation(
+      params.id,
+      getActor(req),
+    );
+    res.json(successResponse(result, "Confirmation rejected"));
   }
 }
 

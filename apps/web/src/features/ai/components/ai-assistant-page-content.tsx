@@ -2,6 +2,7 @@
 
 import {
   type AiAssistModeValue,
+  type AiConfirmationRequiredDto,
   type AiConversation,
   type AiMessage,
 } from "@enterprise/shared";
@@ -32,9 +33,11 @@ import {
   isCommunicationVoiceAssistantEnabled,
   isCommunicationVoiceCommandsEnabled,
   isCommunicationVoicePresentationEnabled,
+} from "@/features/communication/feature-flags";
+import {
   getVoiceSttProviderInfo,
   getVoiceTtsProviderInfo,
-} from "@/features/communication";
+} from "@/features/communication/utils/provider-status";
 import {
   useAdvancedPerformanceProfiler,
   usePerformanceMemo,
@@ -78,6 +81,7 @@ import {
   nextVoicePhaseOnStreamProgress,
   nextVoicePhaseOnStreamStart,
 } from "../utils/voice-session";
+import { AiConfirmationDialog } from "./ai-confirmation-dialog";
 import { AiAssistantEnterpriseShell } from "./ai-assistant-enterprise-shell";
 import type { AiAssistantShellProps } from "./ai-assistant-enterprise-shell";
 import { AiAssistantLegacyLayout } from "./ai-assistant-legacy-layout";
@@ -145,6 +149,8 @@ export function AiAssistantPageContent() {
     null,
   );
   const [deleteTarget, setDeleteTarget] = useState<AiConversation | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<AiConfirmationRequiredDto | null>(null);
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [streamStatusText, setStreamStatusText] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
@@ -387,6 +393,24 @@ export function AiAssistantPageContent() {
       });
       setSelectedId(result.conversation.id);
       setLocalMessages(result.conversation.messages ?? []);
+      if (
+        result.confirmationRequired === true &&
+        result.confirmationId &&
+        result.expiresAt &&
+        result.action &&
+        result.summary &&
+        result.riskLevel
+      ) {
+        setPendingConfirmation({
+          confirmationRequired: true,
+          confirmationId: result.confirmationId,
+          expiresAt: result.expiresAt,
+          action: result.action,
+          summary: result.summary,
+          riskLevel: result.riskLevel,
+          toolId: result.confirmations?.[0]?.toolId,
+        });
+      }
       if (shortcuts && !(showVoiceControls && voiceMode)) {
         setStreamStatusText("Response complete");
       }
@@ -898,6 +922,17 @@ export function AiAssistantPageContent() {
       ) : (
         <AiAssistantLegacyLayout {...shellProps} />
       )}
+
+      <AiConfirmationDialog
+        confirmation={pendingConfirmation}
+        onResolved={() => {
+          setPendingConfirmation(null);
+          if (feedbackToasts) {
+            pushToast("Action confirmation recorded", "success");
+          }
+        }}
+        onDismiss={() => setPendingConfirmation(null)}
+      />
 
       {feedbackToasts ? (
         <>

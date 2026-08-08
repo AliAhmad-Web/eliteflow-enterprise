@@ -1,5 +1,6 @@
 export {
   aiChatRequestSchema,
+  aiConfirmationIdParamsSchema,
   aiConversationIdParamsSchema,
   aiDocumentIdParamsSchema,
   createAiDocumentSchema,

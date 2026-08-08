@@ -42,6 +42,8 @@ import {
   useSecurityDashboard,
   useSecuritySessions,
 } from "../hooks/use-security";
+import { MfaEnrollmentCard } from "./mfa-enrollment-card";
+import { SecurityOpsPanel } from "./security-ops-panel";
 
 function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -242,6 +244,249 @@ export function SecurityCenterPageContent() {
         </Card>
       </div>
 
+      {data.siemIntegration ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Shield className="h-4 w-4 text-primary" />
+              SIEM Integration
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 text-sm">
+              <div>
+                <p className="text-muted-foreground">Connection</p>
+                <p className="font-medium">
+                  {data.siemIntegration.connectionStatus}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Queue size</p>
+                <p className="font-medium">{data.siemIntegration.queueSize}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Failed deliveries</p>
+                <p className="font-medium">
+                  {data.siemIntegration.failedDeliveries}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last export</p>
+                <p className="font-medium">
+                  {formatWhen(data.siemIntegration.lastExportAt)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Connected providers</p>
+                <p className="font-medium">
+                  {data.siemIntegration.connectedProviders.length > 0
+                    ? data.siemIntegration.connectedProviders.join(", ")
+                    : "None"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Event throughput (1h)</p>
+                <p className="font-medium">
+                  {data.siemIntegration.eventThroughput}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <SecurityOpsPanel />
+
+      {data.backupValidation ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Backup Validation
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 text-sm">
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <p className="font-medium">{data.backupValidation.status}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Coverage</p>
+                <p className="font-medium">{data.backupValidation.coverage}%</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Health</p>
+                <p className="font-medium">{data.backupValidation.health}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Failures</p>
+                <p className="font-medium">{data.backupValidation.failures}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last validation</p>
+                <p className="font-medium">
+                  {formatWhen(data.backupValidation.lastValidationAt)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Next validation</p>
+                <p className="font-medium">
+                  {formatWhen(data.backupValidation.nextValidationAt)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {data.encryptionAudit ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Lock className="h-4 w-4 text-primary" />
+              Encryption Audit
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 text-sm">
+              <div>
+                <p className="text-muted-foreground">Overall score</p>
+                <p className="font-medium">
+                  {data.encryptionAudit.overallScore}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Coverage</p>
+                <p className="font-medium">{data.encryptionAudit.coverage}%</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Weak algorithms</p>
+                <p className="font-medium">
+                  {data.encryptionAudit.weakAlgorithms}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Failed checks</p>
+                <p className="font-medium">
+                  {data.encryptionAudit.failedChecks}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recommendations</p>
+                <p className="font-medium">
+                  {data.encryptionAudit.recommendations}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last audit</p>
+                <p className="font-medium">
+                  {formatWhen(data.encryptionAudit.lastAuditAt)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {data.disasterRecoveryTest ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <RefreshCw className="h-4 w-4 text-primary" />
+              Disaster Recovery Test
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 text-sm">
+              <div>
+                <p className="text-muted-foreground">Readiness</p>
+                <p className="font-medium">
+                  {data.disasterRecoveryTest.readiness}%
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last test</p>
+                <p className="font-medium">
+                  {formatWhen(data.disasterRecoveryTest.lastTestAt)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Success rate</p>
+                <p className="font-medium">
+                  {data.disasterRecoveryTest.successRate}%
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recovery time</p>
+                <p className="font-medium">
+                  {data.disasterRecoveryTest.recoveryTimeMs != null
+                    ? `${data.disasterRecoveryTest.recoveryTimeMs} ms`
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recommendations</p>
+                <p className="font-medium">
+                  {data.disasterRecoveryTest.recommendations}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {data.penetrationTest ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+              Penetration Test Assessment
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 text-sm">
+              <div>
+                <p className="text-muted-foreground">Overall score</p>
+                <p className="font-medium">
+                  {data.penetrationTest.overallScore}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Security maturity</p>
+                <p className="font-medium">
+                  {data.penetrationTest.securityMaturity ?? "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Critical findings</p>
+                <p className="font-medium">
+                  {data.penetrationTest.criticalFindings}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">High findings</p>
+                <p className="font-medium">
+                  {data.penetrationTest.highFindings}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recommendations</p>
+                <p className="font-medium">
+                  {data.penetrationTest.recommendations}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last assessment</p>
+                <p className="font-medium">
+                  {formatWhen(data.penetrationTest.lastAssessmentAt)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
@@ -335,6 +580,8 @@ export function SecurityCenterPageContent() {
             </form>
           </CardContent>
         </Card>
+
+        <MfaEnrollmentCard />
 
         <Card>
           <CardHeader>

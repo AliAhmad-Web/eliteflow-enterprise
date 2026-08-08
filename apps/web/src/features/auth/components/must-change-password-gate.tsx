@@ -61,8 +61,7 @@ export function MustChangePasswordGate() {
             Change your password
           </DialogTitle>
           <DialogDescription>
-            Your account was created with a temporary password. Set a new password
-            before continuing.
+            For security, you must set a new password before continuing.
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={onSubmit}>

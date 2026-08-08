@@ -32,13 +32,47 @@ model SecurityEvent {
   ipAddress  String?             @map("ip_address") @db.VarChar(45)
   userAgent  String?             @map("user_agent") @db.VarChar(1024)
   resolvedAt DateTime?           @map("resolved_at")
+  /// Optional link to correlated security incident (Phase 3 Step 10).
+  incidentId String?             @map("incident_id") @db.Uuid
   createdAt  DateTime            @default(now()) @map("created_at")
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user     User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  incident SecurityIncident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
 
   @@index([severity, createdAt])
   @@index([category, createdAt])
   @@index([userId, createdAt])
   @@index([resolvedAt, createdAt])
+  @@index([eventType, createdAt])
+  @@index([incidentId])
   @@map("security_events")
+}
+
+/// Correlated HIGH/CRITICAL threat incidents (aggregated from security events).
+model SecurityIncident {
+  id              String                 @id @default(uuid()) @db.Uuid
+  type            String                 @db.VarChar(100)
+  severity        SecuritySeverity
+  status          SecurityIncidentStatus @default(OPEN)
+  actorUserId     String?                @map("actor_user_id") @db.Uuid
+  resource        String?                @db.VarChar(120)
+  resourceId      String?                @map("resource_id") @db.VarChar(100)
+  count           Int                    @default(1)
+  correlationKey  String                 @map("correlation_key") @db.VarChar(255)
+  message         String                 @db.VarChar(500)
+  metadata        Json?
+  windowStartedAt DateTime               @map("window_started_at")
+  lastSeenAt      DateTime               @map("last_seen_at")
+  resolvedAt      DateTime?              @map("resolved_at")
+  resolvedById    String?                @map("resolved_by_id") @db.Uuid
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  events SecurityEvent[]
+
+  @@index([status, severity, lastSeenAt])
+  @@index([type, lastSeenAt])
+  @@index([correlationKey, status])
+  @@index([actorUserId, status])
+  @@map("security_incidents")
 }

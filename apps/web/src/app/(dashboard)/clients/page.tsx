@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { ClientsPageContent } from "@/features/clients/components/clients-page-content";
+import { LazyClientsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Clients" };
 
 export default function ClientsPage() {
-  return <ClientsPageContent />;
+  return <LazyClientsPage />;
 }

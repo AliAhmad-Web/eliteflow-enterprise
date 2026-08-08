@@ -90,10 +90,9 @@ export function PrefetchLink({
 
   const warm = useCallback(() => {
     if (!pathOnly) return;
-    router.prefetch(pathOnly);
+    // Keep-alive preload is enough for soft-nav; Link `prefetch` handles RSC.
     void preloadKeepAliveRoute(pathOnly);
-    // RC#3: do not stampede communication hub APIs on every hover.
-  }, [pathOnly, router]);
+  }, [pathOnly]);
 
   const handleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {

@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 
-import { EmailAutomationPageContent } from "@/features/communication/components/email-automation-workspace";
+import { LazyEmailAutomationPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Email" };
 
 export default function EmailAutomationPage() {
-  return <EmailAutomationPageContent />;
+  return <LazyEmailAutomationPage />;
 }

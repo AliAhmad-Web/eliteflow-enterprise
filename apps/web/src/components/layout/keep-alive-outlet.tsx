@@ -15,6 +15,7 @@ import {
 import { usePathname } from "next/navigation";
 
 import { KeepAlivePageActiveProvider } from "@/components/layout/keep-alive-page-active";
+import { ROUTES } from "@/constants/routes";
 import {
   getKeepAliveLoader,
   matchKeepAliveRoute,
@@ -23,8 +24,25 @@ import {
 import { useKeepAliveVisibilityStore } from "@/stores/keep-alive-visibility.store";
 import { useNavTransitionStore } from "@/stores/nav-transition.store";
 
-/** RC#6: enough slots for static registry + a few dynamic channel/detail pages. */
-const MAX_CACHED_PAGES = 28;
+/**
+ * Soft-nav cache size. Prefer fewer mounted pages to cut memory/CPU;
+ * heavy routes are evicted first when over capacity.
+ */
+const MAX_CACHED_PAGES = 12;
+
+/** Prefer evicting these before lighter list pages. */
+const HEAVY_KEEP_ALIVE = new Set<string>([
+  ROUTES.AI_ASSISTANT,
+  ROUTES.AI_DOCUMENTS,
+  ROUTES.FILE_MANAGER,
+  ROUTES.REPORTS,
+  ROUTES.TEAM,
+  ROUTES.SECURITY,
+  ROUTES.WHITEBOARD,
+  ROUTES.EMAIL_AUTOMATION,
+  ROUTES.VOICE_AI,
+  ROUTES.WHATSAPP,
+]);
 const SCROLL_STORAGE_KEY = "eliteflow-ka-scroll";
 const scrollPositions = new Map<string, number>();
 const lazyPageCache = new Map<
@@ -146,11 +164,16 @@ export function KeepAliveOutlet({ children }: KeepAliveOutletProps) {
         return current;
       }
       const next = [...current, activeKeepAlive];
-      if (next.length <= MAX_CACHED_PAGES) {
-        return next;
-      }
-      const evictIndex = next.findIndex((route) => route !== activeKeepAlive);
-      if (evictIndex >= 0) {
+      while (next.length > MAX_CACHED_PAGES) {
+        let evictIndex = next.findIndex(
+          (route) =>
+            route !== activeKeepAlive &&
+            (HEAVY_KEEP_ALIVE.has(route) || route.startsWith("/files/")),
+        );
+        if (evictIndex < 0) {
+          evictIndex = next.findIndex((route) => route !== activeKeepAlive);
+        }
+        if (evictIndex < 0) break;
         const evicted = next[evictIndex]!;
         scrollPositions.delete(evicted);
         lazyPageCache.delete(evicted);

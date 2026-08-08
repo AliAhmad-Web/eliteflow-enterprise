@@ -1,6 +1,10 @@
 export {
   forgotPasswordSchema,
   loginSchema,
+  mfaDisableSchema,
+  mfaEnableSchema,
+  mfaStepUpSchema,
+  mfaStatusSchema,
   oauthCallbackSchema,
   oauthLinkSchema,
   oauthUnlinkSchema,
@@ -20,6 +24,8 @@ export {
 export type {
   ForgotPasswordInput,
   LoginInput,
+  MfaDisableInput,
+  MfaEnableInput,
   OAuthCallbackInput,
   OAuthLinkInput,
   OAuthUnlinkInput,

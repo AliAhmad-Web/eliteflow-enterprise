@@ -38,6 +38,9 @@ export function SocialLoginButtons({ mode = "login" }: SocialLoginButtonsProps) 
       const intent: OAuthFlowIntent = mode === "signup" ? "signup" : "login";
       sessionStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, provider);
       sessionStorage.setItem(OAUTH_INTENT_STORAGE_KEY, intent);
+      // localStorage survives some redirect edge cases where sessionStorage is cleared.
+      localStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, provider);
+      localStorage.setItem(OAUTH_INTENT_STORAGE_KEY, intent);
 
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: toSupabaseProvider(provider),
@@ -53,12 +56,16 @@ export function SocialLoginButtons({ mode = "login" }: SocialLoginButtonsProps) 
       if (oauthError) {
         sessionStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
         sessionStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+        localStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
+        localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
         setError(oauthError.message);
         setLoadingProvider(null);
       }
     } catch {
       sessionStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
       sessionStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+      localStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
+      localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
       setError("Unable to start OAuth sign-in. Please try again.");
       setLoadingProvider(null);
     }

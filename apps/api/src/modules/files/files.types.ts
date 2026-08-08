@@ -54,7 +54,7 @@ export function toManagedFileDto(file: ManagedFile): ManagedFileDto {
     createdAt: file.createdAt.toISOString(),
     updatedAt: file.updatedAt.toISOString(),
     deletedAt: file.deletedAt?.toISOString() ?? null,
-    previewable: isPreviewable(file.category),
+    previewable: isPreviewable(file.category, file.extension),
   };
 }
 

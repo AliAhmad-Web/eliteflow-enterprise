@@ -2,30 +2,30 @@ import cookieParser from "cookie-parser";
 import compression from "compression";
 import cors from "cors";
 import express from "express";
-import helmet from "helmet";
 
 import { API_PREFIX } from "@enterprise/shared";
 
 import { getCorsOrigins } from "./config/auth.config.js";
 import { errorHandler } from "./middleware/error.middleware.js";
-import { csrfProtection } from "./middleware/csrf.middleware.js";
 import { requestTiming } from "./middleware/request-timing.middleware.js";
 import { apiRouter } from "./routes/index.js";
+import { apiVersionMiddleware } from "./shared/api-versioning/index.js";
+import { csrfProtection } from "./shared/security/csrf/index.js";
+import { installConsoleRedaction } from "./shared/security/install-console-redaction.js";
+import { securityHeadersMiddleware } from "./shared/security/security-headers/index.js";
 
 export function createApp() {
+  installConsoleRedaction();
+
   const app = express();
 
   app.set("trust proxy", 1);
+  // Defense in depth — Helmet also hides this when headers are enabled.
+  app.disable("x-powered-by");
 
   app.use(requestTiming());
   app.use(compression());
-  app.use(
-    helmet({
-      // API returns JSON only; CSP is enforced by the Next.js frontend.
-      contentSecurityPolicy: false,
-      crossOriginResourcePolicy: { policy: "cross-origin" },
-    }),
-  );
+  app.use(securityHeadersMiddleware());
   app.use(
     cors({
       origin: getCorsOrigins(),
@@ -34,6 +34,17 @@ export function createApp() {
         "Content-Disposition",
         "Content-Type",
         "Server-Timing",
+        "RateLimit-Limit",
+        "RateLimit-Remaining",
+        "RateLimit-Reset",
+        "Retry-After",
+        "X-CSRF-Token",
+        "X-API-Version",
+        "API-Version",
+        "Deprecation",
+        "Sunset",
+        "Link",
+        "Warning",
       ],
     }),
   );
@@ -47,7 +58,14 @@ export function createApp() {
     res.redirect(302, webUrl);
   });
 
+  // Enterprise API Versioning — before controllers; never bypasses auth stack.
+  app.use(apiVersionMiddleware());
+
+  // Version 1 — existing routes (backward compatible).
   app.use(API_PREFIX, apiRouter);
+
+  // Version 2 — experimental; same controllers via compatibility (no duplication).
+  app.use("/api/v2", apiRouter);
 
   app.use(errorHandler);
 

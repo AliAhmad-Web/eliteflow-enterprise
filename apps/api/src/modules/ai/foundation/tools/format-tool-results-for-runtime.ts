@@ -69,8 +69,21 @@ export function formatToolResultsForRuntime(
       case "skipped":
       case "eligible":
       case "running":
-      case "pending_confirmation":
         break;
+      case "pending_confirmation": {
+        const summary =
+          typeof execution.metadata?.summary === "string"
+            ? sanitizeLine(execution.metadata.summary, 200)
+            : "awaiting human approval";
+        const action =
+          typeof execution.metadata?.action === "string"
+            ? sanitizeLine(execution.metadata.action, 80)
+            : execution.toolId;
+        lines.push(
+          `- [${sanitizeLine(execution.toolId, 80)}] pending_confirmation: ${action} — ${summary}`,
+        );
+        break;
+      }
       default: {
         const _exhaustive: never = execution.status;
         void _exhaustive;
@@ -83,5 +96,12 @@ export function formatToolResultsForRuntime(
     return "";
   }
 
-  return ["Tool results (successful executions):", ...lines].join("\n");
+  const hasPending = executions.some(
+    (item) => item.status === "pending_confirmation",
+  );
+  const header = hasPending
+    ? "Tool results (successful executions and pending confirmations):"
+    : "Tool results (successful executions):";
+
+  return [header, ...lines].join("\n");
 }

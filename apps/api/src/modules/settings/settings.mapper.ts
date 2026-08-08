@@ -12,6 +12,8 @@ import type {
   StorageSettingsDto,
 } from "@enterprise/shared";
 
+import { encryptionService } from "../../shared/security/encryption.service.js";
+
 export function toSettingsProfileDto(user: {
   id: string;
   email: string;
@@ -180,8 +182,10 @@ export function toCompanyDto(row: {
     state: row.state,
     postalCode: row.postalCode,
     country: row.country,
-    taxNumber: row.taxNumber,
-    registrationNumber: row.registrationNumber,
+    taxNumber:
+      encryptionService.decryptIfNeeded(row.taxNumber) ?? null,
+    registrationNumber:
+      encryptionService.decryptIfNeeded(row.registrationNumber) ?? null,
     currency: row.currency,
     timezone: row.timezone,
     emailFromName: row.emailFromName,
@@ -284,7 +288,7 @@ export function toBillingDto(
     history: [
       {
         id: "inv_demo_001",
-        description: `${row.planName} plan ‚Äî current period`,
+        description: `${row.planName} plan ù current period`,
         amount: 99,
         currency: "USD",
         status: "paid",

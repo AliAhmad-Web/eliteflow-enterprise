@@ -26,6 +26,7 @@ import type {
 } from "@enterprise/shared";
 
 import { getAiProvider } from "../ai/providers/index.js";
+import { attachmentSecurityService } from "../files/attachment-security.service.js";
 import { notificationDispatcher } from "../notifications/index.js";
 import { tasksService } from "../tasks/index.js";
 import { writeCommunicationAudit } from "./communication.audit.js";
@@ -230,6 +231,13 @@ export class CommunicationHubService {
   ) {
     assertAnnouncementManage(actor);
 
+    const attachments = input.attachments?.length
+      ? await attachmentSecurityService.secureAttachments(
+          input.attachments,
+          actor,
+        )
+      : undefined;
+
     const created = await communicationHubRepository.createAnnouncement({
       title: input.title,
       body: input.body,
@@ -239,7 +247,7 @@ export class CommunicationHubService {
       isPinned: input.isPinned ?? false,
       publishedAt: input.publish === false ? null : new Date(),
       createdById: actor.userId,
-      attachments: input.attachments,
+      attachments,
     });
 
     void writeCommunicationAudit({
@@ -847,13 +855,26 @@ export class CommunicationHubService {
     const meeting = await communicationHubRepository.findMeetingById(meetingId);
     if (!meeting) notFound("Meeting");
 
+    const secured = await attachmentSecurityService.secureAttachment(
+      {
+        fileName: input.fileName,
+        fileUrl: input.storageUrl,
+        storageUrl: input.storageUrl,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        managedFileId: input.managedFileId,
+        durationSeconds: input.durationSeconds,
+      },
+      actor,
+    );
+
     const recording = await communicationHubRepository.addRecording(meetingId, {
-      fileName: input.fileName,
-      storageUrl: input.storageUrl,
-      mimeType: input.mimeType,
-      sizeBytes: input.sizeBytes,
-      durationSeconds: input.durationSeconds,
-      managedFileId: input.managedFileId,
+      fileName: secured.fileName,
+      storageUrl: secured.fileUrl,
+      mimeType: secured.mimeType,
+      sizeBytes: secured.sizeBytes,
+      durationSeconds: secured.durationSeconds ?? input.durationSeconds,
+      managedFileId: secured.managedFileId,
       startedAt: input.startedAt ? new Date(input.startedAt) : null,
       endedAt: input.endedAt ? new Date(input.endedAt) : null,
       createdById: actor.userId,

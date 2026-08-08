@@ -5,7 +5,6 @@ import {
   ROLE_DASHBOARD_ROUTES,
   type UserRole,
 } from "@enterprise/shared";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { RedirectFallback } from "@/components/common/feedback/redirect-fallback";
@@ -25,7 +24,6 @@ export function RoleRouteGuard({
   allowedRoles,
   requiredPermission,
 }: RoleRouteGuardProps) {
-  const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const user = useAuthStore((state) => state.user);
@@ -56,14 +54,14 @@ export function RoleRouteGuard({
     redirectedRef.current = true;
     const fallback =
       ROLE_DASHBOARD_ROUTES[user.role.code as UserRole] ?? ROUTES.DASHBOARD;
-    router.replace(fallback);
+    window.location.assign(fallback);
 
     const timeout = window.setTimeout(() => {
       setRedirectTimedOut(true);
     }, 4_000);
 
     return () => window.clearTimeout(timeout);
-  }, [allowed, isAuthenticated, isInitialized, router, user]);
+  }, [allowed, isAuthenticated, isInitialized, user]);
 
   if (isInitialized && !isAuthenticated) {
     return null;

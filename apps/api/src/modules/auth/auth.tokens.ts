@@ -83,13 +83,16 @@ export function getAccessTokenExpiresIn(): number {
   return TOKEN_EXPIRATION.ACCESS_TOKEN_SECONDS;
 }
 
-export function getRefreshTokenExpiresAt(): Date {
-  return new Date(Date.now() + TOKEN_EXPIRATION.REFRESH_TOKEN_SECONDS * 1000);
+export function getRefreshTokenExpiresAt(rememberMe = false): Date {
+  const seconds = rememberMe
+    ? TOKEN_EXPIRATION.REFRESH_TOKEN_SECONDS_REMEMBER_ME
+    : TOKEN_EXPIRATION.REFRESH_TOKEN_SECONDS;
+  return new Date(Date.now() + seconds * 1000);
 }
 
 export function getPasswordResetExpiresAt(): Date {
   return new Date(
-    Date.now() + TOKEN_EXPIRATION.PASSWORD_RESET_HOURS * 60 * 60 * 1000,
+    Date.now() + TOKEN_EXPIRATION.PASSWORD_SETUP_MINUTES * 60 * 1000,
   );
 }
 

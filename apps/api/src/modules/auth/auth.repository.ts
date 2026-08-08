@@ -1,11 +1,13 @@
 import {
   prisma,
+  Prisma,
   OAuthProvider,
   SessionRevokedReason,
   UserStatus,
 } from "@enterprise/database";
 import type { OtpPurpose } from "@enterprise/database";
 
+import { encryptionService } from "../../shared/security/encryption.service.js";
 import type { UserWithRoleAndPermissions } from "./auth.types.js";
 import { DEFAULT_CLIENT_ROLE_CODE } from "./auth.constants.js";
 
@@ -22,6 +24,51 @@ const userWithRoleInclude = {
     },
   },
 } as const;
+
+function safeDecryptToken(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === null || value === undefined) return value;
+  try {
+    return encryptionService.decryptIfNeeded(value) ?? value;
+  } catch {
+    // Ciphertext from a prior ephemeral/rotated encryption key — leave null so
+    // the next token upsert can overwrite with a freshly encrypted value.
+    return null;
+  }
+}
+
+function encryptOAuthToken(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === null || value === undefined) return value;
+  return encryptionService.encryptIfNeeded(value);
+}
+
+function decryptOAuthAccount<T extends {
+  accessToken?: string;
+  refreshToken?: string | null;
+} | null>(account: T): T {
+  if (!account) return account;
+  return {
+    ...account,
+    ...(account.accessToken !== undefined
+      ? {
+          accessToken:
+            safeDecryptToken(account.accessToken) ?? account.accessToken,
+        }
+      : {}),
+    ...(account.refreshToken !== undefined
+      ? {
+          refreshToken:
+            account.refreshToken === null
+              ? null
+              : (safeDecryptToken(account.refreshToken) ??
+                account.refreshToken),
+        }
+      : {}),
+  };
+}
 
 export class AuthRepository {
   private normalizeEmail(email: string): string {
@@ -119,7 +166,7 @@ export class AuthRepository {
     provider: OAuthProvider,
     providerAccountId: string,
   ) {
-    return prisma.oAuthAccount.findUnique({
+    const account = await prisma.oAuthAccount.findUnique({
       where: {
         provider_providerAccountId: {
           provider,
@@ -132,18 +179,20 @@ export class AuthRepository {
         },
       },
     });
+    return decryptOAuthAccount(account);
   }
 
   async findOAuthAccountByUserAndProvider(
     userId: string,
     provider: OAuthProvider,
   ) {
-    return prisma.oAuthAccount.findFirst({
+    const account = await prisma.oAuthAccount.findFirst({
       where: {
         userId,
         provider,
       },
     });
+    return decryptOAuthAccount(account);
   }
 
   async countOAuthAccounts(userId: string): Promise<number> {
@@ -165,8 +214,10 @@ export class AuthRepository {
         userId: input.userId,
         provider: input.provider,
         providerAccountId: input.providerAccountId,
-        accessToken: input.accessToken,
-        refreshToken: input.refreshToken ?? null,
+        accessToken: encryptOAuthToken(input.accessToken) as string,
+        refreshToken:
+          (encryptOAuthToken(input.refreshToken ?? null) as string | null) ??
+          null,
         expiresAt: input.expiresAt ?? null,
       },
     });
@@ -195,14 +246,18 @@ export class AuthRepository {
         userId: input.userId,
         provider: input.provider,
         providerAccountId: input.providerAccountId,
-        accessToken: input.accessToken,
-        refreshToken: input.refreshToken ?? null,
+        accessToken: encryptOAuthToken(input.accessToken) as string,
+        refreshToken:
+          (encryptOAuthToken(input.refreshToken ?? null) as string | null) ??
+          null,
         expiresAt: input.expiresAt ?? null,
       },
       update: {
         providerAccountId: input.providerAccountId,
-        accessToken: input.accessToken,
-        refreshToken: input.refreshToken ?? null,
+        accessToken: encryptOAuthToken(input.accessToken) as string,
+        refreshToken:
+          (encryptOAuthToken(input.refreshToken ?? null) as string | null) ??
+          null,
         expiresAt: input.expiresAt ?? null,
       },
     });
@@ -220,8 +275,12 @@ export class AuthRepository {
     await prisma.oAuthAccount.update({
       where: { id },
       data: {
-        accessToken: input.accessToken,
-        refreshToken: input.refreshToken ?? null,
+        accessToken: encryptOAuthToken(input.accessToken) as string,
+        refreshToken:
+          input.refreshToken === undefined
+            ? undefined
+            : ((encryptOAuthToken(input.refreshToken) as string | null) ??
+              null),
         expiresAt: input.expiresAt ?? null,
         ...(input.providerAccountId
           ? { providerAccountId: input.providerAccountId }
@@ -241,6 +300,8 @@ export class AuthRepository {
     deviceName: string;
     ipAddress: string;
     userAgent: string;
+    fingerprintHash?: string | null;
+    expiresAt?: Date | null;
   }) {
     return prisma.session.create({
       data: {
@@ -248,6 +309,8 @@ export class AuthRepository {
         deviceName: input.deviceName,
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
+        fingerprintHash: input.fingerprintHash ?? null,
+        expiresAt: input.expiresAt ?? null,
       },
     });
   }
@@ -327,6 +390,31 @@ export class AuthRepository {
         lastLoginAt: new Date(),
         failedLoginCount: 0,
         lockedUntil: null,
+      },
+    });
+  }
+
+  async updateUserMfa(
+    userId: string,
+    data: {
+      twoFactorEnabled?: boolean;
+      twoFactorSecret?: string | null;
+      recoveryCodes?: Prisma.InputJsonValue | null;
+      twoFactorLastStep?: number | null;
+      mfaEnrollmentRequired?: boolean;
+    },
+  ): Promise<void> {
+    const { recoveryCodes, ...rest } = data;
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...rest,
+        ...(recoveryCodes !== undefined
+          ? {
+              recoveryCodes:
+                recoveryCodes === null ? Prisma.JsonNull : recoveryCodes,
+            }
+          : {}),
       },
     });
   }
@@ -509,6 +597,7 @@ export class AuthRepository {
       data: {
         passwordHash,
         passwordChangedAt: new Date(),
+        mustChangePassword: false,
         failedLoginCount: 0,
         lockedUntil: null,
       },

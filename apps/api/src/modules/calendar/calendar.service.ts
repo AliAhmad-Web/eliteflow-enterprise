@@ -20,6 +20,7 @@ import { CALENDAR_AUDIT_ACTIONS, logCalendarAuditEvent } from "./calendar.audit.
 import { CALENDAR_ERROR_CODES, CalendarError } from "./calendar.errors.js";
 import { calendarRepository } from "./calendar.repository.js";
 import { toCalendarEventDto, toHolidayDto } from "./calendar.types.js";
+import { attachmentSecurityService } from "../files/attachment-security.service.js";
 
 type StoredEvent = NonNullable<
   Awaited<ReturnType<typeof calendarRepository.getEvent>>
@@ -416,6 +417,11 @@ export class CalendarService {
       attendees.unshift({ userId: actor.userId, isOptional: false });
     }
 
+    const attachmentUrls = await attachmentSecurityService.secureAttachmentUrls(
+      input.attachmentUrls,
+      actor,
+    );
+
     const event = await calendarRepository.createEvent({
       title: input.title,
       description: input.description,
@@ -435,7 +441,7 @@ export class CalendarService {
         ? new Date(input.recurrenceUntil)
         : null,
       recurrenceCount: input.recurrenceCount ?? null,
-      attachmentUrls: input.attachmentUrls,
+      attachmentUrls,
       projectId: input.projectId,
       taskId: input.taskId,
       clientId: input.clientId,
@@ -506,7 +512,13 @@ export class CalendarService {
         ? { recurrenceCount: input.recurrenceCount }
         : {}),
       ...(input.attachmentUrls !== undefined
-        ? { attachmentUrls: input.attachmentUrls }
+        ? {
+            attachmentUrls:
+              await attachmentSecurityService.secureAttachmentUrls(
+                input.attachmentUrls,
+                actor,
+              ),
+          }
         : {}),
       ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
       ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),

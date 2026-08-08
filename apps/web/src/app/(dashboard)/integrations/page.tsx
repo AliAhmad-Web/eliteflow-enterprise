@@ -1,14 +1,14 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import { IntegrationsCenterPageContent } from "@/features/integrations";
+import { LazyIntegrationsPage } from "@/components/common/loading/lazy-feature-pages";
 
 export const metadata: Metadata = { title: "Integrations" };
 
 export default function IntegrationsPage() {
   return (
     <Suspense fallback={null}>
-      <IntegrationsCenterPageContent />
+      <LazyIntegrationsPage />
     </Suspense>
   );
 }

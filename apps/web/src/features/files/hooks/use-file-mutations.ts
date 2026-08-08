@@ -119,3 +119,13 @@ export function useShareFile() {
     },
   });
 }
+
+export function useUnshareFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (shareId: string) => filesService.unshareFile(shareId),
+    onSuccess: async () => {
+      await invalidateFiles(queryClient);
+    },
+  });
+}

@@ -5,6 +5,7 @@ import {
   emailSchema,
   firstNameSchema,
   lastNameSchema,
+  mfaChallengeCodeSchema,
   otpCodeSchema,
   passwordSchema,
   tokenSchema,
@@ -41,6 +42,8 @@ export const loginSchema = z.object({
   password: z
     .string({ required_error: "Password is required" })
     .min(1, "Password is required"),
+  /** Optional — extends refresh/absolute session lifetime when true. */
+  rememberMe: z.boolean().optional().default(false),
   captchaToken: captchaTokenSchema,
 });
 
@@ -99,10 +102,51 @@ export type VerifyEmailQueryInput = z.infer<typeof verifyEmailQuerySchema>;
 
 export const verifyOtpSchema = z.object({
   otpSessionId: uuidSchema,
-  code: otpCodeSchema,
+  code: mfaChallengeCodeSchema,
 });
 
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+
+// =============================================================================
+// MFA enrollment (TOTP)
+// =============================================================================
+
+export const mfaEnableSchema = z.object({
+  code: otpCodeSchema,
+});
+
+export type MfaEnableInput = z.infer<typeof mfaEnableSchema>;
+
+export const mfaDisableSchema = z.object({
+  code: mfaChallengeCodeSchema,
+});
+
+export type MfaDisableInput = z.infer<typeof mfaDisableSchema>;
+
+/** Step-up MFA for Zero Trust (reuses TOTP/recovery challenge). */
+export const mfaStepUpSchema = z.object({
+  code: mfaChallengeCodeSchema,
+});
+
+export type MfaStepUpInput = z.infer<typeof mfaStepUpSchema>;
+
+export const mfaStepUpResponseSchema = z.object({
+  verified: z.boolean(),
+  expiresAt: z.string(),
+  requiresStepUp: z.literal(false),
+  riskLevel: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
+});
+
+export type MfaStepUpResponse = z.infer<typeof mfaStepUpResponseSchema>;
+
+export const mfaStatusSchema = z.object({
+  enabled: z.boolean(),
+  enrollmentRequired: z.boolean(),
+  canEnroll: z.boolean(),
+  recoveryCodesRemaining: z.number().int().nonnegative().optional(),
+});
+
+export type MfaStatusOutput = z.infer<typeof mfaStatusSchema>;
 
 // =============================================================================
 // Refresh Token
@@ -214,6 +258,9 @@ export const safeUserSchema = z.object({
   status: z.string(),
   emailVerified: z.boolean(),
   permissions: z.array(z.string()),
+  mustChangePassword: z.boolean().optional(),
+  twoFactorEnabled: z.boolean().optional(),
+  mfaEnrollmentRequired: z.boolean().optional(),
   createdAt: z.string(),
 });
 
@@ -222,6 +269,8 @@ export const loginResponseSchema = z.object({
   tokens: authTokensSchema.optional(),
   requiresOtp: z.boolean().optional(),
   otpSessionId: uuidSchema.optional(),
+  mfaMethod: z.enum(["totp", "email"]).optional(),
+  expiresIn: z.number().int().positive().optional(),
 });
 
 export type LoginResponseOutput = z.infer<typeof loginResponseSchema>;

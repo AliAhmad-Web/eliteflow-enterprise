@@ -8,14 +8,23 @@ import {
 import type { ListFilesQueryInput } from "@enterprise/shared";
 
 export class FilesRepository {
-  listFolders(parentId: string | null, search: string) {
+  listFolders(
+    parentId: string | null,
+    search: string,
+    scope: Prisma.FolderWhereInput = {},
+  ) {
     return prisma.folder.findMany({
       where: {
-        deletedAt: null,
-        parentId,
-        ...(search
-          ? { name: { contains: search, mode: "insensitive" as const } }
-          : {}),
+        AND: [
+          scope,
+          {
+            deletedAt: null,
+            parentId,
+            ...(search
+              ? { name: { contains: search, mode: "insensitive" as const } }
+              : {}),
+          },
+        ],
       },
       include: {
         _count: {
@@ -296,6 +305,52 @@ export class FilesRepository {
     return prisma.fileShare.delete({ where: { id } });
   }
 
+  findActiveShareForUser(
+    fileId: string,
+    userId: string,
+    access?: FileShareAccess,
+  ) {
+    return prisma.fileShare.findFirst({
+      where: {
+        fileId,
+        sharedWithUserId: userId,
+        ...(access ? { access } : {}),
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { id: true, access: true },
+    });
+  }
+
+  findActiveShareForClient(
+    fileId: string,
+    clientId: string,
+    access?: FileShareAccess,
+  ) {
+    return prisma.fileShare.findFirst({
+      where: {
+        fileId,
+        sharedWithClientId: clientId,
+        ...(access ? { access } : {}),
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { id: true, access: true },
+    });
+  }
+
+  findShareTargetUser(id: string) {
+    return prisma.user.findFirst({
+      where: { id },
+      select: { id: true, status: true, deletedAt: true },
+    });
+  }
+
+  findShareTargetClient(id: string) {
+    return prisma.client.findFirst({
+      where: { id },
+      select: { id: true, status: true, deletedAt: true },
+    });
+  }
+
   listActivities(fileId: string) {
     return prisma.fileActivity.findMany({
       where: { fileId },
@@ -317,6 +372,27 @@ export class FilesRepository {
     return prisma.projectMember.findMany({
       where: { userId },
       select: { projectId: true },
+    });
+  }
+
+  findProjectId(id: string) {
+    return prisma.project.findFirst({
+      where: { id },
+      select: { id: true },
+    });
+  }
+
+  findClientId(id: string) {
+    return prisma.client.findFirst({
+      where: { id },
+      select: { id: true },
+    });
+  }
+
+  findProjectMembership(userId: string, projectId: string) {
+    return prisma.projectMember.findFirst({
+      where: { userId, projectId },
+      select: { id: true },
     });
   }
 }

@@ -9,6 +9,10 @@ import {
   isAiRealToolExecutionEnabled,
   resolveMaxParallelToolExecutions,
 } from "../feature-flags.js";
+import { humanConfirmationService } from "../confirmation/index.js";
+import { aiDataPolicyService } from "../policy/ai-data-policy.service.js";
+import { passwordPolicyService } from "../../../../shared/security/password-policy/index.js";
+import { promptSecurityService } from "../security/index.js";
 import { runPlaceholderTool } from "./placeholder-tool-runners.js";
 import { runRealTool } from "./real-tool-runners.js";
 import type { AiToolExecutionContext } from "./tool-execution-context.js";
@@ -28,13 +32,33 @@ export interface ExecuteEligibleToolsOptions {
 function toExecutionResult(
   execution: AiToolExecution,
   protectedResult: ProtectedToolResult,
+  context: AiToolExecutionContext,
 ): AiToolExecution {
   if (protectedResult.status === "succeeded") {
+    const subject = aiDataPolicyService.subjectFrom({
+      userId: context.userId,
+      role: context.role,
+      permissions: context.permissions,
+      explicitRestrictedAccess: context.explicitRestrictedAccess,
+    });
+    const output = protectedResult.output
+      ? aiDataPolicyService.sanitizeToolOutput(
+          protectedResult.output as Record<string, unknown>,
+          subject,
+        )
+      : protectedResult.output;
+
+    // Prompt security — scrub injection / secrets in tool output text fields.
+    const securedOutput =
+      output && typeof output === "object"
+        ? scrubToolOutputGraph(output as Record<string, unknown>)
+        : output;
+
     return {
       toolId: execution.toolId,
       status: "succeeded",
       input: execution.input,
-      output: protectedResult.output,
+      output: securedOutput,
       executionTimeMs: protectedResult.executionTime,
       metadata: protectedResult.metadata,
     };
@@ -51,12 +75,104 @@ function toExecutionResult(
   };
 }
 
+function scrubToolOutputGraph(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (typeof v === "string") {
+      out[key] = promptSecurityService.sanitizeToolOutputText(v, {
+        surface: "tool_output",
+      });
+    } else if (v && typeof v === "object" && !Array.isArray(v)) {
+      out[key] = scrubToolOutputGraph(v as Record<string, unknown>);
+    } else {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+
 async function executeOneTool(
   execution: AiToolExecution,
   options: ExecuteEligibleToolsOptions,
   useReal: boolean,
   timeoutMs: number,
 ): Promise<AiToolExecution> {
+  promptSecurityService.assertSafeToolCall({
+    toolId: execution.toolId,
+    args: execution.input,
+    prompt: options.context.prompt,
+    context: {
+      userId: options.context.userId,
+      surface: "tool",
+      toolId: execution.toolId,
+    },
+  });
+
+  // Human Confirmation Engine — never auto-execute protected critical actions.
+  if (
+    useReal &&
+    humanConfirmationService.requiresConfirmation(execution.toolId)
+  ) {
+    const userId = options.context.userId?.trim();
+    if (!userId) {
+      return {
+        toolId: execution.toolId,
+        status: "failed",
+        input: execution.input,
+        error: "Authenticated user required for confirmation-gated tools",
+        errorMessage:
+          "Authenticated user required for confirmation-gated tools",
+        executionTimeMs: 0,
+        metadata: {
+          runner: "real",
+          confirmationRequired: true,
+          confirmationBlocked: "missing_user",
+        },
+      };
+    }
+
+    const confirmation = await humanConfirmationService.createConfirmation({
+      userId,
+      sessionId: options.context.sessionId ?? null,
+      tenantId:
+        options.context.tenantId ??
+        options.context.activeContext.organization?.organizationId ??
+        null,
+      toolId: execution.toolId,
+      args: { ...(execution.input ?? {}) },
+      conversationId: options.context.activeContext.conversationId,
+      mode: options.context.mode ?? null,
+      role: options.context.role ?? null,
+      permissions: options.context.permissions,
+    });
+
+    return {
+      toolId: execution.toolId,
+      status: "pending_confirmation",
+      input: execution.input,
+      output: {
+        confirmationRequired: true,
+        confirmationId: confirmation.confirmationId,
+        expiresAt: confirmation.expiresAt,
+        action: confirmation.action,
+        summary: confirmation.summary,
+        riskLevel: confirmation.riskLevel,
+      },
+      executionTimeMs: 0,
+      metadata: {
+        runner: "real",
+        confirmationRequired: true,
+        confirmationId: confirmation.confirmationId,
+        expiresAt: confirmation.expiresAt,
+        action: confirmation.action,
+        summary: confirmation.summary,
+        riskLevel: confirmation.riskLevel,
+      },
+    };
+  }
+
   const protectedResult = await runProtectedToolExecution(
     execution.toolId,
     timeoutMs,
@@ -80,7 +196,7 @@ async function executeOneTool(
     },
   );
 
-  return toExecutionResult(execution, protectedResult);
+  return toExecutionResult(execution, protectedResult, options.context);
 }
 
 async function executeSequentially(
@@ -301,6 +417,22 @@ export async function executeEligibleTools(
   executions: readonly AiToolExecution[],
   options: ExecuteEligibleToolsOptions,
 ): Promise<readonly AiToolExecution[]> {
+  // Defense in depth — AI tools must not run while password change is required.
+  // Primary enforcement is HTTP authenticate(); this blocks in-process bypasses.
+  if (options.context.userId) {
+    const decision = await passwordPolicyService.evaluateUser(
+      options.context.userId,
+    );
+    if (decision?.requiresChange) {
+      return executions.map((execution) => ({
+        ...execution,
+        status: "failed" as const,
+        error: "Password change required before tool execution",
+        output: undefined,
+      }));
+    }
+  }
+
   const useReal = isAiRealToolExecutionEnabled();
   const timeoutMs = resolveToolExecutionTimeoutMs();
 

@@ -1,9 +1,9 @@
 import type { Request } from "express";
 
-import { prisma, Prisma } from "@enterprise/database";
-
 import { isApiSecurityMonitoringEnabled } from "../../config/security-flags.js";
 import { AUTH_AUDIT_RESOURCE } from "../../modules/auth/auth.constants.js";
+import { securityMonitoringService } from "../security/monitoring/index.js";
+import { writeAuditLogSafe } from "../security/write-audit-log.js";
 
 const AUTH_Z_AUDIT_ACTIONS = {
   PERMISSION_DENIED: "authz.permission_denied",
@@ -50,45 +50,76 @@ function mapAction(
 export async function logAuthorizationDenied(
   input: AuthorizationDeniedInput,
 ): Promise<void> {
-  try {
-    const ip =
-      typeof input.req.headers["x-forwarded-for"] === "string"
-        ? input.req.headers["x-forwarded-for"].split(",")[0]?.trim()
-        : input.req.ip;
+  const ip =
+    typeof input.req.headers["x-forwarded-for"] === "string"
+      ? input.req.headers["x-forwarded-for"].split(",")[0]?.trim()
+      : input.req.ip;
 
-    const monitoring = isApiSecurityMonitoringEnabled();
+  const userAgent =
+    typeof input.req.headers["user-agent"] === "string"
+      ? input.req.headers["user-agent"]
+      : null;
 
-    await prisma.auditLog.create({
-      data: {
-        userId: input.req.auth?.userId ?? null,
-        action: mapAction(input.reason),
-        resource: AUTH_AUDIT_RESOURCE,
-        resourceId: input.req.originalUrl,
-        metadata: {
-          reason: input.reason,
-          method: input.req.method,
-          path: input.req.originalUrl,
-          role: input.req.auth?.role ?? null,
-          requiredRoles: input.requiredRoles ?? [],
-          requiredPermissions: input.requiredPermissions ?? [],
-          mode: input.mode ?? null,
-          ...(monitoring
-            ? {
-                sessionId: input.req.auth?.sessionId ?? null,
-                permissionCount: input.req.auth?.permissions?.length ?? 0,
-                monitoring: true,
-              }
-            : {}),
-        } as Prisma.InputJsonValue,
-        ipAddress: ip ?? null,
-        userAgent:
-          typeof input.req.headers["user-agent"] === "string"
-            ? input.req.headers["user-agent"]
-            : null,
+  const monitoring = isApiSecurityMonitoringEnabled();
+
+  await writeAuditLogSafe(
+    {
+      userId: input.req.auth?.userId ?? null,
+      action: mapAction(input.reason),
+      resource: AUTH_AUDIT_RESOURCE,
+      resourceId: input.req.originalUrl,
+      metadata: {
+        reason: input.reason,
+        method: input.req.method,
+        path: input.req.originalUrl,
+        role: input.req.auth?.role ?? null,
+        requiredRoles: input.requiredRoles ?? [],
+        requiredPermissions: input.requiredPermissions ?? [],
+        mode: input.mode ?? null,
+        ...(monitoring
+          ? {
+              sessionId: input.req.auth?.sessionId ?? null,
+              permissionCount: input.req.auth?.permissions?.length ?? 0,
+              monitoring: true,
+            }
+          : {}),
       },
+      ipAddress: ip ?? null,
+      userAgent,
+    },
+    "authz",
+  );
+
+  if (
+    input.reason === "admin_endpoint_denied" ||
+    input.reason === "role_mismatch"
+  ) {
+    void securityMonitoringService.reportPrivilegeEscalation({
+      userId: input.req.auth?.userId ?? null,
+      resource: "authz",
+      resourceId: input.req.originalUrl,
+      message: `Privilege escalation attempt: ${input.reason}`,
+      metadata: {
+        reason: input.reason,
+        requiredRoles: input.requiredRoles ?? [],
+        requiredPermissions: input.requiredPermissions ?? [],
+      },
+      ipAddress: ip ?? null,
+      userAgent,
     });
-  } catch (error) {
-    console.error("[authz] Failed to write authorization audit log:", error);
+  } else {
+    void securityMonitoringService.reportRbacDenial({
+      userId: input.req.auth?.userId ?? null,
+      resource: "authz",
+      resourceId: input.req.originalUrl,
+      message: `RBAC denial: ${input.reason}`,
+      metadata: {
+        reason: input.reason,
+        requiredPermissions: input.requiredPermissions ?? [],
+      },
+      ipAddress: ip ?? null,
+      userAgent,
+    });
   }
 }
 

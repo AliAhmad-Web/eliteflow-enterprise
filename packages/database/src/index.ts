@@ -75,6 +75,10 @@ export {
   IntegrationHealthStatus,
   IntegrationSyncStatus,
   IntegrationLogLevel,
+  RetentionLifecycleStatus,
+  RetentionEntityType,
+  RetentionJobRunStatus,
+  SecurityIncidentStatus,
 } from "./generated/client/index.js";
 
 export type {
@@ -175,4 +179,8 @@ export type {
   MeetingParticipant,
   MeetingRecording,
   MeetingScreenShare,
+  LegalHold,
+  RetentionLifecycle,
+  RetentionJobRun,
+  SecurityIncident,
 } from "./generated/client/index.js";

@@ -87,7 +87,7 @@ function baseRouteForNotification(notification: Notification): string | null {
       return ROUTES.CLIENTS;
     }
     if (entityType.includes("file") || notification.category === "FILE") {
-      return ROUTES.FILE_MANAGER;
+      return `${ROUTES.FILES}/${entityId}`;
     }
     if (
       entityType.includes("ai") ||
@@ -171,10 +171,18 @@ export function buildEntityDeepLink(
     [DEEP_LINK_PARAMS.SOURCE]: moduleFromCategory(notification.category),
   });
 
-  // Calendar / files historically used alternate param names — include both.
+  // Calendar historically used alternate param names — include both.
   if (base === ROUTES.CALENDAR) params.set("event", entityId);
-  if (base === ROUTES.FILE_MANAGER) params.set("file", entityId);
   if (base === ROUTES.AI_DOCUMENTS) params.set("id", entityId);
+
+  // Full-page file viewer — path already includes the id.
+  if (base.startsWith(`${ROUTES.FILES}/`)) {
+    return `${base}?${params.toString()}`;
+  }
+
+  if (base === ROUTES.FILE_MANAGER) {
+    return `${ROUTES.FILES}/${entityId}?${params.toString()}`;
+  }
 
   return `${base}?${params.toString()}`;
 }
