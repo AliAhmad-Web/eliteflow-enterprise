@@ -24,6 +24,7 @@ export {
   COMMUNICATION_API_PREFIX,
   SECURITY_API_PREFIX,
   SETTINGS_API_PREFIX,
+  SEARCH_API_PREFIX,
   INTEGRATIONS_API_PREFIX,
   WHITEBOARDS_API_PREFIX,
   AUTH_COOKIES,
@@ -1450,6 +1451,21 @@ export type {
   UpdateBillingSettingsInput,
   UpdateIntegrationCredentialInput,
 } from "./schemas/settings.schema.js";
+
+export {
+  GLOBAL_SEARCH_SCOPES,
+  globalSearchHitSchema,
+  globalSearchQuerySchema,
+  globalSearchResponseSchema,
+  globalSearchScopeSchema,
+} from "./schemas/search.schema.js";
+
+export type {
+  GlobalSearchHit,
+  GlobalSearchQueryInput,
+  GlobalSearchResponse,
+  GlobalSearchScope,
+} from "./schemas/search.schema.js";
 
 // Types — Integrations (Phase 19.1)
 export type {

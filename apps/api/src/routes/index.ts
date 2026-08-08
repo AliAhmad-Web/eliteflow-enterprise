@@ -18,6 +18,7 @@ import { securityRouter } from "../modules/security/index.js";
 import { settingsRouter } from "../modules/settings/index.js";
 import { integrationsRouter } from "../modules/integrations/index.js";
 import { whiteboardsRouter } from "../modules/whiteboards/index.js";
+import { searchRouter } from "../modules/search/index.js";
 import { buildSaasReadinessReport } from "../shared/services/saas-health.helpers.js";
 
 const apiRouter = Router();
@@ -38,6 +39,7 @@ apiRouter.use("/security", securityRouter);
 apiRouter.use("/settings", settingsRouter);
 apiRouter.use("/integrations", integrationsRouter);
 apiRouter.use("/whiteboards", whiteboardsRouter);
+apiRouter.use("/search", searchRouter);
 
 apiRouter.get("/health", (_req, res) => {
   // Contract preserved: always { status, timestamp }.

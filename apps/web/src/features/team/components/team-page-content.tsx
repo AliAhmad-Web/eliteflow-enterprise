@@ -43,10 +43,12 @@ import {
 } from "lucide-react";
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useSearchParams } from "next/navigation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 import { EmptyState } from "@/components/common/feedback/empty-state";
@@ -69,6 +71,7 @@ import { useAuthStore } from "@/features/auth/stores/auth.store";
 import {
   useAdvancedPerformanceProfiler,
 } from "@/features/performance";
+import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
 import {
   useHasPermission,
   useRole,
@@ -251,6 +254,7 @@ export function TeamPageContent() {
   const canManage = useHasPermission(PERMISSIONS.TEAM_MANAGE) && !isClient;
   const canManageOrg = isSuperAdmin;
   const currentUserId = useAuthStore((state) => state.user?.id);
+  const searchParams = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<TeamTab>("overview");
   const [search, setSearch] = useState("");
@@ -306,6 +310,18 @@ export function TeamPageContent() {
     editing: EmployeeGoal | null;
   }>({ open: false, editing: null });
   const [exportCsvPending, setExportCsvPending] = useState(false);
+
+  useEntityDeepLink((openId) => {
+    setActiveTab("directory");
+    setProfileId(openId);
+  });
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (!q) return;
+    setActiveTab("directory");
+    setSearch(q);
+  }, [searchParams]);
 
   const employeeQueryInput = useMemo<ListEmployeesQueryInput>(
     () => ({
