@@ -44,6 +44,11 @@ export const ZERO_TRUST_ROUTE_CLASSIFICATIONS: Array<{
   prefix: string;
   classification: DataClassification;
 }> = [
+  // Read-only status telemetry stays CONFIDENTIAL so Admin Ops can load
+  // without MFA. Mutating retention/audit routes remain RESTRICTED below.
+  { prefix: "/security/retention/status", classification: "CONFIDENTIAL" },
+  { prefix: "/security/audit/verify", classification: "CONFIDENTIAL" },
+  { prefix: "/security/audit/export", classification: "RESTRICTED" },
   { prefix: "/security/audit", classification: "RESTRICTED" },
   { prefix: "/security/retention", classification: "RESTRICTED" },
   { prefix: "/security/zero-trust", classification: "CONFIDENTIAL" },

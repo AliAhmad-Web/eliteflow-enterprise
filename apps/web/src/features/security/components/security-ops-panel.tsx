@@ -100,14 +100,31 @@ export function SecurityOpsPanel() {
     }
   }
 
-  const anyStatusError =
-    retention.isError ||
-    siem.isError ||
-    backup.isError ||
-    encryption.isError ||
-    dr.isError ||
-    webhooks.isError ||
-    apiVersioning.isError;
+  const statusQueries = [
+    { key: "Retention", query: retention },
+    { key: "SIEM", query: siem },
+    { key: "Backup", query: backup },
+    { key: "Encryption", query: encryption },
+    { key: "Disaster recovery", query: dr },
+    { key: "Webhooks", query: webhooks },
+    { key: "API versioning", query: apiVersioning },
+  ] as const;
+
+  const failedStatuses = statusQueries.filter((item) => item.query.isError);
+  const anyStatusError = failedStatuses.length > 0;
+  const statusErrorLooksLikeTrustOrMfa = failedStatuses.some((item) => {
+    const err = item.query.error;
+    if (!(err instanceof ApiClientError)) return false;
+    const code = String(err.code ?? "");
+    const message = err.message.toLowerCase();
+    return (
+      err.status === 403 &&
+      (code.includes("TRUST_") ||
+        message.includes("mfa") ||
+        message.includes("step-up") ||
+        message.includes("restricted"))
+    );
+  });
 
   const pending =
     ops.verifyAuditChain.isPending ||
@@ -165,7 +182,11 @@ export function SecurityOpsPanel() {
         {anyStatusError ? (
           <ErrorState
             title="Unable to load some admin status endpoints"
-            description="You may lack access, or a subsystem is unavailable."
+            description={
+              statusErrorLooksLikeTrustOrMfa
+                ? `Blocked for: ${failedStatuses.map((item) => item.key).join(", ")}. Super Admin MFA enrollment may be required (Settings → Security), or Zero Trust blocked the request.`
+                : `Failed: ${failedStatuses.map((item) => item.key).join(", ")}. You may lack access, or a subsystem is unavailable.`
+            }
             className="min-h-28 py-6 sm:min-h-32"
             onRetry={() => {
               void retention.refetch();

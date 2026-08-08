@@ -1257,7 +1257,8 @@ export function resolveRecipientsForAssistant(
     }
   }
 
-  // Scan catalog names mentioned inside the full prompt
+  // Scan catalog names mentioned inside the full prompt (employees only).
+  // Never treat the entire natural-language instruction as a directory query.
   if (fullPrompt) {
     const mentioned = findMentionedEmployees(prompt, catalog);
     if (mentioned.length > 1 && mentioned.every((m) => {
@@ -1288,15 +1289,31 @@ export function resolveRecipientsForAssistant(
       }
       return { query: q, matched: mentioned, unresolved: [], ambiguous: [] };
     }
+
+    // Group / shared audiences mentioned in the full prompt (e.g. "… HR ko …")
+    if (!q) {
+      const audience = extractInformAudience(prompt);
+      if (audience) {
+        const fromAudience = resolveRecipientsFromQuery(audience, catalog);
+        if (fromAudience.matched.length > 0) {
+          return { ...fromAudience, ambiguous: [] };
+        }
+      }
+    }
   }
 
-  const resolved = resolveRecipientsFromQuery(q || (fullPrompt ?? ""), catalog);
+  // Directory lookup only against an extracted recipient phrase — never the
+  // full NL / STT transcript (that produced "couldn't find '<entire prompt>'").
+  if (!q) {
+    return { query: q, matched: [], unresolved: [], ambiguous: [] };
+  }
+
+  const resolved = resolveRecipientsFromQuery(q, catalog);
   // If resolve returned multiple employees from one name token, treat as ambiguous
   const employeesOnly = resolved.matched.filter((m) => m.kind === "employee");
   if (
     employeesOnly.length > 1 &&
     resolved.matched.length === employeesOnly.length &&
-    q &&
     !/,|;| and | aur /i.test(q)
   ) {
     return {
@@ -1360,6 +1377,12 @@ function findMentionedEmployees(
   );
 }
 
+function resolveVoiceRecipientQuery(p: string): string | undefined {
+  // Prefer known org audiences (HR, finance, …) over person-phrase extraction.
+  // Otherwise Roman Urdu fillers like "mujhe hr ko …" become "mujhe hr".
+  return extractInformAudience(p) ?? extractRecipientPhrase(p);
+}
+
 export function parseVoiceEmailCommand(utterance: string): VoiceEmailIntent {
   const raw = utterance.trim();
   const p = normalize(raw);
@@ -1373,7 +1396,7 @@ export function parseVoiceEmailCommand(utterance: string): VoiceEmailIntent {
     return {
       kind: "schedule",
       raw,
-      recipientQuery: extractRecipientPhrase(p) ?? extractInformAudience(p),
+      recipientQuery: resolveVoiceRecipientQuery(p),
       topic: extractTopicPhrase(p) ?? raw,
       scheduleHint: scheduleMatch?.[1] ?? "tomorrow 09:00",
       style: detectDraftStyle(p),
@@ -1384,7 +1407,7 @@ export function parseVoiceEmailCommand(utterance: string): VoiceEmailIntent {
     return {
       kind: "reply",
       raw,
-      recipientQuery: extractRecipientPhrase(p),
+      recipientQuery: resolveVoiceRecipientQuery(p),
       topic: extractTopicPhrase(p),
       style: "customer_reply",
     };
@@ -1394,16 +1417,16 @@ export function parseVoiceEmailCommand(utterance: string): VoiceEmailIntent {
     return {
       kind: "forward",
       raw,
-      recipientQuery: extractRecipientPhrase(p),
+      recipientQuery: resolveVoiceRecipientQuery(p),
       topic: extractTopicPhrase(p),
     };
   }
 
-  if (/\bdraft\b|تیار|prepare draft/.test(p)) {
+  if (/\bdraft\b|تیار|prepare draft|\blikh\b|likho|write\b/.test(p)) {
     return {
       kind: "draft",
       raw,
-      recipientQuery: extractRecipientPhrase(p) ?? extractInformAudience(p),
+      recipientQuery: resolveVoiceRecipientQuery(p),
       topic: extractTopicPhrase(p) ?? raw,
       style: detectDraftStyle(p),
     };
@@ -1411,14 +1434,14 @@ export function parseVoiceEmailCommand(utterance: string): VoiceEmailIntent {
 
   // "Inform all employees…", "Send email…", meeting announcements → send
   if (
-    /\bsend\b|email|بھیج|mail|inform|notify|announce|meeting|bhej|kar do|میٹنگ/.test(
+    /\bsend\b|email|e-?mail|بھیج|mail|inform|notify|announce|meeting|bhej|kar do|diya|likh|likho|write\b|میٹنگ/.test(
       p,
     )
   ) {
     return {
       kind: "send",
       raw,
-      recipientQuery: extractRecipientPhrase(p) ?? extractInformAudience(p),
+      recipientQuery: resolveVoiceRecipientQuery(p),
       topic: extractTopicPhrase(p) ?? raw,
       style:
         detectDraftStyle(p) === "professional" && /meeting|میٹنگ|zoom/.test(p)
@@ -1430,6 +1453,7 @@ export function parseVoiceEmailCommand(utterance: string): VoiceEmailIntent {
   return {
     kind: "unknown",
     raw,
+    recipientQuery: resolveVoiceRecipientQuery(p),
     topic: raw,
     style: detectDraftStyle(p),
   };
@@ -1461,14 +1485,49 @@ function extractInformAudience(p: string): string | undefined {
   return undefined;
 }
 
+const ROMAN_URDU_FILLERS =
+  /^(?:mujhe|mujhse|please|pls|plz|main|mein|mera|meri|mere|ek|aik|a|an|the|can you|could you|i want|i need)\s+/i;
+
+/** Verbs / filler mistaken for directory names after STT noise. */
+const NON_RECIPIENT_QUERY =
+  /^(?:kar|do|diya|diye|likh|likho|write|draft|send|email|mail|thanks|thank|yogi|mel|char|the|a|an)(?:\s+(?:kar|do|diya|diye|likh|email|mail|char))?$/i;
+
+function stripRecipientFillers(name: string): string {
+  let cleaned = name.trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = cleaned.replace(ROMAN_URDU_FILLERS, "").trim();
+    if (next === cleaned) break;
+    cleaned = next;
+  }
+  return cleaned;
+}
+
+function isPlausibleRecipientQuery(name: string): boolean {
+  const cleaned = name.trim();
+  if (!cleaned || cleaned.length < 2) return false;
+  if (NON_RECIPIENT_QUERY.test(cleaned)) return false;
+  // Whole NL instructions are never a single directory key
+  if (cleaned.split(/\s+/).length > 5) return false;
+  return true;
+}
+
 function extractRecipientPhrase(p: string): string | undefined {
   // Urdu / Roman Urdu: "Ali Ahmad ko thank you email bhej do"
+  // Also: "Mujhe HR ko thanks ka email likh kar do" → "hr" (fillers stripped)
   const koName = p.match(
-    /^([a-z\u0600-\u06FF][a-z0-9\s&.\u0600-\u06FF'-]{1,40}?)\s+ko\s+/i,
+    /(?:^|\s)([a-z\u0600-\u06FF][a-z0-9\s&.\u0600-\u06FF'-]{0,40}?)\s+ko\s+/i,
   );
   if (koName?.[1]) {
-    const name = koName[1].trim();
-    if (name && !/^(all|everyone|sab|tamam|please)$/i.test(name)) return name;
+    const name = stripRecipientFillers(koName[1]);
+    if (
+      name &&
+      isPlausibleRecipientQuery(name) &&
+      !/^(all|everyone|sab|tamam|please|mujhe|thanks|thank|email|mail)$/i.test(
+        name,
+      )
+    ) {
+      return name;
+    }
   }
 
   // Prefer trailing "to <Name>" so "Send a thank you email to Ali Ahmad" → "Ali Ahmad"
@@ -1476,20 +1535,27 @@ function extractRecipientPhrase(p: string): string | undefined {
     /\b(?:to|کو)\s+([a-z\u0600-\u06FF][a-z0-9\s&.\u0600-\u06FF'-]{0,60})$/i,
   );
   if (toTail?.[1]) {
-    const name = toTail[1].trim();
-    if (name && !/^(all|everyone|the|a|an|me|him|her|them)$/i.test(name)) {
+    const name = stripRecipientFillers(toTail[1]);
+    if (
+      name &&
+      isPlausibleRecipientQuery(name) &&
+      !/^(all|everyone|the|a|an|me|him|her|them)$/i.test(name)
+    ) {
       return name;
     }
   }
 
+  // Do NOT treat "likh/write …" trailing text as a recipient — in Roman Urdu the
+  // recipient comes before "ko", and in English before/after "to".
   const m =
     p.match(
-      /(?:to|کو)\s+([a-z0-9\s&.\u0600-\u06FF-]+?)(?:\s+(?:about|regarding|ke|کی|کا|کو|بھیج|send|reply|forward|draft|inform|bhej)|$)/i,
+      /(?:to|کو)\s+([a-z0-9\s&.\u0600-\u06FF-]+?)(?:\s+(?:about|regarding|ke|کی|کا|کو|بھیج|send|reply|forward|draft|inform|bhej|likh|write|thanks|thank)|$)/i,
     ) ??
     p.match(
       /(?:send|email|mail|بھیج|bhej|inform)\s+(?:to\s+)?([a-z0-9\s&.-]+?)(?:\s+(?:about|regarding|کی|کا|ko)|$)/i,
     );
-  return m?.[1]?.trim();
+  const captured = m?.[1] ? stripRecipientFillers(m[1]) : undefined;
+  return captured && isPlausibleRecipientQuery(captured) ? captured : undefined;
 }
 
 function extractTopicPhrase(p: string): string | undefined {
@@ -1712,10 +1778,19 @@ export function composeAiEmailIntent(input: {
     };
   }
 
-  // No recipient resolved — ask rather than invent
+  // No recipient resolved — ask rather than invent / directory-search the whole prompt
   if (matched.length === 0) {
-    const missing = recipientQuery || unresolved[0] || "the recipient";
-    const assistantMessage = `I couldn't find "${missing}" in your organization directory. Please check the name and try again.`;
+    const missingCandidate =
+      (recipientQuery && recipientQuery.trim()) ||
+      unresolved.find((item) => item.trim().length > 0 && item !== normalize(input.prompt)) ||
+      "";
+    const looksLikeFullPrompt =
+      !missingCandidate ||
+      normalize(missingCandidate) === normalize(input.prompt) ||
+      missingCandidate.trim().split(/\s+/).length > 6;
+    const assistantMessage = looksLikeFullPrompt
+      ? "I couldn't determine who should receive this email. Please name a person or team in your organization directory (for example, HR)."
+      : `I couldn't find "${missingCandidate}" in your organization directory. Please check the name and try again.`;
     return {
       subject: "",
       body: "",
@@ -1725,7 +1800,11 @@ export function composeAiEmailIntent(input: {
       emailType,
       language,
       recipients: [],
-      unresolved: unresolved.length > 0 ? unresolved : [missing],
+      unresolved: looksLikeFullPrompt
+        ? []
+        : unresolved.length > 0
+          ? unresolved
+          : [missingCandidate],
       ambiguousCandidates: [],
       needsDisambiguation: false,
       originalPrompt: input.prompt,
