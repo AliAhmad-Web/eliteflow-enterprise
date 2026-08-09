@@ -19,10 +19,6 @@ function hasPermission(actor: SearchActor, key: string): boolean {
   return actor.permissions.includes(key) || actor.permissions.includes("*");
 }
 
-function isSuperAdmin(actor: SearchActor): boolean {
-  return actor.role === UserRole.SUPER_ADMIN;
-}
-
 function isAdmin(actor: SearchActor): boolean {
   return (
     actor.role === UserRole.ADMIN ||
@@ -1008,29 +1004,32 @@ export class SearchService {
   }
 
   private async searchReports(q: string, limit: number, actor: SearchActor) {
+    // Saved reports are owner-private by default; only return records the
+    // actor can open (own, or shared TEAM/COMPANY — never other users' PRIVATE).
     const where: Prisma.SavedReportWhereInput = {
       deletedAt: null,
       OR: [
         { name: { contains: q, mode: "insensitive" } },
         { description: { contains: q, mode: "insensitive" } },
       ],
+      AND: [
+        isClient(actor)
+          ? { ownerId: actor.userId }
+          : isAdmin(actor)
+            ? {
+                OR: [
+                  { ownerId: actor.userId },
+                  { visibility: { in: ["TEAM", "COMPANY"] } },
+                ],
+              }
+            : {
+                OR: [
+                  { ownerId: actor.userId },
+                  { visibility: { in: ["TEAM", "COMPANY"] } },
+                ],
+              },
+      ],
     };
-
-    if (!isAdmin(actor) && !isSuperAdmin(actor)) {
-      where.AND = [
-        {
-          OR: [
-            { ownerId: actor.userId },
-            { visibility: { in: ["TEAM", "COMPANY"] } },
-          ],
-        },
-      ];
-    }
-
-    // Clients only see their own saved reports (never company-wide internals).
-    if (isClient(actor)) {
-      where.AND = [{ ownerId: actor.userId }];
-    }
 
     const rows = await prisma.savedReport.findMany({
       where,
@@ -1064,22 +1063,17 @@ export class SearchService {
     limit: number,
     actor: SearchActor,
   ) {
-    const where: Prisma.AiDocumentWhereInput = {
-      deletedAt: null,
-      OR: [
-        { title: { contains: q, mode: "insensitive" } },
-        { prompt: { contains: q, mode: "insensitive" } },
-        { content: { contains: q, mode: "insensitive" } },
-      ],
-    };
-
-    // AI docs are private per owner unless admin/super-admin.
-    if (!isAdmin(actor)) {
-      where.userId = actor.userId;
-    }
-
+    // AI Documents module is owner-scoped (list/get require userId).
+    // Never return another user's docs from search — clicks would 404.
     const rows = await prisma.aiDocument.findMany({
-      where,
+      where: {
+        deletedAt: null,
+        userId: actor.userId,
+        OR: [
+          { title: { contains: q, mode: "insensitive" } },
+          { prompt: { contains: q, mode: "insensitive" } },
+        ],
+      },
       take: limit,
       orderBy: { updatedAt: "desc" },
       select: {
@@ -1151,7 +1145,7 @@ export class SearchService {
         ]
           .filter(Boolean)
           .join(" · "),
-        href: `/announcements?open=${encodeURIComponent(row.id)}`,
+        href: `/announcements`,
       }),
     );
   }
