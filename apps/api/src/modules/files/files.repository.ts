@@ -377,8 +377,8 @@ export class FilesRepository {
 
   findProjectId(id: string) {
     return prisma.project.findFirst({
-      where: { id },
-      select: { id: true },
+      where: { id, deletedAt: null },
+      select: { id: true, clientId: true },
     });
   }
 

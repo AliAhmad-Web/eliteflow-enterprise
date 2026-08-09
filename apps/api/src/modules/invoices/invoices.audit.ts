@@ -31,4 +31,5 @@ export const INVOICE_AUDIT_ACTIONS = {
   UPDATE: "invoice.update",
   DELETE: "invoice.delete",
   PDF: "invoice.pdf",
+  PAYMENT_NOTICE: "invoice.payment_notice",
 } as const;

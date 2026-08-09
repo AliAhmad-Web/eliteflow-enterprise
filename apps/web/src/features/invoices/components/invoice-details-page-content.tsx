@@ -19,7 +19,7 @@ import {
 } from "@/features/rbac/hooks/use-permissions";
 import { ApiClientError } from "@/services/api/api-error";
 
-import { useDownloadInvoicePdf } from "../hooks/use-invoice-mutations";
+import { useDownloadInvoicePdf, useReportInvoicePaymentNotice } from "../hooks/use-invoice-mutations";
 import { useInvoice } from "../hooks/use-invoices";
 import { INVOICE_STATUS_LABELS } from "../types/invoices.types";
 import { DeleteInvoiceDialog } from "./delete-invoice-dialog";
@@ -60,7 +60,7 @@ export function InvoiceDetailsPageContent() {
   const invoiceId = params.id;
   const router = useRouter();
 
-  const { isAdmin } = useRole();
+  const { isAdmin, isClient } = useRole();
   const hasWrite = useHasPermission(PERMISSIONS.INVOICES_WRITE);
   const hasDelete = useHasPermission(PERMISSIONS.INVOICES_DELETE);
   const canWrite = isAdmin && hasWrite;
@@ -68,8 +68,10 @@ export function InvoiceDetailsPageContent() {
 
   const invoiceQuery = useInvoice(invoiceId);
   const pdfMutation = useDownloadInvoicePdf();
+  const paymentNoticeMutation = useReportInvoicePaymentNotice();
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
   const invoice = invoiceQuery.data;
 
@@ -283,6 +285,59 @@ export function InvoiceDetailsPageContent() {
               <DetailItem label="Tax rate" value={`${invoice.taxRate}%`} />
             </CardContent>
           </Card>
+
+          {isClient &&
+          invoice.status !== "PAID" &&
+          invoice.status !== "CANCELLED" ? (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="text-base">Pay offline</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Online card payment is not enabled. Please pay using your
+                  agreed bank transfer / check / offline method, then notify
+                  EliteFlow so finance can confirm and mark this invoice paid.
+                </p>
+                <p>
+                  Contact your EliteFlow administrator if you need payment
+                  instructions for{" "}
+                  <span className="font-medium text-foreground">
+                    {invoice.invoiceNumber}
+                  </span>
+                  .
+                </p>
+                {paymentNotice ? (
+                  <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400" role="status">
+                    {paymentNotice}
+                  </p>
+                ) : null}
+                {paymentNoticeMutation.error instanceof ApiClientError ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {paymentNoticeMutation.error.message}
+                  </p>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={paymentNoticeMutation.isPending}
+                  onClick={() => {
+                    void paymentNoticeMutation
+                      .mutateAsync({ id: invoice.id })
+                      .then(() => {
+                        setPaymentNotice(
+                          "Payment notice sent. EliteFlow will verify your offline payment.",
+                        );
+                      })
+                      .catch(() => undefined);
+                  }}
+                >
+                  {paymentNoticeMutation.isPending
+                    ? "Sending…"
+                    : "I've paid — notify EliteFlow"}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
 

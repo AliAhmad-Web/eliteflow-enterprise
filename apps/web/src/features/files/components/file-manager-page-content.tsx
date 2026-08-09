@@ -51,7 +51,6 @@ import {
 } from "@/features/ai/components/ai-ui-toast";
 import {
   useHasPermission,
-  useRole,
 } from "@/features/rbac/hooks/use-permissions";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
 import { ApiClientError } from "@/services/api/api-error";
@@ -99,8 +98,7 @@ export function FileManagerPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { isClient } = useRole();
-  const canUpload = useHasPermission(PERMISSIONS.FILES_UPLOAD) && !isClient;
+  const canUpload = useHasPermission(PERMISSIONS.FILES_UPLOAD);
   const { toasts, pushToast, dismiss } = useAiUiToasts();
 
   const tree = useFolderTreeState();

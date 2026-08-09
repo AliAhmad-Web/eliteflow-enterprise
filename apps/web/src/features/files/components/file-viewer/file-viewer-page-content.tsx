@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { ROUTES } from "@/constants/routes";
 import {
   useHasPermission,
-  useRole,
 } from "@/features/rbac/hooks/use-permissions";
 
 import {
@@ -45,8 +44,7 @@ export function FileViewerPageContent() {
   const params = useParams<{ id: string }>();
   const fileId = typeof params?.id === "string" ? params.id : "";
   const router = useRouter();
-  const { isClient } = useRole();
-  const canWrite = useHasPermission(PERMISSIONS.FILES_UPLOAD) && !isClient;
+  const canWrite = useHasPermission(PERMISSIONS.FILES_UPLOAD);
 
   const detailQuery = useFileDetail(fileId || null);
   const versionsQuery = useFileVersions(fileId || null);

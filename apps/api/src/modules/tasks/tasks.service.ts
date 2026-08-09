@@ -1,3 +1,7 @@
+import {
+  NotificationCategory,
+  NotificationPriority,
+} from "@enterprise/database";
 import { UserRole } from "@enterprise/shared";
 import type {
   CreateTaskCommentInput,
@@ -28,6 +32,7 @@ import {
 } from "./tasks.types.js";
 import { queuePerformanceRecalcForUser } from "../team/performance-recalc.queue.js";
 import { attachmentSecurityService } from "../files/attachment-security.service.js";
+import { notificationDispatcher } from "../notifications/notification.dispatcher.js";
 
 export interface TaskActor {
   userId: string;
@@ -247,14 +252,6 @@ export class TasksService {
     input: CreateTaskCommentInput,
     actor: TaskActor,
   ): Promise<TaskCommentDto> {
-    if (actor.role === UserRole.CLIENT) {
-      throw new TasksError(
-        "Clients cannot comment on tasks",
-        403,
-        TASKS_ERROR_CODES.FORBIDDEN,
-      );
-    }
-
     const scope = await this.resolveScope(actor);
     const task = await tasksRepository.findById(id, scope);
     if (!task) {
@@ -276,16 +273,47 @@ export class TasksService {
       );
     }
 
+    // CLIENT may leave feedback/change requests only on company-scoped tasks
+    // (already enforced by resolveScope + findById above).
+
     const comment = await tasksRepository.addComment(id, input, actor.userId);
 
     await logTaskAuditEvent({
       userId: actor.userId,
       action: TASK_AUDIT_ACTIONS.COMMENT,
       resourceId: id,
-      metadata: { commentId: comment.id },
+      metadata: {
+        commentId: comment.id,
+        fromClient: actor.role === UserRole.CLIENT,
+      },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
+
+    if (actor.role === UserRole.CLIENT) {
+      void notificationDispatcher.notify({
+        title: "Client feedback on task",
+        body: `${actor.email}: ${input.body.substring(0, 180)}`,
+        category: NotificationCategory.TASK,
+        priority: NotificationPriority.HIGH,
+        linkUrl: `/tasks/${id}`,
+        entityType: "Task",
+        entityId: id,
+        audience: { type: "ROLE", roleCode: "ADMIN" },
+        createdById: actor.userId,
+      });
+      void notificationDispatcher.notify({
+        title: "Client feedback on task",
+        body: `${actor.email}: ${input.body.substring(0, 180)}`,
+        category: NotificationCategory.TASK,
+        priority: NotificationPriority.HIGH,
+        linkUrl: `/tasks/${id}`,
+        entityType: "Task",
+        entityId: id,
+        audience: { type: "ROLE", roleCode: "SUPER_ADMIN" },
+        createdById: actor.userId,
+      });
+    }
 
     return toTaskCommentDto(comment);
   }

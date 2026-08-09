@@ -3,6 +3,7 @@ import {
   type CreateInvoiceInput,
   type Invoice,
   type InvoiceListResponse,
+  type InvoicePaymentNoticeInput,
   type InvoiceStats,
   type ListInvoicesQueryInput,
   type UpdateInvoiceInput,
@@ -69,6 +70,14 @@ export const invoicesService = {
         auth: true,
       },
     );
+  },
+
+  reportPaymentNotice(id: string, input: InvoicePaymentNoticeInput = {}) {
+    return apiRequest<Invoice>(`${INVOICES_API_PREFIX}/${id}/payment-notice`, {
+      method: "POST",
+      body: input,
+      auth: true,
+    });
   },
 
   async downloadPdf(id: string): Promise<{ blob: Blob; filename: string }> {

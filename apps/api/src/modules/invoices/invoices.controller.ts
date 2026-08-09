@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import type {
   CreateInvoiceInput,
   InvoiceIdParamsInput,
+  InvoicePaymentNoticeInput,
   ListInvoicesQueryInput,
   UpdateInvoiceInput,
 } from "@enterprise/shared";
@@ -90,6 +91,22 @@ export class InvoicesController {
       `attachment; filename="${result.filename}"`,
     );
     res.send(result.buffer);
+  }
+
+  async reportPaymentNotice(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as InvoiceIdParamsInput;
+    const body = req.body as InvoicePaymentNoticeInput;
+    const result = await invoicesService.reportPaymentNotice(
+      params.id,
+      body,
+      getActor(req),
+    );
+    res.json(
+      successResponse(
+        result,
+        "Payment notice submitted. EliteFlow will verify offline payment.",
+      ),
+    );
   }
 }
 

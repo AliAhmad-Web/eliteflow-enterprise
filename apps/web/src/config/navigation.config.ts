@@ -148,83 +148,91 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
           PERMISSIONS.CHAT_WRITE,
         ],
       },
-      {
-        title: "Channels",
-        href: ROUTES.CHANNELS,
-        icon: Hash,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-        ],
-      },
-      {
-        title: "Announcements",
-        href: ROUTES.ANNOUNCEMENTS,
-        icon: Megaphone,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-        ],
-      },
-      {
-        title: "Threads",
-        href: ROUTES.THREADS,
-        icon: MessagesSquare,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-        ],
-      },
-      {
-        title: "Meetings",
-        href: ROUTES.MEETINGS,
-        icon: Video,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-        ],
-      },
-      {
-        title: "Activity",
-        href: ROUTES.ACTIVITY,
-        icon: Activity,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-          PERMISSIONS.COMMUNICATION_WRITE,
-          PERMISSIONS.CHAT_WRITE,
-        ],
-      },
-      {
-        title: "Voice AI",
-        href: ROUTES.VOICE_AI,
-        icon: Mic,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-          PERMISSIONS.AI_USE,
-        ],
-      },
-      {
-        title: "WhatsApp",
-        href: ROUTES.WHATSAPP,
-        icon: MessageCircle,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-          PERMISSIONS.NOTIFICATIONS_READ,
-        ],
-      },
-      {
-        title: "Email Automation",
-        href: ROUTES.EMAIL_AUTOMATION,
-        icon: Mail,
-        anyPermissions: [
-          PERMISSIONS.COMMUNICATION_READ,
-          PERMISSIONS.CHAT_READ,
-          PERMISSIONS.NOTIFICATIONS_READ,
-        ],
-      },
+  {
+    title: "Channels",
+    href: ROUTES.CHANNELS,
+    icon: Hash,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+    ],
+  },
+  {
+    title: "Announcements",
+    href: ROUTES.ANNOUNCEMENTS,
+    icon: Megaphone,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+    ],
+  },
+  {
+    title: "Threads",
+    href: ROUTES.THREADS,
+    icon: MessagesSquare,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+    ],
+  },
+  {
+    title: "Meetings",
+    href: ROUTES.MEETINGS,
+    icon: Video,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+    ],
+  },
+  {
+    title: "Activity",
+    href: ROUTES.ACTIVITY,
+    icon: Activity,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+      PERMISSIONS.COMMUNICATION_WRITE,
+      PERMISSIONS.CHAT_WRITE,
+    ],
+  },
+  {
+    title: "Voice AI",
+    href: ROUTES.VOICE_AI,
+    icon: Mic,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+      PERMISSIONS.AI_USE,
+    ],
+  },
+  {
+    title: "WhatsApp",
+    href: ROUTES.WHATSAPP,
+    icon: MessageCircle,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+      PERMISSIONS.NOTIFICATIONS_READ,
+    ],
+  },
+  {
+    title: "Email Automation",
+    href: ROUTES.EMAIL_AUTOMATION,
+    icon: Mail,
+    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
+    anyPermissions: [
+      PERMISSIONS.COMMUNICATION_READ,
+      PERMISSIONS.CHAT_READ,
+      PERMISSIONS.NOTIFICATIONS_READ,
+    ],
+  },
     ],
   },
   {
@@ -240,8 +248,8 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         title: "Whiteboard",
         href: ROUTES.WHITEBOARD,
         icon: PenTool,
-        // Visible to every signed-in user (same pattern as Security / Downloads).
-        // API still enforces whiteboards:read|write|delete.
+        permission: PERMISSIONS.WHITEBOARDS_READ,
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
       },
       {
         title: "File Manager",
@@ -254,6 +262,7 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.REPORTS,
         icon: BarChart3,
         permission: PERMISSIONS.REPORTS_READ,
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
       },
       {
         title: "Team",
@@ -275,13 +284,14 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
           UserRole.SUPER_ADMIN,
           UserRole.ADMIN,
           UserRole.EMPLOYEE,
-          UserRole.CLIENT,
         ],
       },
       {
         title: "Security",
         href: ROUTES.SECURITY,
         icon: Shield,
+        // Security Ops console — not Client Portal.
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
       },
       {
         title: "Settings",

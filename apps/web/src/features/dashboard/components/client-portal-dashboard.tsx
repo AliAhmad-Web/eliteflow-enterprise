@@ -266,12 +266,21 @@ function ClientLinkedDashboard({
       iconClassName: "bg-chart-1/15 text-chart-1 ring-chart-1/20",
     },
     {
+      id: "completed",
+      label: "Completed projects",
+      value: String(projectStats?.completed ?? 0),
+      change: 0,
+      trend: "neutral",
+      icon: CheckSquare,
+      iconClassName: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20",
+    },
+    {
       id: "open-tasks",
       label: "Open tasks",
       value: String(openTasks),
       change: 0,
       trend: "neutral",
-      icon: CheckSquare,
+      icon: ClipboardList,
       iconClassName: "bg-chart-3/15 text-chart-3 ring-chart-3/20",
     },
     {

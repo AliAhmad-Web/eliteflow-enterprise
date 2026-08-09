@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
+import { EntityCommentsPanel } from "@/features/communication/components/entity-comments-panel";
 
 import { useProject } from "../hooks/use-projects";
 import {
@@ -243,6 +244,20 @@ export function ProjectDetailsDialog({
                   ))}
                 </ul>
               )}
+            </section>
+
+            <section className="space-y-3 rounded-xl border border-border/50 p-4">
+              <h4 className="text-sm font-semibold text-foreground">
+                Feedback & change requests
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Share project feedback with the EliteFlow team. Comments stay
+                scoped to this project.
+              </p>
+              <EntityCommentsPanel
+                entityType="PROJECT"
+                entityId={project.id}
+              />
             </section>
 
             <DialogFooter className="gap-2 sm:justify-between">

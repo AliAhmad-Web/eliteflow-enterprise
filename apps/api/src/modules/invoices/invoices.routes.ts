@@ -17,6 +17,7 @@ import { invoicesController } from "./invoices.controller.js";
 import {
   createInvoiceSchema,
   invoiceIdParamsSchema,
+  invoicePaymentNoticeSchema,
   listInvoicesQuerySchema,
   updateInvoiceSchema,
 } from "./invoices.validation.js";
@@ -59,6 +60,21 @@ invoicesRouter.get(
   }),
   validate(invoiceIdParamsSchema, "params"),
   asyncHandler((req, res) => invoicesController.pdf(req, res)),
+);
+
+invoicesRouter.post(
+  "/:id/payment-notice",
+  authorizePermissions(PERMISSIONS.INVOICES_READ),
+  authorizeRoles(UserRole.CLIENT),
+  rateLimit({
+    name: "invoices.payment_notice",
+    max: 20,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(invoiceIdParamsSchema, "params"),
+  validate(invoicePaymentNoticeSchema, "body"),
+  asyncHandler((req, res) => invoicesController.reportPaymentNotice(req, res)),
 );
 
 invoicesRouter.get(

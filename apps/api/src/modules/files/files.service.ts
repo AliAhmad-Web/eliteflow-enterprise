@@ -339,6 +339,8 @@ export class FilesService {
   /**
    * Upload association validation (FS-06).
    * Never trust client-supplied folderId / projectId / clientId.
+   * CLIENT uploads are forced to authenticated companyId and may only
+   * target projects owned by that company.
    */
   private async assertUploadAssociations(
     actor: FilesActor,
@@ -347,10 +349,51 @@ export class FilesService {
       projectId?: string | null;
       clientId?: string | null;
     },
-  ): Promise<void> {
+  ): Promise<{
+    folderId: string | null;
+    projectId: string | null;
+    clientId: string | null;
+  }> {
     const folderId = meta.folderId ?? null;
-    const projectId = meta.projectId ?? null;
-    const clientId = meta.clientId ?? null;
+    let projectId = meta.projectId ?? null;
+    let clientId = meta.clientId ?? null;
+
+    if (isClient(actor)) {
+      if (!actor.companyId) {
+        throw new FilesError(
+          "Link your company account before uploading files",
+          403,
+          FILES_ERROR_CODES.FORBIDDEN,
+        );
+      }
+
+      // Never trust client-supplied company/client association.
+      if (clientId && clientId !== actor.companyId) {
+        throw new FilesError(
+          "Permission denied",
+          403,
+          FILES_ERROR_CODES.FORBIDDEN,
+        );
+      }
+      clientId = actor.companyId;
+
+      if (projectId) {
+        const project = await filesRepository.findProjectId(projectId);
+        if (!project || project.clientId !== actor.companyId) {
+          throw new FilesError(
+            "Permission denied",
+            403,
+            FILES_ERROR_CODES.FORBIDDEN,
+          );
+        }
+      }
+
+      if (folderId) {
+        await this.assertCanReadFolder(actor, folderId);
+      }
+
+      return { folderId, projectId, clientId };
+    }
 
     if (folderId) {
       await this.assertCanReadFolder(actor, folderId);
@@ -396,6 +439,8 @@ export class FilesService {
         }
       }
     }
+
+    return { folderId, projectId, clientId };
   }
 
   async listFolders(
@@ -588,19 +633,18 @@ export class FilesService {
     },
     actor: FilesActor,
   ): Promise<ManagedFileDto[]> {
-    if (!hasPermission(actor, "files:upload") || isClient(actor)) {
+    if (!hasPermission(actor, "files:upload")) {
       throw new FilesError("Permission denied", 403, FILES_ERROR_CODES.FORBIDDEN);
     }
 
-    const folderId = meta.folderId ?? null;
-    const projectId = meta.projectId ?? null;
-    const clientId = meta.clientId ?? null;
-
-    await this.assertUploadAssociations(actor, {
-      folderId,
-      projectId,
-      clientId,
+    const associations = await this.assertUploadAssociations(actor, {
+      folderId: meta.folderId ?? null,
+      projectId: meta.projectId ?? null,
+      clientId: meta.clientId ?? null,
     });
+    const folderId = associations.folderId;
+    const projectId = associations.projectId;
+    const clientId = associations.clientId;
 
     const existing = await filesRepository.listNamesInFolder(folderId);
     const existingNames = existing.map((item) => item.name);

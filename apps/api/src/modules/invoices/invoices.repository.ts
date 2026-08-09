@@ -287,6 +287,26 @@ export class InvoicesRepository {
     });
   }
 
+  async addPaymentNotice(
+    id: string,
+    input: { note: string; actorId: string; status: string },
+  ): Promise<InvoiceWithRelations> {
+    await prisma.invoicePaymentHistory.create({
+      data: {
+        invoiceId: id,
+        status: input.status as never,
+        amount: null,
+        note: input.note,
+        actorId: input.actorId,
+      },
+    });
+
+    return (await prisma.invoice.findFirstOrThrow({
+      where: { id },
+      include: detailInclude,
+    })) as InvoiceWithRelations;
+  }
+
   async nextInvoiceNumber(): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `INV-${year}-`;

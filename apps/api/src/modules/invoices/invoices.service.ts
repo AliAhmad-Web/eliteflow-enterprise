@@ -1,8 +1,13 @@
+import {
+  NotificationCategory,
+  NotificationPriority,
+} from "@enterprise/database";
 import { UserRole } from "@enterprise/shared";
 import type {
   CreateInvoiceInput,
   InvoiceDto,
   InvoiceListResponse,
+  InvoicePaymentNoticeInput,
   InvoiceStats,
   ListInvoicesQueryInput,
   UpdateInvoiceInput,
@@ -19,6 +24,7 @@ import {
   type InvoiceAccessScope,
 } from "./invoices.repository.js";
 import { toInvoiceDto } from "./invoices.types.js";
+import { notificationDispatcher } from "../notifications/notification.dispatcher.js";
 
 export interface InvoiceActor {
   userId: string;
@@ -180,6 +186,77 @@ export class InvoicesService {
       buffer,
       filename: `${invoice.invoiceNumber}.pdf`,
     };
+  }
+
+  /**
+   * CLIENT offline payment notice — does not mark invoice paid.
+   * Records history + notifies admins for verification.
+   */
+  async reportPaymentNotice(
+    id: string,
+    input: InvoicePaymentNoticeInput,
+    actor: InvoiceActor,
+  ): Promise<InvoiceDto> {
+    if (actor.role !== UserRole.CLIENT) {
+      throw new InvoicesError(
+        "Only client portal users can submit offline payment notices",
+        403,
+        INVOICES_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    const invoice = await this.getById(id, actor);
+    if (invoice.status === "PAID" || invoice.status === "CANCELLED") {
+      throw new InvoicesError(
+        "This invoice cannot accept a payment notice in its current status",
+        409,
+        INVOICES_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const note =
+      input.note?.trim() ||
+      "Client reported an offline payment. Please verify and mark the invoice paid when funds clear.";
+
+    const updated = await invoicesRepository.addPaymentNotice(id, {
+      note: `Offline payment notice: ${note}`,
+      actorId: actor.userId,
+      status: invoice.status,
+    });
+
+    await logInvoiceAuditEvent({
+      userId: actor.userId,
+      action: INVOICE_AUDIT_ACTIONS.PAYMENT_NOTICE,
+      resourceId: id,
+      metadata: { invoiceNumber: invoice.invoiceNumber, note },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
+
+    void notificationDispatcher.notify({
+      title: "Client offline payment notice",
+      body: `${actor.email} reported payment for ${invoice.invoiceNumber}`,
+      category: NotificationCategory.INVOICE,
+      priority: NotificationPriority.HIGH,
+      linkUrl: `/invoices/${id}`,
+      entityType: "Invoice",
+      entityId: id,
+      audience: { type: "ROLE", roleCode: "ADMIN" },
+      createdById: actor.userId,
+    });
+    void notificationDispatcher.notify({
+      title: "Client offline payment notice",
+      body: `${actor.email} reported payment for ${invoice.invoiceNumber}`,
+      category: NotificationCategory.INVOICE,
+      priority: NotificationPriority.HIGH,
+      linkUrl: `/invoices/${id}`,
+      entityType: "Invoice",
+      entityId: id,
+      audience: { type: "ROLE", roleCode: "SUPER_ADMIN" },
+      createdById: actor.userId,
+    });
+
+    return toInvoiceDto(updated);
   }
 
   private async assertClientAndProject(

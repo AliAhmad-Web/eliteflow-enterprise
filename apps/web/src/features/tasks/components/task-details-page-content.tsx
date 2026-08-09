@@ -51,14 +51,14 @@ export function TaskDetailsPageContent() {
   const taskId = params.id;
   const router = useRouter();
 
-  const { isAdmin, isEmployee } = useRole();
+  const { isAdmin, isEmployee, isClient } = useRole();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const hasWrite = useHasPermission(PERMISSIONS.TASKS_WRITE);
   const hasDelete = useHasPermission(PERMISSIONS.TASKS_DELETE);
   const canManage = isAdmin && hasWrite;
   const canDelete = isAdmin && hasDelete;
   const canWriteOwn = isEmployee && hasWrite;
-  const canComment = (isAdmin || isEmployee) && hasWrite;
+  const canComment = isClient || ((isAdmin || isEmployee) && hasWrite);
 
   const taskQuery = useTask(taskId);
   const activityQuery = useTaskActivity(taskId);
@@ -258,7 +258,11 @@ export function TaskDetailsPageContent() {
                     rows={3}
                     value={commentBody}
                     onChange={(event) => setCommentBody(event.target.value)}
-                    placeholder="Add a comment..."
+                    placeholder={
+                      isClient
+                        ? "Share feedback or a change request…"
+                        : "Add a comment..."
+                    }
                   />
                   {commentMutation.error instanceof ApiClientError ? (
                     <p className="text-sm text-destructive" role="alert">
@@ -274,7 +278,7 @@ export function TaskDetailsPageContent() {
                       void handleComment();
                     }}
                   >
-                    Post comment
+                    {isClient ? "Submit feedback" : "Post comment"}
                   </Button>
                 </div>
               ) : null}

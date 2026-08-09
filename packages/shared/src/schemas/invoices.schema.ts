@@ -100,6 +100,14 @@ export const invoiceIdParamsSchema = z.object({
 
 export type InvoiceIdParamsInput = z.infer<typeof invoiceIdParamsSchema>;
 
+export const invoicePaymentNoticeSchema = z.object({
+  note: z.string().trim().max(500).optional(),
+});
+
+export type InvoicePaymentNoticeInput = z.infer<
+  typeof invoicePaymentNoticeSchema
+>;
+
 export const INVOICE_SORT_FIELDS = [
   "invoiceNumber",
   "status",

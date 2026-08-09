@@ -1174,6 +1174,8 @@ export class CommunicationService {
   // ---- Comments -------------------------------------------------------------
 
   async listComments(query: ListCommentsQueryInput, actor: CommunicationActor) {
+    await this.assertCommentEntityAccess(actor, query.entityType, query.entityId);
+
     const result = await communicationRepository.listComments({
       ...query,
       parentIdNull: true,
@@ -1202,6 +1204,12 @@ export class CommunicationService {
         );
       }
     }
+
+    await this.assertCommentEntityAccess(
+      actor,
+      input.entityType,
+      input.entityId,
+    );
 
     const attachments = input.attachments?.length
       ? await attachmentSecurityService.secureAttachments(
@@ -1257,6 +1265,31 @@ export class CommunicationService {
           createdById: actor.userId,
         });
       }
+    }
+
+    if (isClient(actor)) {
+      void notificationDispatcher.notify({
+        title: "Client feedback / change request",
+        body: `${actor.email} on ${input.entityType}: ${input.body.substring(0, 160)}`,
+        category: NotificationCategory.TEAM,
+        priority: NotificationPriority.HIGH,
+        linkUrl: `/${input.entityType.toLowerCase()}s/${input.entityId}`,
+        entityType: "Comment",
+        entityId: comment.id,
+        audience: { type: "ROLE", roleCode: "ADMIN" },
+        createdById: actor.userId,
+      });
+      void notificationDispatcher.notify({
+        title: "Client feedback / change request",
+        body: `${actor.email} on ${input.entityType}: ${input.body.substring(0, 160)}`,
+        category: NotificationCategory.TEAM,
+        priority: NotificationPriority.HIGH,
+        linkUrl: `/${input.entityType.toLowerCase()}s/${input.entityId}`,
+        entityType: "Comment",
+        entityId: comment.id,
+        audience: { type: "ROLE", roleCode: "SUPER_ADMIN" },
+        createdById: actor.userId,
+      });
     }
 
     void activityPublisher.record({
@@ -1457,6 +1490,68 @@ export class CommunicationService {
   }
 
   // ---- Helpers --------------------------------------------------------------
+
+  /**
+   * Clients may only read/write comments on entities owned by their company.
+   * Admins/employees keep existing broader access.
+   */
+  private async assertCommentEntityAccess(
+    actor: CommunicationActor,
+    entityType: string,
+    entityId: string,
+  ): Promise<void> {
+    if (!isClient(actor)) return;
+
+    const companyId = await resolveActorCompanyId(actor);
+    if (!companyId) {
+      throw new CommunicationError(
+        "Link your company account before commenting",
+        403,
+        COMMUNICATION_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    let allowed = false;
+    switch (entityType) {
+      case "CLIENT":
+        allowed = entityId === companyId;
+        break;
+      case "PROJECT": {
+        const project = await prisma.project.findFirst({
+          where: { id: entityId, deletedAt: null },
+          select: { clientId: true },
+        });
+        allowed = project?.clientId === companyId;
+        break;
+      }
+      case "TASK": {
+        const task = await prisma.task.findFirst({
+          where: { id: entityId, deletedAt: null },
+          select: { project: { select: { clientId: true } } },
+        });
+        allowed = task?.project?.clientId === companyId;
+        break;
+      }
+      case "INVOICE": {
+        const invoice = await prisma.invoice.findFirst({
+          where: { id: entityId, deletedAt: null },
+          select: { clientId: true },
+        });
+        allowed = invoice?.clientId === companyId;
+        break;
+      }
+      default:
+        allowed = false;
+    }
+
+    if (!allowed) {
+      throw new CommunicationError(
+        "Access denied",
+        403,
+        COMMUNICATION_ERROR_CODES.FORBIDDEN,
+      );
+    }
+  }
 
   private async _assertMember(
     conversationId: string,
