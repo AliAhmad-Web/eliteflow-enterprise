@@ -203,6 +203,35 @@ async function main() {
   }
   assert.equal(duplicateDenied, true, "duplicate link must be rejected");
 
+  // Already linked to another company cannot be silently reassigned
+  const secondClient = await prisma.client.create({
+    data: {
+      companyName: "Second Co",
+      contactName: "Second",
+      email: email("second-co"),
+      status: ClientStatus.ACTIVE,
+    },
+  });
+  let crossCompanyDenied = false;
+  try {
+    await clientsService.linkPortalUser(
+      secondClient.id,
+      { userId: unlinkedUser.id },
+      actor,
+    );
+  } catch (error) {
+    crossCompanyDenied =
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code: string }).code ===
+        CLIENTS_ERROR_CODES.PORTAL_USER_LINKED_ELSEWHERE;
+  }
+  assert.equal(
+    crossCompanyDenied,
+    true,
+    "link to a different company must be rejected without unlink",
+  );
+
   // Non-CLIENT cannot be linked
   let nonClientDenied = false;
   try {
@@ -220,10 +249,67 @@ async function main() {
   }
   assert.equal(nonClientDenied, true, "ADMIN must not be linkable as portal user");
 
+  // Confirm linked access, then unlink and confirm data access disappears
+  const linkedProject = await prisma.project.create({
+    data: {
+      name: `P0 Linked Project ${RUN_ID}`,
+      clientId: otherClient.id,
+      status: "IN_PROGRESS",
+      priority: "MEDIUM",
+      progress: 5,
+    },
+  });
+  const linkedActor = {
+    userId: unlinkedUser.id,
+    role: "CLIENT",
+    email: unlinkedUser.email,
+  };
+  const beforeUnlinkProjects = await projectsService.list(
+    {
+      search: "",
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      page: 1,
+      limit: 50,
+    },
+    linkedActor,
+  );
+  assert.ok(
+    beforeUnlinkProjects.items.some((p) => p.id === linkedProject.id),
+    "linked CLIENT must see company project",
+  );
+
   await clientsService.unlinkPortalUser(otherClient.id, unlinkedUser.id, actor);
   const afterUnlink = await authRepository.findUserById(unlinkedUser.id);
   assert.equal(afterUnlink?.companyId ?? null, null);
   assert.equal(toSafeUser(afterUnlink!).companyId, null);
+
+  const afterUnlinkProjects = await projectsService.list(
+    {
+      search: "",
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      page: 1,
+      limit: 50,
+    },
+    linkedActor,
+  );
+  assert.equal(
+    afterUnlinkProjects.items.some((p) => p.id === linkedProject.id),
+    false,
+    "unlinked CLIENT must not see previous company projects",
+  );
+  let afterUnlinkDirectDenied = false;
+  try {
+    await projectsService.getById(linkedProject.id, linkedActor);
+  } catch {
+    afterUnlinkDirectDenied = true;
+  }
+  assert.equal(
+    afterUnlinkDirectDenied,
+    true,
+    "unlinked CLIENT must not fetch previous company project by id",
+  );
 
   // --- 4) Isolation: CLIENT A sees own projects/invoices; not CLIENT B
   const companyA = await prisma.client.create({
@@ -423,7 +509,9 @@ async function main() {
           "email_match_no_duplicate",
           "admin_link_unlink",
           "duplicate_link_rejected",
+          "cross_company_link_rejected",
           "non_client_link_rejected",
+          "unlink_removes_company_data_access",
           "project_isolation",
           "invoice_isolation",
           "admin_clients_list",

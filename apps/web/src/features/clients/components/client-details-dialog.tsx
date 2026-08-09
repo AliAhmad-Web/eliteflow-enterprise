@@ -1,12 +1,21 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
-import type { Client } from "@enterprise/shared";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import type { Client, PortalUserDto } from "@enterprise/shared";
 import { PERMISSIONS } from "@enterprise/shared";
-import { ExternalLink, Link2, Mail, MapPin, Phone, Unlink } from "lucide-react";
+import {
+  ExternalLink,
+  Link2,
+  Mail,
+  MapPin,
+  Phone,
+  Search,
+  Unlink,
+} from "lucide-react";
 
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +25,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
 import { ApiClientError } from "@/services/api/api-error";
 
@@ -53,6 +64,10 @@ function DetailRow({
   );
 }
 
+function portalUserLabel(user: PortalUserDto) {
+  return `${user.firstName} ${user.lastName}`.trim() || user.email;
+}
+
 export function ClientDetailsDialog({
   open,
   clientId,
@@ -64,31 +79,48 @@ export function ClientDetailsDialog({
     open ? clientId : null,
   );
   const portalUsersQuery = useClientPortalUsers(open ? clientId : null);
+  const [portalSearch, setPortalSearch] = useState("");
+  const deferredSearch = useDeferredValue(portalSearch.trim());
   const unlinkedQuery = useUnlinkedPortalUsers(
-    { search: "", page: 1, limit: 50 },
+    { search: deferredSearch, page: 1, limit: 50 },
     open && Boolean(clientId),
   );
   const linkMutation = useLinkPortalUser(clientId);
   const unlinkMutation = useUnlinkPortalUser(clientId);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [unlinkTarget, setUnlinkTarget] = useState<PortalUserDto | null>(null);
   const [portalMessage, setPortalMessage] = useState<{
     tone: "success" | "error";
     text: string;
   } | null>(null);
 
+  useEffect(() => {
+    if (!open) {
+      setPortalSearch("");
+      setSelectedUserId("");
+      setUnlinkTarget(null);
+      setPortalMessage(null);
+    }
+  }, [open]);
+
+  const linkedUsers = portalUsersQuery.data ?? [];
   const unlinkedOptions = useMemo(
     () => unlinkedQuery.data?.items ?? [],
     [unlinkedQuery.data?.items],
   );
+  const selectedUnlinked = useMemo(
+    () => unlinkedOptions.find((user) => user.id === selectedUserId) ?? null,
+    [selectedUserId, unlinkedOptions],
+  );
 
   const handleLink = async () => {
-    if (!selectedUserId) return;
+    if (!selectedUserId || !client) return;
     setPortalMessage(null);
     try {
-      await linkMutation.mutateAsync(selectedUserId);
+      const linked = await linkMutation.mutateAsync(selectedUserId);
       setPortalMessage({
         tone: "success",
-        text: "Portal user linked to this company.",
+        text: `Linked ${linked.email} to ${client.companyName}.`,
       });
       setSelectedUserId("");
       void unlinkedQuery.refetch();
@@ -103,14 +135,16 @@ export function ClientDetailsDialog({
     }
   };
 
-  const handleUnlink = async (userId: string) => {
+  const handleConfirmUnlink = async () => {
+    if (!unlinkTarget || !client) return;
     setPortalMessage(null);
     try {
-      await unlinkMutation.mutateAsync(userId);
+      const unlinked = await unlinkMutation.mutateAsync(unlinkTarget.id);
       setPortalMessage({
         tone: "success",
-        text: "Portal user unlinked.",
+        text: `Unlinked ${unlinked.email} from ${client.companyName}. They will no longer see this company's projects, invoices, or tasks.`,
       });
+      setUnlinkTarget(null);
       void unlinkedQuery.refetch();
     } catch (err) {
       setPortalMessage({
@@ -125,7 +159,7 @@ export function ClientDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Client details</DialogTitle>
           <DialogDescription>
@@ -234,27 +268,30 @@ export function ClientDetailsDialog({
               />
             </dl>
 
-            <section className="space-y-3 rounded-xl border border-border/50 p-4">
-              <div className="flex items-center justify-between gap-2">
+            <section className="space-y-4 rounded-xl border border-border/50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h4 className="text-sm font-semibold text-foreground">
                     Portal users
                   </h4>
                   <p className="text-xs text-muted-foreground">
-                    CLIENT accounts linked to this company for portal access.
+                    Link existing CLIENT accounts to{" "}
+                    <span className="font-medium text-foreground">
+                      {client.companyName}
+                    </span>{" "}
+                    for scoped portal access. Only unlinked CLIENT users can be
+                    linked — never invent CRM companies here.
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {(portalUsersQuery.data ?? []).length} linked
-                </span>
+                <Badge variant="success">{linkedUsers.length} linked</Badge>
               </div>
 
               {portalMessage ? (
                 <p
                   className={
                     portalMessage.tone === "success"
-                      ? "text-sm text-emerald-700 dark:text-emerald-400"
-                      : "text-sm text-destructive"
+                      ? "rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
+                      : "rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive"
                   }
                   role="status"
                 >
@@ -262,72 +299,203 @@ export function ClientDetailsDialog({
                 </p>
               ) : null}
 
-              {portalUsersQuery.isLoading ? (
-                <LoadingState
-                  label="Loading portal users"
-                  className="min-h-[80px] border-0 bg-transparent"
-                />
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Linked to this company
+                </p>
+                {portalUsersQuery.isLoading ? (
+                  <LoadingState
+                    label="Loading portal users"
+                    className="min-h-[80px] border-0 bg-transparent"
+                  />
+                ) : null}
+                {linkedUsers.length === 0 && !portalUsersQuery.isLoading ? (
+                  <p className="rounded-lg border border-dashed border-border/60 px-3 py-4 text-sm text-muted-foreground">
+                    No portal users are linked to this company yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {linkedUsers.map((user) => (
+                      <li
+                        key={user.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {portalUserLabel(user)}
+                            </p>
+                            <Badge variant="success">Linked</Badge>
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {user.email}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Company: {user.companyName ?? client.companyName}
+                          </p>
+                        </div>
+                        <PermissionGuard permission={PERMISSIONS.CLIENTS_WRITE}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              unlinkMutation.isPending || Boolean(unlinkTarget)
+                            }
+                            onClick={() => {
+                              setPortalMessage(null);
+                              setUnlinkTarget(user);
+                            }}
+                          >
+                            <Unlink className="mr-1.5 h-3.5 w-3.5" />
+                            Unlink
+                          </Button>
+                        </PermissionGuard>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {unlinkTarget ? (
+                <div
+                  className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+                  role="alertdialog"
+                  aria-labelledby="unlink-portal-user-title"
+                >
+                  <div>
+                    <p
+                      id="unlink-portal-user-title"
+                      className="text-sm font-semibold text-foreground"
+                    >
+                      Confirm unlink
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Remove{" "}
+                      <span className="font-medium text-foreground">
+                        {unlinkTarget.email}
+                      </span>{" "}
+                      from{" "}
+                      <span className="font-medium text-foreground">
+                        {client.companyName}
+                      </span>
+                      ? They will immediately lose access to this company&apos;s
+                      projects, invoices, tasks, and files.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={unlinkMutation.isPending}
+                      onClick={() => void handleConfirmUnlink()}
+                    >
+                      {unlinkMutation.isPending
+                        ? "Unlinking…"
+                        : "Confirm unlink"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={unlinkMutation.isPending}
+                      onClick={() => setUnlinkTarget(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
               ) : null}
 
-              {(portalUsersQuery.data ?? []).length === 0 &&
-              !portalUsersQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground">
-                  No portal users are linked yet.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {(portalUsersQuery.data ?? []).map((user) => (
-                    <li
-                      key={user.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {user.firstName} {user.lastName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {user.email}
-                        </p>
-                      </div>
-                      <PermissionGuard permission={PERMISSIONS.CLIENTS_WRITE}>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={unlinkMutation.isPending}
-                          onClick={() => void handleUnlink(user.id)}
-                        >
-                          <Unlink className="mr-1.5 h-3.5 w-3.5" />
-                          Unlink
-                        </Button>
-                      </PermissionGuard>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
               <PermissionGuard permission={PERMISSIONS.CLIENTS_WRITE}>
-                <div className="flex flex-col gap-2 border-t border-border/40 pt-3 sm:flex-row sm:items-center">
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm sm:flex-1"
-                    value={selectedUserId}
-                    onChange={(event) => setSelectedUserId(event.target.value)}
-                    aria-label="Select unlinked CLIENT user"
-                  >
-                    <option value="">Select unlinked CLIENT user</option>
-                    {unlinkedOptions.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.firstName} {user.lastName} · {user.email}
+                <div className="space-y-3 border-t border-border/40 pt-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Link portal user
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Search eligible unlinked CLIENT accounts by name or email,
+                      then link them to this CRM company.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="portal-user-search">
+                      Search unlinked CLIENT users
+                    </Label>
+                    <div className="relative">
+                      <Search
+                        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <Input
+                        id="portal-user-search"
+                        value={portalSearch}
+                        onChange={(event) => {
+                          setPortalSearch(event.target.value);
+                          setSelectedUserId("");
+                        }}
+                        placeholder="Name or email…"
+                        className="pl-9"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="portal-user-select">Eligible users</Label>
+                    <select
+                      id="portal-user-select"
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={selectedUserId}
+                      onChange={(event) =>
+                        setSelectedUserId(event.target.value)
+                      }
+                      aria-label="Select unlinked CLIENT user"
+                      disabled={unlinkedQuery.isLoading}
+                    >
+                      <option value="">
+                        {unlinkedQuery.isLoading
+                          ? "Loading eligible users…"
+                          : unlinkedOptions.length === 0
+                            ? deferredSearch
+                              ? "No unlinked CLIENT users match this search"
+                              : "No unlinked CLIENT users available"
+                            : "Select an unlinked CLIENT user"}
                       </option>
-                    ))}
-                  </select>
+                      {unlinkedOptions.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {portalUserLabel(user)} · {user.email} · Unlinked
+                        </option>
+                      ))}
+                    </select>
+                    {selectedUnlinked ? (
+                      <p className="text-xs text-muted-foreground">
+                        Will link{" "}
+                        <span className="font-medium text-foreground">
+                          {selectedUnlinked.email}
+                        </span>{" "}
+                        <Badge variant="warning" className="ml-1 align-middle">
+                          Unlinked
+                        </Badge>{" "}
+                        →{" "}
+                        <span className="font-medium text-foreground">
+                          {client.companyName}
+                        </span>
+                      </p>
+                    ) : null}
+                  </div>
+
                   <Button
                     type="button"
                     disabled={!selectedUserId || linkMutation.isPending}
                     onClick={() => void handleLink()}
                   >
                     <Link2 className="mr-1.5 h-3.5 w-3.5" />
-                    Link user
+                    {linkMutation.isPending
+                      ? "Linking…"
+                      : "Link portal user"}
                   </Button>
                 </div>
               </PermissionGuard>

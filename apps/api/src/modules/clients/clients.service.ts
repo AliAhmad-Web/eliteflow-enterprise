@@ -292,6 +292,22 @@ export class ClientsService {
       );
     }
 
+    // Never silently reassign across companies — Admin must unlink first.
+    if (user.companyId) {
+      const otherName = user.company?.companyName?.trim() || "another company";
+      throw new ClientsError(
+        `This portal user is already linked to ${otherName}. Unlink them first before linking here.`,
+        409,
+        CLIENTS_ERROR_CODES.PORTAL_USER_LINKED_ELSEWHERE,
+        [
+          {
+            field: "userId",
+            message: "Portal user is already linked to a different Client company",
+          },
+        ],
+      );
+    }
+
     const previousCompanyId = user.companyId;
     const updated = await clientsRepository.setUserCompanyId(
       user.id,
