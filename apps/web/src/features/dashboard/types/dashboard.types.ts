@@ -51,10 +51,14 @@ export interface RecentProject {
   status: ProjectStatus;
   date: string;
   team: string[];
+  /** 0–100 when known from live project data */
+  progress?: number;
 }
 
 export interface RecentInvoice {
   id: string;
+  /** Human-readable invoice number for display */
+  number?: string;
   client: string;
   amount: number;
   status: InvoiceStatus;

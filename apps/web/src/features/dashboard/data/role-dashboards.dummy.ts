@@ -16,7 +16,6 @@ import { PERMISSIONS } from "@enterprise/shared";
 
 import { ROUTES } from "@/constants/routes";
 import type {
-  DashboardNotification,
   KpiStat,
   ProjectStatusSegment,
   QuickAction,
@@ -337,85 +336,4 @@ export const EMPLOYEE_PROJECTS: RecentProject[] = [
   },
 ];
 
-/** Client — portal home */
-export const CLIENT_KPI_STATS: KpiStat[] = [
-  {
-    id: "projects",
-    label: "My Projects",
-    value: "4",
-    change: 0,
-    trend: "neutral",
-    icon: FolderKanban,
-    iconClassName: "text-primary bg-primary/10",
-  },
-  {
-    id: "invoices",
-    label: "Open Invoices",
-    value: "2",
-    change: -1.0,
-    trend: "down",
-    icon: Receipt,
-    iconClassName: "text-warning bg-warning/10",
-  },
-  {
-    id: "files",
-    label: "Shared Files",
-    value: "36",
-    change: 5.0,
-    trend: "up",
-    icon: FileText,
-    iconClassName: "text-info bg-info/10",
-  },
-  {
-    id: "updates",
-    label: "New Updates",
-    value: "5",
-    change: 2.0,
-    trend: "up",
-    icon: Clock,
-    iconClassName: "text-success bg-success/10",
-  },
-];
-
-export const CLIENT_PROJECTS: RecentProject[] = [
-  {
-    id: "1",
-    name: "Website Redesign",
-    company: "Your account",
-    status: "in_progress",
-    date: "Updated today",
-    team: ["JD", "SK"],
-  },
-  {
-    id: "2",
-    name: "Brand Refresh",
-    company: "Your account",
-    status: "on_hold",
-    date: "Awaiting feedback",
-    team: ["EM"],
-  },
-];
-
-export const CLIENT_INVOICES: RecentInvoice[] = [
-  { id: "INV-2201", client: "Balance due", amount: 3200, status: "pending" },
-  { id: "INV-2198", client: "Paid", amount: 1800, status: "paid" },
-];
-
-export const CLIENT_UPDATES: DashboardNotification[] = [
-  {
-    id: "1",
-    title: "Milestone shared",
-    description: "Homepage designs are ready for review",
-    time: "2 hours ago",
-    read: false,
-    type: "info",
-  },
-  {
-    id: "2",
-    title: "Invoice issued",
-    description: "INV-2201 is ready for payment",
-    time: "Yesterday",
-    read: false,
-    type: "warning",
-  },
-];
+/* Client portal home uses live APIs only — no CLIENT_* dummy dashboard data. */

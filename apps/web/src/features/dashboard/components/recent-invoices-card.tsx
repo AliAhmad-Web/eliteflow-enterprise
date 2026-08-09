@@ -77,7 +77,7 @@ export function RecentInvoicesCard({
                 {invoices.map((invoice) => (
                   <tr key={invoice.id}>
                     <td className="font-medium tracking-tight text-foreground">
-                      {invoice.id}
+                      {invoice.number ?? invoice.id}
                     </td>
                     <td className="text-muted-foreground">{invoice.client}</td>
                     <td className="text-right font-semibold tabular-nums text-foreground">

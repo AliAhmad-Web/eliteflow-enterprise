@@ -58,6 +58,9 @@ export function RecentProjectsCard({
                 <tr>
                   <th scope="col">Project</th>
                   <th scope="col">Status</th>
+                  <th scope="col" className="hidden lg:table-cell">
+                    Progress
+                  </th>
                   <th scope="col" className="hidden md:table-cell">
                     Team
                   </th>
@@ -81,6 +84,25 @@ export function RecentProjectsCard({
                     </td>
                     <td>
                       <ProjectStatusBadge status={project.status} />
+                    </td>
+                    <td className="hidden lg:table-cell">
+                      {typeof project.progress === "number" ? (
+                        <div className="flex min-w-24 items-center gap-2">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary"
+                              style={{
+                                width: `${Math.max(0, Math.min(100, project.progress))}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {project.progress}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="hidden md:table-cell">
                       <UserAvatarGroup members={project.team} />
