@@ -14,6 +14,11 @@ export type PortalCompanyLinkResult = {
   linkedByEmail: boolean;
 };
 
+export type PortalCompanyLinkOptions = {
+  /** When false, only email-match existing Client CRM rows — never create. */
+  createIfMissing?: boolean;
+};
+
 export type PortalCompanyLinkAuditContext = {
   userId?: string | null;
   ipAddress?: string | null;
@@ -27,6 +32,7 @@ export type PortalCompanyLinkAuditContext = {
  * 1. Already linked to an active Client → no-op
  * 2. Active Client with the same email → link
  * 3. Otherwise create a new ACTIVE Client from the user's profile → link
+ *    (skipped when createIfMissing: false — used by production backfill)
  *
  * Does not run for non-CLIENT roles. Call only from signup/OAuth create
  * or explicit admin/backfill paths — not on every /me (so admin unlink sticks).
@@ -34,7 +40,10 @@ export type PortalCompanyLinkAuditContext = {
 export async function ensurePortalCompanyLink(
   userId: string,
   audit: PortalCompanyLinkAuditContext = {},
+  options: PortalCompanyLinkOptions = {},
 ): Promise<PortalCompanyLinkResult | null> {
+  const createIfMissing = options.createIfMissing !== false;
+
   const user = await prisma.user.findFirst({
     where: { id: userId, deletedAt: null },
     select: {
@@ -99,6 +108,10 @@ export async function ensurePortalCompanyLink(
       } satisfies PortalCompanyLinkResult;
     }
 
+    if (!createIfMissing) {
+      return null;
+    }
+
     const created = await tx.client.create({
       data: {
         companyName: displayName,
@@ -123,6 +136,10 @@ export async function ensurePortalCompanyLink(
     } satisfies PortalCompanyLinkResult;
   });
 
+  if (!result) {
+    return null;
+  }
+
   await logClientsAuditEvent({
     userId: audit.userId ?? user.id,
     action: result.createdClient
@@ -134,6 +151,7 @@ export async function ensurePortalCompanyLink(
       email,
       createdClient: result.createdClient,
       linkedByEmail: result.linkedByEmail,
+      createIfMissing,
     },
     ipAddress: audit.ipAddress,
     userAgent: audit.userAgent,

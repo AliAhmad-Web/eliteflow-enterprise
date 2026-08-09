@@ -125,10 +125,15 @@ export class AuthRepository {
     emailVerified?: boolean;
     avatarUrl?: string | null;
   }) {
+    const hasPassword = Boolean(input.passwordHash);
     return prisma.user.create({
       data: {
         email: this.normalizeEmail(input.email),
         passwordHash: input.passwordHash ?? null,
+        // Self-chosen signup password is "changed" at creation so max-age
+        // policy does not immediately force a second change on first login.
+        passwordChangedAt: hasPassword ? new Date() : null,
+        mustChangePassword: false,
         firstName: input.firstName,
         lastName: input.lastName,
         roleId: input.roleId,
