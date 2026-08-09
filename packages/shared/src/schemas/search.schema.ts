@@ -10,6 +10,8 @@ export const GLOBAL_SEARCH_SCOPES = [
   "files",
   "messages",
   "notifications",
+  "invoices",
+  "calendar",
 ] as const;
 
 export const globalSearchScopeSchema = z.enum(GLOBAL_SEARCH_SCOPES);
@@ -34,6 +36,8 @@ export const globalSearchHitSchema = z.object({
     "file",
     "message",
     "notification",
+    "invoice",
+    "calendar",
   ]),
   title: z.string(),
   subtitle: z.string().nullable(),
@@ -55,6 +59,8 @@ export const globalSearchResponseSchema = z.object({
     files: z.array(globalSearchHitSchema),
     messages: z.array(globalSearchHitSchema),
     notifications: z.array(globalSearchHitSchema),
+    invoices: z.array(globalSearchHitSchema),
+    calendar: z.array(globalSearchHitSchema),
   }),
 });
 

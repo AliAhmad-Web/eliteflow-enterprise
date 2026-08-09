@@ -46,6 +46,8 @@ const response = globalSearchResponseSchema.parse({
     files: [],
     messages: [],
     notifications: [],
+    invoices: [],
+    calendar: [],
   },
 });
 assert.equal(response.total, 1);

@@ -46,6 +46,8 @@ export function flattenSearchHits(
     ...data.groups.files,
     ...data.groups.messages,
     ...data.groups.notifications,
+    ...data.groups.invoices,
+    ...data.groups.calendar,
   ];
 }
 
@@ -61,4 +63,6 @@ export const SEARCH_GROUP_LABELS: Record<
   files: "Files",
   messages: "Messages",
   notifications: "Notifications",
+  invoices: "Invoices",
+  calendar: "Calendar",
 };

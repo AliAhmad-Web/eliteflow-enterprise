@@ -3,12 +3,14 @@
 import type { GlobalSearchHit, GlobalSearchResponse } from "@enterprise/shared";
 import {
   Building2,
+  CalendarDays,
   CheckSquare,
   FileText,
   FolderKanban,
   Loader2,
   MessageSquareText,
   Bell,
+  Receipt,
   Search,
   UserRound,
   Users,
@@ -51,6 +53,8 @@ const GROUP_ICONS = {
   files: FileText,
   messages: MessageSquareText,
   notifications: Bell,
+  invoices: Receipt,
+  calendar: CalendarDays,
 } as const;
 
 function SearchResultsPanel({
@@ -79,7 +83,8 @@ function SearchResultsPanel({
   if (!debouncedQ) {
     return (
       <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-        Search people, clients, projects, tasks, files, messages, and more.
+        Search people, clients, projects, tasks, files, invoices, calendar, and
+        more.
       </p>
     );
   }

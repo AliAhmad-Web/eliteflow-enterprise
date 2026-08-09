@@ -37,6 +37,53 @@ function hit(
   return partial;
 }
 
+function tokensOf(q: string): string[] {
+  return q
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0)
+    .slice(0, 6);
+}
+
+function personNameWhere(q: string): Prisma.UserWhereInput {
+  const tokens = tokensOf(q);
+  const or: Prisma.UserWhereInput[] = [
+    { firstName: { contains: q, mode: "insensitive" } },
+    { lastName: { contains: q, mode: "insensitive" } },
+    { email: { contains: q, mode: "insensitive" } },
+    { username: { contains: q, mode: "insensitive" } },
+    { designation: { contains: q, mode: "insensitive" } },
+  ];
+
+  // "Ali Ahmad" must match across first/last name, not a single column.
+  if (tokens.length > 1) {
+    or.push({
+      AND: tokens.map((token) => ({
+        OR: [
+          { firstName: { contains: token, mode: "insensitive" } },
+          { lastName: { contains: token, mode: "insensitive" } },
+          { email: { contains: token, mode: "insensitive" } },
+        ],
+      })),
+    });
+  }
+
+  return { OR: or };
+}
+
+async function settledHits(
+  label: string,
+  run: () => Promise<GlobalSearchHit[]>,
+): Promise<GlobalSearchHit[]> {
+  try {
+    return await run();
+  } catch (error) {
+    console.error(`[search] ${label} failed:`, error);
+    return [];
+  }
+}
+
 export class SearchService {
   async search(
     input: GlobalSearchQueryInput,
@@ -68,38 +115,60 @@ export class SearchService {
       files,
       messages,
       notifications,
+      invoices,
+      calendar,
     ] = await Promise.all([
       include("users") &&
       !isClient(actor) &&
       (hasPermission(actor, PERMISSIONS.TEAM_READ) ||
         hasPermission(actor, PERMISSIONS.CHAT_READ))
-        ? this.searchUsers(q, limit)
+        ? settledHits("users", () => this.searchUsers(q, limit))
         : Promise.resolve([] as GlobalSearchHit[]),
       include("employees") &&
       !isClient(actor) &&
       hasPermission(actor, PERMISSIONS.TEAM_READ)
-        ? this.searchEmployees(q, limit)
+        ? settledHits("employees", () => this.searchEmployees(q, limit))
         : Promise.resolve([] as GlobalSearchHit[]),
       include("clients") &&
       !isClient(actor) &&
       hasPermission(actor, PERMISSIONS.CLIENTS_READ)
-        ? this.searchClients(q, limit)
+        ? settledHits("clients", () => this.searchClients(q, limit))
         : Promise.resolve([] as GlobalSearchHit[]),
       include("projects") && hasPermission(actor, PERMISSIONS.PROJECTS_READ)
-        ? this.searchProjects(q, limit, actor, companyId)
+        ? settledHits("projects", () =>
+            this.searchProjects(q, limit, actor, companyId),
+          )
         : Promise.resolve([] as GlobalSearchHit[]),
       include("tasks") && hasPermission(actor, PERMISSIONS.TASKS_READ)
-        ? this.searchTasks(q, limit, actor, companyId)
+        ? settledHits("tasks", () =>
+            this.searchTasks(q, limit, actor, companyId),
+          )
         : Promise.resolve([] as GlobalSearchHit[]),
       include("files") && hasPermission(actor, PERMISSIONS.FILES_READ)
-        ? this.searchFiles(q, limit, actor, companyId)
+        ? settledHits("files", () =>
+            this.searchFiles(q, limit, actor, companyId),
+          )
         : Promise.resolve([] as GlobalSearchHit[]),
-      include("messages") && hasPermission(actor, PERMISSIONS.CHAT_READ)
-        ? this.searchMessages(q, limit, actor)
+      include("messages") &&
+      (hasPermission(actor, PERMISSIONS.CHAT_READ) ||
+        hasPermission(actor, PERMISSIONS.COMMUNICATION_READ))
+        ? settledHits("messages", () => this.searchMessages(q, limit, actor))
         : Promise.resolve([] as GlobalSearchHit[]),
       include("notifications") &&
       hasPermission(actor, PERMISSIONS.NOTIFICATIONS_READ)
-        ? this.searchNotifications(q, limit, actor.userId)
+        ? settledHits("notifications", () =>
+            this.searchNotifications(q, limit, actor.userId),
+          )
+        : Promise.resolve([] as GlobalSearchHit[]),
+      include("invoices") && hasPermission(actor, PERMISSIONS.INVOICES_READ)
+        ? settledHits("invoices", () =>
+            this.searchInvoices(q, limit, actor, companyId),
+          )
+        : Promise.resolve([] as GlobalSearchHit[]),
+      include("calendar") && hasPermission(actor, PERMISSIONS.CALENDAR_READ)
+        ? settledHits("calendar", () =>
+            this.searchCalendar(q, limit, actor, companyId),
+          )
         : Promise.resolve([] as GlobalSearchHit[]),
     ]);
 
@@ -112,6 +181,8 @@ export class SearchService {
       files,
       messages,
       notifications,
+      invoices,
+      calendar,
     };
 
     const total = Object.values(groups).reduce(
@@ -126,12 +197,7 @@ export class SearchService {
     const rows = await prisma.user.findMany({
       where: {
         deletedAt: null,
-        OR: [
-          { firstName: { contains: q, mode: "insensitive" } },
-          { lastName: { contains: q, mode: "insensitive" } },
-          { email: { contains: q, mode: "insensitive" } },
-          { username: { contains: q, mode: "insensitive" } },
-        ],
+        ...personNameWhere(q),
       },
       take: limit,
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
@@ -162,6 +228,26 @@ export class SearchService {
   }
 
   private async searchEmployees(q: string, limit: number) {
+    const tokens = tokensOf(q);
+    const userMatch: Prisma.UserWhereInput =
+      tokens.length > 1
+        ? {
+            AND: tokens.map((token) => ({
+              OR: [
+                { firstName: { contains: token, mode: "insensitive" } },
+                { lastName: { contains: token, mode: "insensitive" } },
+                { email: { contains: token, mode: "insensitive" } },
+              ],
+            })),
+          }
+        : {
+            OR: [
+              { firstName: { contains: q, mode: "insensitive" } },
+              { lastName: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+            ],
+          };
+
     const rows = await prisma.employeeProfile.findMany({
       where: {
         deletedAt: null,
@@ -169,15 +255,9 @@ export class SearchService {
           { employeeCode: { contains: q, mode: "insensitive" } },
           { designation: { contains: q, mode: "insensitive" } },
           { phone: { contains: q, mode: "insensitive" } },
-          {
-            user: {
-              OR: [
-                { firstName: { contains: q, mode: "insensitive" } },
-                { lastName: { contains: q, mode: "insensitive" } },
-                { email: { contains: q, mode: "insensitive" } },
-              ],
-            },
-          },
+          { companyEmail: { contains: q, mode: "insensitive" } },
+          { personalEmail: { contains: q, mode: "insensitive" } },
+          { user: userMatch },
         ],
       },
       take: limit,
@@ -213,6 +293,7 @@ export class SearchService {
           { companyName: { contains: q, mode: "insensitive" } },
           { contactName: { contains: q, mode: "insensitive" } },
           { email: { contains: q, mode: "insensitive" } },
+          { phone: { contains: q, mode: "insensitive" } },
         ],
       },
       take: limit,
@@ -247,7 +328,15 @@ export class SearchService {
   ) {
     const where: Prisma.ProjectWhereInput = {
       deletedAt: null,
-      name: { contains: q, mode: "insensitive" },
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+        {
+          client: {
+            companyName: { contains: q, mode: "insensitive" },
+          },
+        },
+      ],
     };
 
     if (!isAdmin(actor)) {
@@ -290,41 +379,41 @@ export class SearchService {
     actor: SearchActor,
     companyId: string | null,
   ) {
-    const where: Prisma.TaskWhereInput = {
-      deletedAt: null,
+    const textMatch: Prisma.TaskWhereInput = {
       OR: [
         { title: { contains: q, mode: "insensitive" } },
         { description: { contains: q, mode: "insensitive" } },
       ],
     };
 
+    const where: Prisma.TaskWhereInput = {
+      deletedAt: null,
+      ...textMatch,
+    };
+
     if (!isAdmin(actor)) {
       if (isClient(actor)) {
         if (!companyId) return [];
-        where.project = { clientId: companyId, deletedAt: null };
+        where.AND = [
+          textMatch,
+          { project: { clientId: companyId, deletedAt: null } },
+        ];
+        delete where.OR;
       } else {
-        where.OR = [
+        where.AND = [
+          textMatch,
           {
-            AND: [
+            OR: [
+              { assignedToId: actor.userId },
               {
-                OR: [
-                  { title: { contains: q, mode: "insensitive" } },
-                  { description: { contains: q, mode: "insensitive" } },
-                ],
-              },
-              {
-                OR: [
-                  { assignedToId: actor.userId },
-                  {
-                    project: {
-                      members: { some: { userId: actor.userId } },
-                    },
-                  },
-                ],
+                project: {
+                  members: { some: { userId: actor.userId } },
+                },
               },
             ],
           },
         ];
+        delete where.OR;
       }
     }
 
@@ -357,12 +446,13 @@ export class SearchService {
     actor: SearchActor,
     companyId: string | null,
   ) {
-    const memberships = !isAdmin(actor) && !isClient(actor)
-      ? await prisma.projectMember.findMany({
-          where: { userId: actor.userId },
-          select: { projectId: true },
-        })
-      : [];
+    const memberships =
+      !isAdmin(actor) && !isClient(actor)
+        ? await prisma.projectMember.findMany({
+            where: { userId: actor.userId },
+            select: { projectId: true },
+          })
+        : [];
     const projectIds = memberships.map((item) => item.projectId);
 
     const scope: Prisma.ManagedFileWhereInput = isAdmin(actor)
@@ -434,17 +524,30 @@ export class SearchService {
     const rows = await prisma.message.findMany({
       where: {
         deletedAt: null,
-        body: { contains: q, mode: "insensitive" },
-        conversation: {
-          deletedAt: null,
-          ...(orgWide
-            ? {}
-            : {
-                members: {
-                  some: { userId: actor.userId, deletedAt: null },
+        AND: [
+          {
+            conversation: {
+              deletedAt: null,
+              ...(orgWide
+                ? {}
+                : {
+                    members: {
+                      some: { userId: actor.userId, deletedAt: null },
+                    },
+                  }),
+            },
+          },
+          {
+            OR: [
+              { body: { contains: q, mode: "insensitive" } },
+              {
+                conversation: {
+                  name: { contains: q, mode: "insensitive" },
                 },
-              }),
-        },
+              },
+            ],
+          },
+        ],
       },
       take: limit,
       orderBy: { createdAt: "desc" },
@@ -459,11 +562,12 @@ export class SearchService {
 
     return rows.map((row) => {
       const preview = row.body.replace(/\s+/g, " ").trim().slice(0, 80);
-      const sender = `${row.sender?.firstName ?? ""} ${row.sender?.lastName ?? ""}`.trim();
+      const sender =
+        `${row.sender?.firstName ?? ""} ${row.sender?.lastName ?? ""}`.trim();
       return hit({
         id: row.id,
         type: "message",
-        title: preview || "Message",
+        title: preview || row.conversation?.name || "Message",
         subtitle: [row.conversation?.name || "Conversation", sender]
           .filter(Boolean)
           .join(" · "),
@@ -500,6 +604,139 @@ export class SearchService {
         subtitle:
           row.body?.replace(/\s+/g, " ").trim().slice(0, 80) || row.category,
         href: `/notifications/${row.id}`,
+      }),
+    );
+  }
+
+  private async searchInvoices(
+    q: string,
+    limit: number,
+    actor: SearchActor,
+    companyId: string | null,
+  ) {
+    const where: Prisma.InvoiceWhereInput = {
+      deletedAt: null,
+      OR: [
+        { invoiceNumber: { contains: q, mode: "insensitive" } },
+        { notes: { contains: q, mode: "insensitive" } },
+        {
+          client: {
+            companyName: { contains: q, mode: "insensitive" },
+          },
+        },
+        {
+          project: {
+            name: { contains: q, mode: "insensitive" },
+          },
+        },
+      ],
+    };
+
+    if (!isAdmin(actor)) {
+      if (isClient(actor)) {
+        if (!companyId) return [];
+        where.clientId = companyId;
+      }
+    }
+
+    const rows = await prisma.invoice.findMany({
+      where,
+      take: limit,
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        total: true,
+        currency: true,
+        client: { select: { companyName: true } },
+      },
+    });
+
+    return rows.map((row) =>
+      hit({
+        id: row.id,
+        type: "invoice",
+        title: row.invoiceNumber,
+        subtitle: [
+          row.client?.companyName,
+          row.status,
+          `${row.currency} ${String(row.total)}`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: `/invoices?q=${encodeURIComponent(row.invoiceNumber)}`,
+      }),
+    );
+  }
+
+  private async searchCalendar(
+    q: string,
+    limit: number,
+    actor: SearchActor,
+    companyId: string | null,
+  ) {
+    const where: Prisma.CalendarEventWhereInput = {
+      deletedAt: null,
+      OR: [
+        { title: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+        { location: { contains: q, mode: "insensitive" } },
+        { notes: { contains: q, mode: "insensitive" } },
+      ],
+    };
+
+    if (!isAdmin(actor)) {
+      if (isClient(actor)) {
+        if (!companyId) return [];
+        where.AND = [
+          {
+            OR: [
+              { clientId: companyId },
+              { createdById: actor.userId },
+              { attendees: { some: { userId: actor.userId } } },
+            ],
+          },
+        ];
+      } else {
+        where.AND = [
+          {
+            OR: [
+              { createdById: actor.userId },
+              { attendees: { some: { userId: actor.userId } } },
+              { isPrivate: false },
+            ],
+          },
+        ];
+      }
+    }
+
+    const rows = await prisma.calendarEvent.findMany({
+      where,
+      take: limit,
+      orderBy: { startsAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        startsAt: true,
+        location: true,
+        type: true,
+      },
+    });
+
+    return rows.map((row) =>
+      hit({
+        id: row.id,
+        type: "calendar",
+        title: row.title,
+        subtitle: [
+          row.type,
+          row.location,
+          row.startsAt.toISOString().slice(0, 10),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        href: `/calendar?q=${encodeURIComponent(row.title)}`,
       }),
     );
   }

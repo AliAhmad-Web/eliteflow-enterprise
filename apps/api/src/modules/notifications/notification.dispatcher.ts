@@ -144,6 +144,19 @@ function buildEmailText(title: string, body: string, linkUrl?: string | null): s
  */
 export class NotificationDispatcher {
   async notify(input: NotifyInput): Promise<{ created: number; queued: number }> {
+    try {
+      return await this.notifyUnsafe(input);
+    } catch (error) {
+      // Fire-and-forget callers use `void notify(...)`; never let storage/transient
+      // failures become unhandled rejections that crash the API process.
+      console.error("[notifications] notify failed:", error);
+      return { created: 0, queued: 0 };
+    }
+  }
+
+  private async notifyUnsafe(
+    input: NotifyInput,
+  ): Promise<{ created: number; queued: number }> {
     const userIds = await resolveAudienceUserIds(input.audience);
     let created = 0;
     let queued = 0;
