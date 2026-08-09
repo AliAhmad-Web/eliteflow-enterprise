@@ -1,7 +1,10 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { ListClientsQueryInput } from "@enterprise/shared";
+import type {
+  ListClientsQueryInput,
+  ListUnlinkedPortalUsersQueryInput,
+} from "@enterprise/shared";
 
 import { clientsService } from "../services/clients.service";
 import { CLIENTS_QUERY_KEYS } from "../types/clients.types";
@@ -29,5 +32,27 @@ export function useClient(id: string | null) {
     queryFn: () => clientsService.getById(id!),
     enabled: Boolean(id),
     staleTime: 30_000,
+  });
+}
+
+export function useClientPortalUsers(clientId: string | null) {
+  return useQuery({
+    queryKey: CLIENTS_QUERY_KEYS.portalUsers(clientId ?? "none"),
+    queryFn: () => clientsService.listPortalUsers(clientId!),
+    enabled: Boolean(clientId),
+    staleTime: 30_000,
+  });
+}
+
+export function useUnlinkedPortalUsers(
+  query: ListUnlinkedPortalUsersQueryInput,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: CLIENTS_QUERY_KEYS.unlinkedPortalUsers(query),
+    queryFn: () => clientsService.listUnlinkedPortalUsers(query),
+    enabled,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }

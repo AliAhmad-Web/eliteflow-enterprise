@@ -91,6 +91,7 @@ import {
   SESSION_INVALID_MESSAGE,
 } from "./session/index.js";
 import { sessionHardeningService } from "../../shared/security/session-hardening/index.js";
+import { ensurePortalCompanyLink } from "../clients/client-company-onboarding.service.js";
 import { deviceManagementService } from "../../shared/security/device-management/index.js";
 
 export class AuthService {
@@ -142,6 +143,19 @@ export class AuthService {
       roleId: clientRole.id,
       status: UserStatus.PENDING_VERIFICATION,
     });
+
+    try {
+      await ensurePortalCompanyLink(user.id, {
+        userId: user.id,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+      });
+    } catch (error) {
+      console.error(
+        "[auth] Signup succeeded but portal company link failed:",
+        error,
+      );
+    }
 
     await logAuthAuditEvent({
       userId: user.id,
@@ -1506,6 +1520,19 @@ export class AuthService {
         expiresAt: identity.expiresAt,
       });
 
+      try {
+        await ensurePortalCompanyLink(created.id, {
+          userId: created.id,
+          ipAddress: context.ipAddress,
+          userAgent: context.userAgent,
+        });
+      } catch (error) {
+        console.error(
+          "[auth] OAuth signup succeeded but portal company link failed:",
+          error,
+        );
+      }
+
       await logAuthAuditEvent({
         userId: created.id,
         action: AUTH_AUDIT_ACTIONS.OAUTH_SIGNUP,
@@ -1514,7 +1541,8 @@ export class AuthService {
         context,
       });
 
-      return created;
+      const linked = await authRepository.findUserById(created.id);
+      return linked ?? created;
     } catch (error) {
       // Concurrent signup/OAuth race: email unique constraint.
       if (

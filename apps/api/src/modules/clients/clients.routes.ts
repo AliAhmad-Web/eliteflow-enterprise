@@ -16,7 +16,10 @@ import { clientsController } from "./clients.controller.js";
 import {
   clientIdParamsSchema,
   createClientSchema,
+  linkPortalUserSchema,
   listClientsQuerySchema,
+  listUnlinkedPortalUsersQuerySchema,
+  portalUserIdParamsSchema,
   updateClientSchema,
 } from "./clients.validation.js";
 
@@ -45,6 +48,60 @@ clientsRouter.get(
     keyGenerator: rateLimitByUser,
   }),
   asyncHandler((req, res) => clientsController.stats(req, res)),
+);
+
+// Must be registered before `/:id` so "portal-users" is not captured as an id.
+clientsRouter.get(
+  "/portal-users/unlinked",
+  authorizePermissions(PERMISSIONS.CLIENTS_READ),
+  rateLimit({
+    name: "clients.portal_users.unlinked",
+    ...RATE_LIMIT.GLOBAL_API,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(listUnlinkedPortalUsersQuerySchema, "query"),
+  asyncHandler((req, res) =>
+    clientsController.listUnlinkedPortalUsers(req, res),
+  ),
+);
+
+clientsRouter.get(
+  "/:id/portal-users",
+  authorizePermissions(PERMISSIONS.CLIENTS_READ),
+  rateLimit({
+    name: "clients.portal_users.list",
+    ...RATE_LIMIT.GLOBAL_API,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(clientIdParamsSchema, "params"),
+  asyncHandler((req, res) => clientsController.listPortalUsers(req, res)),
+);
+
+clientsRouter.post(
+  "/:id/portal-users",
+  authorizePermissions(PERMISSIONS.CLIENTS_WRITE),
+  rateLimit({
+    name: "clients.portal_users.link",
+    max: 30,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(clientIdParamsSchema, "params"),
+  validate(linkPortalUserSchema),
+  asyncHandler((req, res) => clientsController.linkPortalUser(req, res)),
+);
+
+clientsRouter.delete(
+  "/:id/portal-users/:userId",
+  authorizePermissions(PERMISSIONS.CLIENTS_WRITE),
+  rateLimit({
+    name: "clients.portal_users.unlink",
+    max: 30,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(portalUserIdParamsSchema, "params"),
+  asyncHandler((req, res) => clientsController.unlinkPortalUser(req, res)),
 );
 
 clientsRouter.get(

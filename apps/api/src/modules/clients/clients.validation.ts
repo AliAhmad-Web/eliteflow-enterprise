@@ -3,6 +3,10 @@ export {
   updateClientSchema,
   listClientsQuerySchema,
   clientIdParamsSchema,
+  linkPortalUserSchema,
+  listUnlinkedPortalUsersQuerySchema,
+  portalUserIdParamsSchema,
+  portalUserSchema,
 } from "@enterprise/shared";
 
 export type {
@@ -10,4 +14,8 @@ export type {
   UpdateClientInput,
   ListClientsQueryInput,
   ClientIdParamsInput,
+  LinkPortalUserInput,
+  ListUnlinkedPortalUsersQueryInput,
+  PortalUserIdParamsInput,
+  PortalUserDto,
 } from "@enterprise/shared";

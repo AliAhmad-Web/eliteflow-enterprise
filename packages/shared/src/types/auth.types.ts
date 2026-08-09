@@ -59,6 +59,10 @@ export interface SafeUser {
   mustChangePassword?: boolean;
   twoFactorEnabled?: boolean;
   mfaEnrollmentRequired?: boolean;
+  /** Linked Client CRM id for CLIENT portal users; null when unlinked. */
+  companyId: string | null;
+  /** Linked Client company name when companyId is set. */
+  companyName: string | null;
   createdAt: string;
 }
 

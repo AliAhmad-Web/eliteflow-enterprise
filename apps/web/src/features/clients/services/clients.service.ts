@@ -3,7 +3,10 @@ import {
   type Client,
   type ClientListResponse,
   type CreateClientInput,
+  type LinkPortalUserInput,
   type ListClientsQueryInput,
+  type ListUnlinkedPortalUsersQueryInput,
+  type PortalUserDto,
   type UpdateClientInput,
 } from "@enterprise/shared";
 
@@ -23,6 +26,19 @@ function toQueryString(query: ListClientsQueryInput): string {
   params.set("page", String(query.page));
   params.set("limit", String(query.limit));
 
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
+function toUnlinkedQueryString(
+  query: ListUnlinkedPortalUsersQueryInput,
+): string {
+  const params = new URLSearchParams();
+  if (query.search) {
+    params.set("search", query.search);
+  }
+  params.set("page", String(query.page));
+  params.set("limit", String(query.limit));
   const serialized = params.toString();
   return serialized ? `?${serialized}` : "";
 }
@@ -67,6 +83,50 @@ export const clientsService = {
   remove(id: string) {
     return apiRequest<{ id: string; message: string }>(
       `${CLIENTS_API_PREFIX}/${id}`,
+      {
+        method: "DELETE",
+        auth: true,
+      },
+    );
+  },
+
+  listPortalUsers(clientId: string) {
+    return apiRequest<PortalUserDto[]>(
+      `${CLIENTS_API_PREFIX}/${clientId}/portal-users`,
+      { auth: true },
+    );
+  },
+
+  listUnlinkedPortalUsers(query: ListUnlinkedPortalUsersQueryInput) {
+    return apiRequest<{
+      items: PortalUserDto[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+        timestamp: string;
+      };
+    }>(
+      `${CLIENTS_API_PREFIX}/portal-users/unlinked${toUnlinkedQueryString(query)}`,
+      { auth: true },
+    );
+  },
+
+  linkPortalUser(clientId: string, input: LinkPortalUserInput) {
+    return apiRequest<PortalUserDto>(
+      `${CLIENTS_API_PREFIX}/${clientId}/portal-users`,
+      {
+        method: "POST",
+        body: input,
+        auth: true,
+      },
+    );
+  },
+
+  unlinkPortalUser(clientId: string, userId: string) {
+    return apiRequest<PortalUserDto>(
+      `${CLIENTS_API_PREFIX}/${clientId}/portal-users/${userId}`,
       {
         method: "DELETE",
         auth: true,

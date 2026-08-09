@@ -261,6 +261,8 @@ export const safeUserSchema = z.object({
   mustChangePassword: z.boolean().optional(),
   twoFactorEnabled: z.boolean().optional(),
   mfaEnrollmentRequired: z.boolean().optional(),
+  companyId: uuidSchema.nullable(),
+  companyName: z.string().nullable(),
   createdAt: z.string(),
 });
 

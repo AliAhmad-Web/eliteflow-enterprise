@@ -23,6 +23,12 @@ const userWithRoleInclude = {
       },
     },
   },
+  company: {
+    select: {
+      id: true,
+      companyName: true,
+    },
+  },
 } as const;
 
 function safeDecryptToken(

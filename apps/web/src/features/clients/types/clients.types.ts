@@ -1,4 +1,7 @@
-import type { ListClientsQueryInput } from "@enterprise/shared";
+import type {
+  ListClientsQueryInput,
+  ListUnlinkedPortalUsersQueryInput,
+} from "@enterprise/shared";
 
 export const CLIENTS_QUERY_KEYS = {
   all: ["clients"] as const,
@@ -8,6 +11,10 @@ export const CLIENTS_QUERY_KEYS = {
   stats: () => [...CLIENTS_QUERY_KEYS.all, "stats"] as const,
   details: () => [...CLIENTS_QUERY_KEYS.all, "detail"] as const,
   detail: (id: string) => [...CLIENTS_QUERY_KEYS.details(), id] as const,
+  portalUsers: (clientId: string) =>
+    [...CLIENTS_QUERY_KEYS.all, "portal-users", clientId] as const,
+  unlinkedPortalUsers: (query: ListUnlinkedPortalUsersQueryInput) =>
+    [...CLIENTS_QUERY_KEYS.all, "portal-users-unlinked", query] as const,
 };
 
 export const CLIENT_STATUS_LABELS = {

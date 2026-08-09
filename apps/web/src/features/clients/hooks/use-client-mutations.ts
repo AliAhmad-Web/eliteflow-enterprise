@@ -42,3 +42,37 @@ export function useDeleteClient() {
     },
   });
 }
+
+export function useLinkPortalUser(clientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) =>
+      clientsService.linkPortalUser(clientId!, { userId }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CLIENTS_QUERY_KEYS.all });
+      if (clientId) {
+        await queryClient.invalidateQueries({
+          queryKey: CLIENTS_QUERY_KEYS.portalUsers(clientId),
+        });
+      }
+    },
+  });
+}
+
+export function useUnlinkPortalUser(clientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: string) =>
+      clientsService.unlinkPortalUser(clientId!, userId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CLIENTS_QUERY_KEYS.all });
+      if (clientId) {
+        await queryClient.invalidateQueries({
+          queryKey: CLIENTS_QUERY_KEYS.portalUsers(clientId),
+        });
+      }
+    },
+  });
+}

@@ -9,6 +9,7 @@ export interface UserWithRoleAndPermissions extends User {
       };
     }>;
   };
+  company?: { id: string; companyName: string } | null;
 }
 
 export interface RequestContext {
@@ -110,6 +111,8 @@ export function toSafeUser(user: SafeUserMapperInput): SafeUser {
     mfaEnrollmentRequired: Boolean(
       (user as { mfaEnrollmentRequired?: boolean }).mfaEnrollmentRequired,
     ),
+    companyId: user.companyId ?? null,
+    companyName: user.company?.companyName ?? null,
     createdAt: user.createdAt.toISOString(),
   };
 }

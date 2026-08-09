@@ -168,6 +168,106 @@ export class ClientsRepository {
       where: { deletedAt: null, status },
     });
   }
+
+  async findPortalUsersByClientId(clientId: string) {
+    return prisma.user.findMany({
+      where: {
+        companyId: clientId,
+        deletedAt: null,
+        role: { code: "CLIENT" },
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        companyId: true,
+        createdAt: true,
+        company: { select: { companyName: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async findUnlinkedPortalUsers(query: {
+    search: string;
+    page: number;
+    limit: number;
+  }) {
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+      companyId: null,
+      role: { code: "CLIENT" },
+    };
+
+    if (query.search) {
+      const term = query.search;
+      where.OR = [
+        { email: { contains: term, mode: "insensitive" } },
+        { firstName: { contains: term, mode: "insensitive" } },
+        { lastName: { contains: term, mode: "insensitive" } },
+      ];
+    }
+
+    const skip = (query.page - 1) * query.limit;
+
+    const [items, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          status: true,
+          companyId: true,
+          createdAt: true,
+          company: { select: { companyName: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: query.limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return { items, total };
+  }
+
+  async findPortalUserCandidate(userId: string) {
+    return prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        companyId: true,
+        createdAt: true,
+        role: { select: { code: true } },
+        company: { select: { id: true, companyName: true } },
+      },
+    });
+  }
+
+  async setUserCompanyId(userId: string, companyId: string | null) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { companyId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        status: true,
+        companyId: true,
+        createdAt: true,
+        company: { select: { companyName: true } },
+      },
+    });
+  }
 }
 
 export const clientsRepository = new ClientsRepository();

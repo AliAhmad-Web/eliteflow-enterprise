@@ -371,7 +371,11 @@ export {
   clientSchema,
   clientStatusSchema,
   createClientSchema,
+  linkPortalUserSchema,
   listClientsQuerySchema,
+  listUnlinkedPortalUsersQuerySchema,
+  portalUserIdParamsSchema,
+  portalUserSchema,
   updateClientSchema,
 } from "./schemas/clients.schema.js";
 
@@ -380,7 +384,11 @@ export type {
   ClientIdParamsInput,
   ClientStatusValue,
   CreateClientInput,
+  LinkPortalUserInput,
   ListClientsQueryInput,
+  ListUnlinkedPortalUsersQueryInput,
+  PortalUserDto,
+  PortalUserIdParamsInput,
   UpdateClientInput,
 } from "./schemas/clients.schema.js";
 

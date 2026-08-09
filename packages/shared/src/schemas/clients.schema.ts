@@ -112,3 +112,39 @@ export const clientSchema = z.object({
 });
 
 export type ClientDto = z.infer<typeof clientSchema>;
+
+export const portalUserSchema = z.object({
+  id: uuidSchema,
+  email: emailSchema,
+  firstName: z.string(),
+  lastName: z.string(),
+  status: z.string(),
+  companyId: uuidSchema.nullable(),
+  companyName: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export type PortalUserDto = z.infer<typeof portalUserSchema>;
+
+export const linkPortalUserSchema = z.object({
+  userId: uuidSchema,
+});
+
+export type LinkPortalUserInput = z.infer<typeof linkPortalUserSchema>;
+
+export const portalUserIdParamsSchema = z.object({
+  id: uuidSchema,
+  userId: uuidSchema,
+});
+
+export type PortalUserIdParamsInput = z.infer<typeof portalUserIdParamsSchema>;
+
+export const listUnlinkedPortalUsersQuerySchema = z.object({
+  search: z.string().trim().max(200).optional().default(""),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
+
+export type ListUnlinkedPortalUsersQueryInput = z.infer<
+  typeof listUnlinkedPortalUsersQuerySchema
+>;

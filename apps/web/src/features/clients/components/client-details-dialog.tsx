@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
+import { useMemo, useState } from "react";
 import type { Client } from "@enterprise/shared";
 import { PERMISSIONS } from "@enterprise/shared";
-import { ExternalLink, Mail, MapPin, Phone } from "lucide-react";
+import { ExternalLink, Link2, Mail, MapPin, Phone, Unlink } from "lucide-react";
 
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
@@ -16,8 +17,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
+import { ApiClientError } from "@/services/api/api-error";
 
-import { useClient } from "../hooks/use-clients";
+import {
+  useLinkPortalUser,
+  useUnlinkPortalUser,
+} from "../hooks/use-client-mutations";
+import {
+  useClient,
+  useClientPortalUsers,
+  useUnlinkedPortalUsers,
+} from "../hooks/use-clients";
 import { ClientStatusBadge } from "./client-status-badge";
 
 interface ClientDetailsDialogProps {
@@ -53,6 +63,65 @@ export function ClientDetailsDialog({
   const { data: client, isLoading, isError, error, refetch } = useClient(
     open ? clientId : null,
   );
+  const portalUsersQuery = useClientPortalUsers(open ? clientId : null);
+  const unlinkedQuery = useUnlinkedPortalUsers(
+    { search: "", page: 1, limit: 50 },
+    open && Boolean(clientId),
+  );
+  const linkMutation = useLinkPortalUser(clientId);
+  const unlinkMutation = useUnlinkPortalUser(clientId);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [portalMessage, setPortalMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const unlinkedOptions = useMemo(
+    () => unlinkedQuery.data?.items ?? [],
+    [unlinkedQuery.data?.items],
+  );
+
+  const handleLink = async () => {
+    if (!selectedUserId) return;
+    setPortalMessage(null);
+    try {
+      await linkMutation.mutateAsync(selectedUserId);
+      setPortalMessage({
+        tone: "success",
+        text: "Portal user linked to this company.",
+      });
+      setSelectedUserId("");
+      void unlinkedQuery.refetch();
+    } catch (err) {
+      setPortalMessage({
+        tone: "error",
+        text:
+          err instanceof ApiClientError || err instanceof Error
+            ? err.message
+            : "Could not link portal user.",
+      });
+    }
+  };
+
+  const handleUnlink = async (userId: string) => {
+    setPortalMessage(null);
+    try {
+      await unlinkMutation.mutateAsync(userId);
+      setPortalMessage({
+        tone: "success",
+        text: "Portal user unlinked.",
+      });
+      void unlinkedQuery.refetch();
+    } catch (err) {
+      setPortalMessage({
+        tone: "error",
+        text:
+          err instanceof ApiClientError || err instanceof Error
+            ? err.message
+            : "Could not unlink portal user.",
+      });
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -60,7 +129,7 @@ export function ClientDetailsDialog({
         <DialogHeader>
           <DialogTitle>Client details</DialogTitle>
           <DialogDescription>
-            Company profile and contact information.
+            Company profile, contact information, and portal user linking.
           </DialogDescription>
         </DialogHeader>
 
@@ -141,7 +210,10 @@ export function ClientDetailsDialog({
                 value={
                   client.city || client.country || client.addressLine1 ? (
                     <span className="inline-flex items-start gap-1.5">
-                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <MapPin
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
                       <span>
                         {[client.addressLine1, client.city, client.country]
                           .filter(Boolean)
@@ -161,6 +233,105 @@ export function ClientDetailsDialog({
                 value={new Date(client.updatedAt).toLocaleString()}
               />
             </dl>
+
+            <section className="space-y-3 rounded-xl border border-border/50 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">
+                    Portal users
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    CLIENT accounts linked to this company for portal access.
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {(portalUsersQuery.data ?? []).length} linked
+                </span>
+              </div>
+
+              {portalMessage ? (
+                <p
+                  className={
+                    portalMessage.tone === "success"
+                      ? "text-sm text-emerald-700 dark:text-emerald-400"
+                      : "text-sm text-destructive"
+                  }
+                  role="status"
+                >
+                  {portalMessage.text}
+                </p>
+              ) : null}
+
+              {portalUsersQuery.isLoading ? (
+                <LoadingState
+                  label="Loading portal users"
+                  className="min-h-[80px] border-0 bg-transparent"
+                />
+              ) : null}
+
+              {(portalUsersQuery.data ?? []).length === 0 &&
+              !portalUsersQuery.isLoading ? (
+                <p className="text-sm text-muted-foreground">
+                  No portal users are linked yet.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {(portalUsersQuery.data ?? []).map((user) => (
+                    <li
+                      key={user.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/40 px-3 py-2"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {user.email}
+                        </p>
+                      </div>
+                      <PermissionGuard permission={PERMISSIONS.CLIENTS_WRITE}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={unlinkMutation.isPending}
+                          onClick={() => void handleUnlink(user.id)}
+                        >
+                          <Unlink className="mr-1.5 h-3.5 w-3.5" />
+                          Unlink
+                        </Button>
+                      </PermissionGuard>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <PermissionGuard permission={PERMISSIONS.CLIENTS_WRITE}>
+                <div className="flex flex-col gap-2 border-t border-border/40 pt-3 sm:flex-row sm:items-center">
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm sm:flex-1"
+                    value={selectedUserId}
+                    onChange={(event) => setSelectedUserId(event.target.value)}
+                    aria-label="Select unlinked CLIENT user"
+                  >
+                    <option value="">Select unlinked CLIENT user</option>
+                    {unlinkedOptions.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.firstName} {user.lastName} · {user.email}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    disabled={!selectedUserId || linkMutation.isPending}
+                    onClick={() => void handleLink()}
+                  >
+                    <Link2 className="mr-1.5 h-3.5 w-3.5" />
+                    Link user
+                  </Button>
+                </div>
+              </PermissionGuard>
+            </section>
 
             <DialogFooter className="gap-2 sm:justify-between">
               <Button
