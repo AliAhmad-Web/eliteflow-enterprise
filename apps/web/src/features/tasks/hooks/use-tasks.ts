@@ -6,12 +6,16 @@ import type { ListTasksQueryInput } from "@enterprise/shared";
 import { tasksService } from "../services/tasks.service";
 import { TASKS_QUERY_KEYS } from "../types/tasks.types";
 
-export function useTasks(query: ListTasksQueryInput) {
+export function useTasks(
+  query: ListTasksQueryInput,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: TASKS_QUERY_KEYS.list(query),
     queryFn: () => tasksService.list(query),
     staleTime: 60_000,
     placeholderData: keepPreviousData,
+    enabled: options?.enabled ?? true,
   });
 }
 

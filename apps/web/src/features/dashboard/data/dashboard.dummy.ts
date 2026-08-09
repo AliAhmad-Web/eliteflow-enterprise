@@ -1,23 +1,14 @@
 import {
   DollarSign,
-  FileText,
   FolderKanban,
-  Mail,
-  Plus,
   Receipt,
-  Sparkles,
   Users,
 } from "lucide-react";
-import { PERMISSIONS } from "@enterprise/shared";
 
-import { ROUTES } from "@/constants/routes";
 import type {
-  CalendarDay,
   DashboardNotification,
-  DashboardTask,
   KpiStat,
   ProjectStatusSegment,
-  QuickAction,
   RecentInvoice,
   RecentProject,
   RevenueDataPoint,
@@ -85,37 +76,6 @@ export const DUMMY_PROJECT_STATUS: ProjectStatusSegment[] = [
   { id: "in_progress", label: "In Progress", value: 10, colorClass: "text-chart-1" },
   { id: "on_hold", label: "On Hold", value: 4, colorClass: "text-chart-4" },
   { id: "not_started", label: "Not Started", value: 2, colorClass: "text-chart-6" },
-];
-
-export const DUMMY_TASKS: DashboardTask[] = [
-  {
-    id: "1",
-    title: "Review Q2 financial report",
-    priority: "high",
-    time: "9:00 AM",
-    completed: false,
-  },
-  {
-    id: "2",
-    title: "Client call with Acme Corp",
-    priority: "high",
-    time: "11:30 AM",
-    completed: false,
-  },
-  {
-    id: "3",
-    title: "Update project milestones",
-    priority: "medium",
-    time: "2:00 PM",
-    completed: true,
-  },
-  {
-    id: "4",
-    title: "Send invoice reminders",
-    priority: "medium",
-    time: "4:30 PM",
-    completed: false,
-  },
 ];
 
 export const DUMMY_RECENT_PROJECTS: RecentProject[] = [
@@ -194,86 +154,3 @@ export const DUMMY_NOTIFICATIONS: DashboardNotification[] = [
     type: "info",
   },
 ];
-
-export const DUMMY_QUICK_ACTIONS: QuickAction[] = [
-  {
-    id: "invoice",
-    label: "Generate Invoice",
-    icon: Receipt,
-    permission: PERMISSIONS.INVOICES_WRITE,
-    href: ROUTES.INVOICES,
-  },
-  {
-    id: "email",
-    label: "Write Email",
-    icon: Mail,
-    permission: PERMISSIONS.CHAT_WRITE,
-    href: ROUTES.AI_ASSISTANT,
-  },
-  {
-    id: "analyze",
-    label: "Analyze Data",
-    icon: Sparkles,
-    permission: PERMISSIONS.AI_USE,
-    href: ROUTES.AI_ASSISTANT,
-  },
-  {
-    id: "document",
-    label: "Summarize Document",
-    icon: FileText,
-    permission: PERMISSIONS.AI_USE,
-    href: ROUTES.AI_DOCUMENTS,
-  },
-];
-
-export const DUMMY_CREATE_ACTIONS: QuickAction[] = [
-  {
-    id: "project",
-    label: "New Project",
-    icon: FolderKanban,
-    permission: PERMISSIONS.PROJECTS_WRITE,
-    href: ROUTES.PROJECTS,
-  },
-  {
-    id: "client",
-    label: "New Client",
-    icon: Users,
-    permission: PERMISSIONS.CLIENTS_WRITE,
-    href: ROUTES.CLIENTS,
-  },
-  {
-    id: "invoice",
-    label: "New Invoice",
-    icon: Receipt,
-    permission: PERMISSIONS.INVOICES_WRITE,
-    href: ROUTES.INVOICES,
-  },
-  {
-    id: "task",
-    label: "New Task",
-    icon: Plus,
-    permission: PERMISSIONS.TASKS_WRITE,
-    href: ROUTES.TASKS,
-  },
-];
-
-/** Mini calendar for May 2026 — today = 19 */
-export const DUMMY_CALENDAR_DAYS: CalendarDay[] = (() => {
-  const days: CalendarDay[] = [];
-  const startOffset = 4; // May 1 2026 is Friday (0=Sun)
-
-  for (let i = 0; i < startOffset; i++) {
-    days.push({ date: 26 + i, isCurrentMonth: false, isToday: false, hasEvent: false });
-  }
-  for (let d = 1; d <= 31; d++) {
-    days.push({
-      date: d,
-      isCurrentMonth: true,
-      isToday: d === 19,
-      hasEvent: [5, 12, 19, 26].includes(d),
-    });
-  }
-  return days;
-})();
-
-export const CALENDAR_MONTH_LABEL = "May 2026";

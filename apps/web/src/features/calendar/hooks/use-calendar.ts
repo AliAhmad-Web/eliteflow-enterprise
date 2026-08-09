@@ -6,10 +6,15 @@ import type { ListCalendarEventsQueryInput } from "@enterprise/shared";
 import { calendarService } from "../services/calendar.service";
 import { CALENDAR_QUERY_KEYS } from "../types/calendar.types";
 
-export function useCalendarEvents(query: ListCalendarEventsQueryInput) {
+export function useCalendarEvents(
+  query: ListCalendarEventsQueryInput,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: CALENDAR_QUERY_KEYS.list(query),
     queryFn: () => calendarService.listEvents(query),
+    enabled: options?.enabled ?? true,
+    staleTime: 60_000,
   });
 }
 

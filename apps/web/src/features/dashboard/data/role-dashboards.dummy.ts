@@ -17,7 +17,6 @@ import { PERMISSIONS } from "@enterprise/shared";
 import { ROUTES } from "@/constants/routes";
 import type {
   DashboardNotification,
-  DashboardTask,
   KpiStat,
   ProjectStatusSegment,
   QuickAction,
@@ -291,37 +290,6 @@ export const EMPLOYEE_KPI_STATS: KpiStat[] = [
     trend: "down",
     icon: AlertTriangle,
     iconClassName: "text-destructive bg-destructive/10",
-  },
-];
-
-export const EMPLOYEE_TASKS: DashboardTask[] = [
-  {
-    id: "1",
-    title: "Finish homepage wireframes",
-    priority: "high",
-    time: "10:00 AM",
-    completed: false,
-  },
-  {
-    id: "2",
-    title: "Stand-up notes for Acme",
-    priority: "medium",
-    time: "11:00 AM",
-    completed: false,
-  },
-  {
-    id: "3",
-    title: "Upload asset pack to File Manager",
-    priority: "medium",
-    time: "1:30 PM",
-    completed: true,
-  },
-  {
-    id: "4",
-    title: "QA mobile nav on staging",
-    priority: "high",
-    time: "4:00 PM",
-    completed: false,
   },
 ];
 

@@ -8,8 +8,10 @@ export { EmployeeDashboard } from "./components/employee-dashboard";
 export { FocusListCard } from "./components/focus-list-card";
 export { KpiStatCard, KpiStatsGrid } from "./components/kpi-stat-card";
 export { ProjectStatusChart } from "./components/project-status-chart";
+export { QuickAccessWidget } from "./components/quick-access-widget";
 export { QuickActionButtons } from "./components/quick-action-buttons";
 export { RecentInvoicesCard } from "./components/recent-invoices-card";
+
 export { RecentProjectsCard } from "./components/recent-projects-card";
 export { RevenueChartCard } from "./components/revenue-chart-card";
 export { RoleDashboardHeader } from "./components/role-dashboard-header";

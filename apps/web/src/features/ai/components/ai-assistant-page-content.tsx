@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -138,6 +139,29 @@ export function AiAssistantPageContent() {
   const deferredSearch = useDeferredValue(search.trim());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<AiAssistModeValue>("ASK");
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const conversationId = searchParams.get("c") || searchParams.get("conversation");
+    if (conversationId) {
+      setSelectedId(conversationId);
+    }
+    const modeParam = searchParams.get("mode")?.toUpperCase();
+    if (
+      modeParam === "ASK" ||
+      modeParam === "EMAIL" ||
+      modeParam === "PROPOSAL" ||
+      modeParam === "SUMMARIZE" ||
+      modeParam === "ANALYZE" ||
+      modeParam === "IMPROVE" ||
+      modeParam === "MEETING_NOTES" ||
+      modeParam === "PROJECT_SUMMARY" ||
+      modeParam === "TECHNICAL_DOCS"
+    ) {
+      setMode(modeParam);
+    }
+  }, [searchParams]);
+
   const [draft, setDraft] = useState("");
   const [localMessages, setLocalMessages] = useState<AiMessage[]>([]);
   const [page, setPage] = useState(1);
