@@ -44,6 +44,8 @@ export function CalendarWidget({
     return null;
   }
 
+  const hasMonthEvents = dayCells.some((day) => day.hasEvent);
+
   return (
     <Card className={cn("border-border/50 shadow-[var(--shadow-sm)]", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -93,7 +95,12 @@ export function CalendarWidget({
                 ? error.message
                 : "Could not load calendar events."}
             </p>
-            <Button type="button" size="sm" variant="outline" onClick={() => refetch()}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void refetch()}
+            >
               Retry
             </Button>
           </div>
@@ -151,45 +158,61 @@ export function CalendarWidget({
             </div>
 
             <div className="space-y-1.5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {selectedEvents.length
-                  ? "Events"
-                  : "No events on selected day"}
-              </p>
-              {selectedEvents.slice(0, 3).map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  className="flex w-full items-start gap-2 rounded-lg border border-border/40 bg-muted/10 px-2.5 py-2 text-left transition hover:bg-accent/50"
-                  onClick={() =>
-                    router.push(
-                      `${ROUTES.CALENDAR}?open=${encodeURIComponent(event.id)}`,
-                    )
-                  }
-                >
-                  <span
-                    className="mt-1 size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: event.color || "var(--primary)" }}
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-foreground">
-                      {event.title}
-                    </span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      {formatEventTime(event.startsAt, event.allDay)}
-                    </span>
-                  </span>
-                </button>
-              ))}
-              {selectedEvents.length > 3 ? (
-                <Link
-                  href={ROUTES.CALENDAR}
-                  className="block text-center text-[11px] text-primary hover:underline"
-                >
-                  View {selectedEvents.length - 3} more
-                </Link>
-              ) : null}
+              {!hasMonthEvents ? (
+                <div className="rounded-xl border border-border/40 bg-muted/10 px-3 py-4 text-center">
+                  <p className="text-xs font-medium text-foreground">
+                    No meetings scheduled
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Shared meetings and project deadlines for your account will
+                    appear here.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {selectedEvents.length
+                      ? "Events"
+                      : "No events on selected day"}
+                  </p>
+                  {selectedEvents.slice(0, 3).map((event) => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      className="flex w-full items-start gap-2 rounded-lg border border-border/40 bg-muted/10 px-2.5 py-2 text-left transition hover:bg-accent/50"
+                      onClick={() =>
+                        router.push(
+                          `${ROUTES.CALENDAR}?open=${encodeURIComponent(event.id)}`,
+                        )
+                      }
+                    >
+                      <span
+                        className="mt-1 size-2 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: event.color || "var(--primary)",
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-foreground">
+                          {event.title}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {formatEventTime(event.startsAt, event.allDay)}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                  {selectedEvents.length > 3 ? (
+                    <Link
+                      href={ROUTES.CALENDAR}
+                      className="block text-center text-[11px] text-primary hover:underline"
+                    >
+                      View {selectedEvents.length - 3} more
+                    </Link>
+                  ) : null}
+                </>
+              )}
             </div>
           </>
         ) : null}

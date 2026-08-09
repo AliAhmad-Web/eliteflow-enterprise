@@ -185,15 +185,24 @@ export class CalendarService {
     if (isAdmin(actor)) return {};
 
     if (isClient(actor)) {
-      if (!actor.companyId) {
-        return { id: "__none__" };
-      }
+      // Fresh self-signup clients often have no linked Client CRM row yet
+      // (`user.companyId` is null). Never use a non-UUID sentinel like "__none__"
+      // — Prisma @db.Uuid rejects it and the dashboard Calendar crashes with 500.
+      const invited: Prisma.CalendarEventWhereInput = {
+        attendees: { some: { userId: actor.userId } },
+      };
+      const linkedToCompany: Prisma.CalendarEventWhereInput | null =
+        actor.companyId
+          ? { clientId: actor.companyId }
+          : null;
+
       return {
-        OR: [
-          { clientId: actor.companyId },
-          { attendees: { some: { userId: actor.userId } } },
+        AND: [
+          { isPrivate: false },
+          linkedToCompany
+            ? { OR: [linkedToCompany, invited] }
+            : invited,
         ],
-        isPrivate: false,
       };
     }
 

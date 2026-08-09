@@ -21,6 +21,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { FILES_AUDIT_ACTIONS, logFilesAuditEvent } from "./files.audit.js";
 import { FILES_ERROR_CODES, FilesError } from "./files.errors.js";
 import { filesRepository } from "./files.repository.js";
+import { emptyUuidIdScope } from "../../shared/utils/prisma-empty-scope.js";
 import {
   toFileActivityDto,
   toFileShareDto,
@@ -264,7 +265,9 @@ export class FilesService {
 
     if (isClient(actor)) {
       if (!actor.companyId) {
-        return { id: "__none__" };
+        // Fresh self-signup clients may have no CRM company link yet.
+        // Never use a non-UUID sentinel — Prisma @db.Uuid rejects "__none__".
+        return emptyUuidIdScope();
       }
       return { clientId: actor.companyId };
     }
@@ -504,14 +507,16 @@ export class FilesService {
     if (query.view === "shared") {
       const activeShare = this.activeShareWhere();
       const scope: Prisma.ManagedFileWhereInput = isClient(actor)
-        ? {
-            shares: {
-              some: {
-                sharedWithClientId: actor.companyId ?? "__none__",
-                ...activeShare,
+        ? actor.companyId
+          ? {
+              shares: {
+                some: {
+                  sharedWithClientId: actor.companyId,
+                  ...activeShare,
+                },
               },
-            },
-          }
+            }
+          : emptyUuidIdScope()
         : isAdmin(actor)
           ? { shares: { some: { ...activeShare } } }
           : {
