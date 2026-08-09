@@ -143,7 +143,9 @@ function SearchResultsPanel({
           keyof GlobalSearchResponse["groups"]
         >
       ).map((groupKey) => {
-        const items = data?.groups[groupKey] ?? [];
+        const items = Array.isArray(data?.groups?.[groupKey])
+          ? data.groups[groupKey]
+          : [];
         if (!items.length) return null;
         const Icon = GROUP_ICONS[groupKey];
         return (

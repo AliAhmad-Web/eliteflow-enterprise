@@ -15,48 +15,6 @@ export const searchKeys = {
 
 export { useDebouncedValue };
 
-export function useGlobalSearch(q: string, enabled = true) {
-  const trimmed = q.trim();
-  return useQuery({
-    queryKey: searchKeys.query(trimmed, "all"),
-    queryFn: () =>
-      searchService.search({
-        q: trimmed,
-        scope: "all",
-        limit: 8,
-      }),
-    enabled: enabled && trimmed.length >= 1,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
-    placeholderData: keepPreviousData,
-    refetchOnWindowFocus: false,
-  });
-}
-
-export function flattenSearchHits(
-  data: GlobalSearchResponse | undefined,
-): GlobalSearchHit[] {
-  if (!data) return [];
-  return [
-    ...data.groups.users,
-    ...data.groups.employees,
-    ...data.groups.clients,
-    ...data.groups.projects,
-    ...data.groups.tasks,
-    ...data.groups.files,
-    ...data.groups.messages,
-    ...data.groups.notifications,
-    ...data.groups.invoices,
-    ...data.groups.calendar,
-    ...data.groups.departments,
-    ...data.groups.teams,
-    ...data.groups.leave,
-    ...data.groups.reports,
-    ...data.groups.aiDocuments,
-    ...data.groups.announcements,
-  ];
-}
-
 export const SEARCH_GROUP_LABELS: Record<
   keyof GlobalSearchResponse["groups"],
   string
@@ -78,3 +36,86 @@ export const SEARCH_GROUP_LABELS: Record<
   aiDocuments: "AI Documents",
   announcements: "Announcements",
 };
+
+const SEARCH_GROUP_KEYS = Object.keys(
+  SEARCH_GROUP_LABELS,
+) as Array<keyof GlobalSearchResponse["groups"]>;
+
+function emptyGroups(): GlobalSearchResponse["groups"] {
+  return {
+    users: [],
+    employees: [],
+    clients: [],
+    projects: [],
+    tasks: [],
+    files: [],
+    messages: [],
+    notifications: [],
+    invoices: [],
+    calendar: [],
+    departments: [],
+    teams: [],
+    leave: [],
+    reports: [],
+    aiDocuments: [],
+    announcements: [],
+  };
+}
+
+/** Normalize partial/legacy API payloads so UI never crashes on missing groups. */
+export function normalizeSearchResponse(
+  data: GlobalSearchResponse | null | undefined,
+): GlobalSearchResponse | undefined {
+  if (!data) return undefined;
+  const base = emptyGroups();
+  const incoming = (data.groups ?? {}) as Partial<
+    GlobalSearchResponse["groups"]
+  >;
+  for (const key of SEARCH_GROUP_KEYS) {
+    const value = incoming[key];
+    base[key] = Array.isArray(value) ? value : [];
+  }
+  const total = SEARCH_GROUP_KEYS.reduce(
+    (sum, key) => sum + base[key].length,
+    0,
+  );
+  return {
+    q: typeof data.q === "string" ? data.q : "",
+    total: Number.isFinite(data.total) ? data.total : total,
+    groups: base,
+  };
+}
+
+export function useGlobalSearch(q: string, enabled = true) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: searchKeys.query(trimmed, "all"),
+    queryFn: async () => {
+      const raw = await searchService.search({
+        q: trimmed,
+        scope: "all",
+        limit: 8,
+      });
+      return normalizeSearchResponse(raw) ?? emptyGroupsResponse(trimmed);
+    },
+    enabled: enabled && trimmed.length >= 1,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+  });
+}
+
+function emptyGroupsResponse(q: string): GlobalSearchResponse {
+  return { q, total: 0, groups: emptyGroups() };
+}
+
+export function flattenSearchHits(
+  data: GlobalSearchResponse | undefined,
+): GlobalSearchHit[] {
+  if (!data?.groups) return [];
+  return SEARCH_GROUP_KEYS.flatMap((key) => {
+    const items = data.groups[key];
+    return Array.isArray(items) ? items : [];
+  });
+}
