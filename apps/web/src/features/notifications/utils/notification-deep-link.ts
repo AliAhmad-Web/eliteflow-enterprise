@@ -2,16 +2,17 @@ import type { Notification } from "@enterprise/shared";
 
 import { ROUTES, invoiceDetailPath, taskDetailPath } from "@/constants/routes";
 
-export const DEEP_LINK_PARAMS = {
-  OPEN: "open",
-  FROM: "from",
-  NOTIFICATION_ID: "nid",
-  ACTION: "action",
-  HIGHLIGHT: "highlight",
-  SOURCE: "src",
-} as const;
+import {
+  DEEP_LINK_PARAMS,
+  type DeepLinkActionType,
+} from "./deep-link-params";
 
-export type DeepLinkActionType = "view" | "discuss" | "preview";
+export {
+  DEEP_LINK_PARAMS,
+  parseDeepLinkSearchParams,
+  stripDeepLinkSearchParams,
+  type DeepLinkActionType,
+} from "./deep-link-params";
 
 export type DeepLinkSourceModule =
   | "notifications"
@@ -216,36 +217,6 @@ export function buildEntityDeepLink(
 
 export function buildNotificationPermalink(notificationId: string): string {
   return `${ROUTES.NOTIFICATIONS}/${notificationId}`;
-}
-
-export function parseDeepLinkSearchParams(
-  searchParams: URLSearchParams,
-): {
-  openId: string | null;
-  fromNotification: boolean;
-  notificationId: string | null;
-  actionType: DeepLinkActionType;
-  highlight: boolean;
-  sourceModule: string | null;
-} {
-  const openId =
-    searchParams.get(DEEP_LINK_PARAMS.OPEN) ??
-    searchParams.get("event") ??
-    searchParams.get("file") ??
-    searchParams.get("id");
-
-  const actionRaw = searchParams.get(DEEP_LINK_PARAMS.ACTION);
-  const actionType: DeepLinkActionType =
-    actionRaw === "discuss" || actionRaw === "preview" ? actionRaw : "view";
-
-  return {
-    openId: openId && openId.length > 0 ? openId : null,
-    fromNotification: searchParams.get(DEEP_LINK_PARAMS.FROM) === "notification",
-    notificationId: searchParams.get(DEEP_LINK_PARAMS.NOTIFICATION_ID),
-    actionType,
-    highlight: searchParams.get(DEEP_LINK_PARAMS.HIGHLIGHT) !== "0",
-    sourceModule: searchParams.get(DEEP_LINK_PARAMS.SOURCE),
-  };
 }
 
 export function buildDeepLinkContext(

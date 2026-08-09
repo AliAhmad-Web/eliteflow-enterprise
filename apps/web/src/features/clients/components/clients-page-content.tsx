@@ -305,12 +305,15 @@ export function ClientsPageContent() {
           }
         }}
         onEdit={(client) => {
+          // Defer next dialog so Radix DismissableLayer can clear body pointer-events.
           setViewClientId(null);
-          setEditClient(client);
+          deepLink.clearDeepLinkParams();
+          window.setTimeout(() => setEditClient(client), 50);
         }}
         onDelete={(client) => {
           setViewClientId(null);
-          setDeleteClient(client);
+          deepLink.clearDeepLinkParams();
+          window.setTimeout(() => setDeleteClient(client), 50);
         }}
       />
 

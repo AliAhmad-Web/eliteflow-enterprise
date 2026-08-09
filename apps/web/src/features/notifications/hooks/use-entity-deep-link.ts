@@ -4,8 +4,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import {
-  DEEP_LINK_PARAMS,
+  scheduleAfterOverlayClose,
+  scheduleRestoreBodyInteraction,
+} from "@/lib/ui/body-interaction";
+
+import {
   parseDeepLinkSearchParams,
+  stripDeepLinkSearchParams,
   type DeepLinkActionType,
 } from "../utils/notification-deep-link";
 
@@ -43,28 +48,30 @@ export function useEntityDeepLink(onOpen?: (openId: string) => void): EntityDeep
     if (handledRef.current === parsed.openId) return;
     handledRef.current = parsed.openId;
     handleOpen(parsed.openId, parsed.fromNotification);
-  }, [parsed.openId, parsed.fromNotification, handleOpen]);
+  }, [parsed.openId, parsed.fromNotification]);
 
   const clearDeepLinkParams = () => {
-    const next = new URLSearchParams(searchParams.toString());
-    for (const key of [
-      DEEP_LINK_PARAMS.OPEN,
-      DEEP_LINK_PARAMS.FROM,
-      DEEP_LINK_PARAMS.NOTIFICATION_ID,
-      DEEP_LINK_PARAMS.ACTION,
-      DEEP_LINK_PARAMS.HIGHLIGHT,
-      DEEP_LINK_PARAMS.SOURCE,
-      "event",
-      "file",
-    ]) {
-      next.delete(key);
-    }
-    if (searchParams.get(DEEP_LINK_PARAMS.FROM) === "notification") {
-      next.delete("id");
-    }
+    const { next, changed } = stripDeepLinkSearchParams(
+      new URLSearchParams(searchParams.toString()),
+    );
+
+    // Always schedule a body-interaction restore after detail/modal close.
+    scheduleRestoreBodyInteraction();
+
+    // Critical: never call router.replace when URL is unchanged. A no-op soft
+    // navigation during Radix Dialog teardown races DismissableLayer cleanup and
+    // can leave `document.body.style.pointerEvents = "none"` permanently.
+    if (!changed) return;
+
     const qs = next.toString();
-    const path = window.location.pathname;
-    router.replace(qs ? `${path}?${qs}` : path, { scroll: false });
+    const path =
+      typeof window !== "undefined" ? window.location.pathname : "";
+    const href = qs ? `${path}?${qs}` : path;
+
+    scheduleAfterOverlayClose(() => {
+      router.replace(href, { scroll: false });
+      scheduleRestoreBodyInteraction();
+    }, 0);
   };
 
   return {

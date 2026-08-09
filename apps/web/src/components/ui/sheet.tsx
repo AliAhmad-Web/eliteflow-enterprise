@@ -4,9 +4,25 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
+import { scheduleRestoreBodyInteraction } from "@/lib/ui/body-interaction";
 import { cn } from "@/lib/utils";
 
-const Sheet = DialogPrimitive.Root;
+function Sheet({
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  return (
+    <DialogPrimitive.Root
+      {...props}
+      onOpenChange={(open) => {
+        if (!open) {
+          scheduleRestoreBodyInteraction();
+        }
+        onOpenChange?.(open);
+      }}
+    />
+  );
+}
 
 const SheetTrigger = DialogPrimitive.Trigger;
 
@@ -23,6 +39,7 @@ const SheetOverlay = React.forwardRef<
       "fixed inset-0 z-50 bg-black/50 backdrop-blur-[4px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
+    data-slot="sheet-overlay"
     {...props}
     ref={ref}
   />
@@ -37,7 +54,7 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   SheetContentProps
->(({ side = "left", className, children, ...props }, ref) => (
+>(({ side = "left", className, children, onCloseAutoFocus, onAnimationEnd, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <DialogPrimitive.Content
@@ -50,6 +67,17 @@ const SheetContent = React.forwardRef<
           "inset-y-0 right-0 w-[min(100vw,100%)] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:w-[320px] sm:max-w-[90vw]",
         className,
       )}
+      onCloseAutoFocus={(event) => {
+        onCloseAutoFocus?.(event);
+        scheduleRestoreBodyInteraction();
+      }}
+      onAnimationEnd={(event) => {
+        onAnimationEnd?.(event);
+        const state = (event.currentTarget as HTMLElement).dataset.state;
+        if (state === "closed") {
+          scheduleRestoreBodyInteraction();
+        }
+      }}
       {...props}
     >
       {children}

@@ -15,6 +15,7 @@ import {
   preloadKeepAliveRoute,
 } from "@/lib/navigation/keep-alive-registry";
 import { ROUTES } from "@/constants/routes";
+import { restoreBodyInteractionIfIdle } from "@/lib/ui/body-interaction";
 import { useNavTransitionStore } from "@/stores/nav-transition.store";
 
 const COMMUNICATION_WARM_ROUTES = new Set<string>([
@@ -109,6 +110,9 @@ export function PrefetchLink({
       }
 
       event.preventDefault();
+
+      // If a prior modal left body pointer-events:none, unblock before nav swap.
+      restoreBodyInteractionIfIdle();
 
       const keepAlive = matchKeepAliveRoute(pathOnly);
       if (keepAlive) {

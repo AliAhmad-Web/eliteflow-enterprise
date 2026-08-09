@@ -372,12 +372,15 @@ export function ProjectsPageContent() {
           }
         }}
         onEdit={(project) => {
+          // Defer next dialog so Radix DismissableLayer can clear body pointer-events.
           setViewProjectId(null);
-          setEditProject(project);
+          deepLink.clearDeepLinkParams();
+          window.setTimeout(() => setEditProject(project), 50);
         }}
         onDelete={(project) => {
           setViewProjectId(null);
-          setDeleteProject(project);
+          deepLink.clearDeepLinkParams();
+          window.setTimeout(() => setDeleteProject(project), 50);
         }}
       />
 

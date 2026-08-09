@@ -4,9 +4,26 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
+import { scheduleRestoreBodyInteraction } from "@/lib/ui/body-interaction";
 import { cn } from "@/lib/utils";
 
-const Dialog = DialogPrimitive.Root;
+function Dialog({
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  return (
+    <DialogPrimitive.Root
+      {...props}
+      onOpenChange={(open) => {
+        if (!open) {
+          scheduleRestoreBodyInteraction();
+        }
+        onOpenChange?.(open);
+      }}
+    />
+  );
+}
+
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
@@ -17,6 +34,7 @@ const DialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
+    data-slot="dialog-overlay"
     className={cn(
       "fixed inset-0 z-50 bg-black/50 backdrop-blur-[4px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
@@ -29,7 +47,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onCloseAutoFocus, onAnimationEnd, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -41,6 +59,18 @@ const DialogContent = React.forwardRef<
         "overflow-y-auto",
         className,
       )}
+      onCloseAutoFocus={(event) => {
+        onCloseAutoFocus?.(event);
+        // Radix can leave body pointer-events:none after controlled close / nav race.
+        scheduleRestoreBodyInteraction();
+      }}
+      onAnimationEnd={(event) => {
+        onAnimationEnd?.(event);
+        const state = (event.currentTarget as HTMLElement).dataset.state;
+        if (state === "closed") {
+          scheduleRestoreBodyInteraction();
+        }
+      }}
       {...props}
     >
       {children}

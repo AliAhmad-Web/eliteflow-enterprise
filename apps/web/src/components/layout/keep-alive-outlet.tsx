@@ -21,6 +21,7 @@ import {
   matchKeepAliveRoute,
   preloadKeepAliveRoute,
 } from "@/lib/navigation/keep-alive-registry";
+import { restoreBodyInteractionIfIdle } from "@/lib/ui/body-interaction";
 import { useKeepAliveVisibilityStore } from "@/stores/keep-alive-visibility.store";
 import { useNavTransitionStore } from "@/stores/nav-transition.store";
 
@@ -143,6 +144,13 @@ export function KeepAliveOutlet({ children }: KeepAliveOutletProps) {
       setOptimisticPath(null);
     }
   }, [pathname, optimisticPath, setOptimisticPath]);
+
+  // Safety net: clear leaked Radix body pointer-events after soft navigations.
+  useEffect(() => {
+    restoreBodyInteractionIfIdle();
+    const timer = window.setTimeout(() => restoreBodyInteractionIfIdle(), 50);
+    return () => window.clearTimeout(timer);
+  }, [pathname, activeKeepAlive]);
 
   // RC#5: publish active keep-alive route for poll/heartbeat gating.
   useEffect(() => {
