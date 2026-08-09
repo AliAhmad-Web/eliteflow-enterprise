@@ -15,6 +15,7 @@ import type {
 import { UserRole } from "@enterprise/shared";
 
 import { recordSaasReportGeneration } from "../../shared/services/saas-metrics.service.js";
+import { emptyUuidIdScope } from "../../shared/utils/prisma-empty-scope.js";
 import { getAiProvider } from "../ai/providers/index.js";
 import {
   REPORTS_AUDIT_ACTIONS,
@@ -184,8 +185,8 @@ export class ReportsService {
 
     if (isClient(actor)) {
       const companyId = actor.companyId;
+      const none = emptyUuidIdScope();
       if (!companyId) {
-        const none = { id: "__none__" };
         return {
           clientWhere: none,
           projectWhere: none,
@@ -202,10 +203,11 @@ export class ReportsService {
         projectWhere: { clientId: companyId },
         taskWhere: { project: { clientId: companyId } },
         invoiceWhere: { clientId: companyId },
-        employeeWhere: { id: "__none__" },
-        attendanceWhere: { id: "__none__" },
-        leaveWhere: { id: "__none__" },
-        performanceWhere: { id: "__none__" },
+        // Clients never see HR entities — use UUID-safe empty filters.
+        employeeWhere: none,
+        attendanceWhere: none,
+        leaveWhere: none,
+        performanceWhere: none,
       };
     }
 
@@ -219,6 +221,7 @@ export class ReportsService {
       where: { userId: actor.userId, deletedAt: null },
       select: { id: true },
     });
+    const none = emptyUuidIdScope();
 
     return {
       clientWhere: {},
@@ -234,15 +237,15 @@ export class ReportsService {
       },
       invoiceWhere: projectIds.length
         ? { projectId: { in: projectIds } }
-        : { id: "__none__" },
+        : none,
       employeeWhere: profile ? { id: profile.id } : { userId: actor.userId },
       attendanceWhere: profile
         ? { employeeId: profile.id }
-        : { id: "__none__" },
-      leaveWhere: profile ? { employeeId: profile.id } : { id: "__none__" },
+        : none,
+      leaveWhere: profile ? { employeeId: profile.id } : none,
       performanceWhere: profile
         ? { employeeId: profile.id }
-        : { id: "__none__" },
+        : none,
     };
   }
 
