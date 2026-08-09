@@ -48,6 +48,12 @@ export function flattenSearchHits(
     ...data.groups.notifications,
     ...data.groups.invoices,
     ...data.groups.calendar,
+    ...data.groups.departments,
+    ...data.groups.teams,
+    ...data.groups.leave,
+    ...data.groups.reports,
+    ...data.groups.aiDocuments,
+    ...data.groups.announcements,
   ];
 }
 
@@ -65,4 +71,10 @@ export const SEARCH_GROUP_LABELS: Record<
   notifications: "Notifications",
   invoices: "Invoices",
   calendar: "Calendar",
+  departments: "Departments",
+  teams: "Teams",
+  leave: "Leave",
+  reports: "Reports",
+  aiDocuments: "AI Documents",
+  announcements: "Announcements",
 };

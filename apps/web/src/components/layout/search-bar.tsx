@@ -10,10 +10,16 @@ import {
   Loader2,
   MessageSquareText,
   Bell,
+  Megaphone,
+  Network,
   Receipt,
   Search,
+  Sparkles,
   UserRound,
   Users,
+  UsersRound,
+  ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -34,7 +40,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ApiClientError } from "@/services/api/api-error";
+import { ApiClientError, getApiErrorMessage } from "@/services/api/api-error";
 import { MEDIA_QUERIES } from "@/lib/breakpoints";
 import { cn } from "@/lib/utils";
 import {
@@ -55,6 +61,12 @@ const GROUP_ICONS = {
   notifications: Bell,
   invoices: Receipt,
   calendar: CalendarDays,
+  departments: Network,
+  teams: UsersRound,
+  leave: ClipboardList,
+  reports: BarChart3,
+  aiDocuments: Sparkles,
+  announcements: Megaphone,
 } as const;
 
 function SearchResultsPanel({
@@ -83,8 +95,8 @@ function SearchResultsPanel({
   if (!debouncedQ) {
     return (
       <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-        Search people, clients, projects, tasks, files, invoices, calendar, and
-        more.
+        Search people, clients, projects, tasks, files, invoices, calendar, HR,
+        reports, and more.
       </p>
     );
   }
@@ -101,9 +113,10 @@ function SearchResultsPanel({
   if (isError) {
     return (
       <p className="px-3 py-6 text-center text-sm text-destructive">
-        {error instanceof ApiClientError
-          ? error.message
-          : "Search failed. Please try again."}
+        {getApiErrorMessage(
+          error instanceof ApiClientError ? error : error,
+          "Search failed. Please try again.",
+        )}
       </p>
     );
   }
