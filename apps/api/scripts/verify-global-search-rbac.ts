@@ -157,7 +157,14 @@ async function main() {
       actors.SUPER_ADMIN,
     );
     for (const row of invoices.groups.invoices) {
-      assert.match(row.href, /^\/invoices\?open=/);
+      assert.match(row.href, /^\/invoices\//);
+    }
+    const tasks = await searchService.search(
+      { q: "a", scope: "tasks", limit: 5 },
+      actors.SUPER_ADMIN,
+    );
+    for (const row of tasks.groups.tasks) {
+      assert.match(row.href, /^\/tasks\//);
     }
     const calendar = await searchService.search(
       { q: "a", scope: "calendar", limit: 5 },

@@ -17,8 +17,9 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useRouter } from "next/navigation";
 
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
@@ -27,9 +28,9 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { taskDetailPath } from "@/constants/routes";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
 import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
-import { DeepLinkHighlight } from "@/features/notifications/components/deep-link-highlight";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
 import {
   useHasPermission,
@@ -44,13 +45,13 @@ import {
   TASK_STATUS_LABELS,
 } from "../types/tasks.types";
 import { DeleteTaskDialog } from "./delete-task-dialog";
-import { TaskDetailsDrawer } from "./task-details-drawer";
 import { TaskFormDialog } from "./task-form-dialog";
 import { TasksTable } from "./tasks-table";
 
 const selectClassName = FORM_SELECT_CLASS;
 
 export function TasksPageContent() {
+  const router = useRouter();
   const { isAdmin, isEmployee, isClient } = useRole();
   const currentUserId = useAuthStore((state) => state.user?.id);
   const hasWrite = useHasPermission(PERMISSIONS.TASKS_WRITE);
@@ -58,7 +59,6 @@ export function TasksPageContent() {
   const canManage = isAdmin && hasWrite;
   const canDelete = isAdmin && hasDelete;
   const canWriteOwn = isEmployee && hasWrite;
-  const canComment = (isAdmin || isEmployee) && hasWrite;
 
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
@@ -74,12 +74,14 @@ export function TasksPageContent() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
-  const [viewTaskId, setViewTaskId] = useState<string | null>(null);
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
 
-  const deepLink = useEntityDeepLink((openId) => {
-    setViewTaskId(openId);
-  });
+  const deepLink = useEntityDeepLink();
+
+  useEffect(() => {
+    if (!deepLink.openId) return;
+    router.replace(taskDetailPath(deepLink.openId));
+  }, [deepLink.openId, router]);
 
   const query = useMemo<ListTasksQueryInput>(
     () => ({
@@ -315,28 +317,17 @@ export function TasksPageContent() {
                   onAction={canManage ? () => setCreateOpen(true) : undefined}
                 />
               ) : (
-                <DeepLinkHighlight
-                  active={Boolean(
-                    deepLink.highlight &&
-                      deepLink.openId &&
-                      viewTaskId === deepLink.openId,
-                  )}
-                  scrollId={
-                    deepLink.openId ? `task-row-${deepLink.openId}` : undefined
-                  }
-                >
-                  <TasksTable
-                    tasks={tasks}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                    onView={(task) => setViewTaskId(task.id)}
-                    onEdit={(task) => setEditTask(task)}
-                    onDelete={(task) => setDeleteTask(task)}
-                    canEditTask={canEditTask}
-                    canDelete={canDelete}
-                  />
-                </DeepLinkHighlight>
+                <TasksTable
+                  tasks={tasks}
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  onView={(task) => router.push(taskDetailPath(task.id))}
+                  onEdit={(task) => setEditTask(task)}
+                  onDelete={(task) => setDeleteTask(task)}
+                  canEditTask={canEditTask}
+                  canDelete={canDelete}
+                />
               )}
 
               {totalPages > 1 ? (
@@ -395,28 +386,6 @@ export function TasksPageContent() {
           if (!open) {
             setEditTask(null);
           }
-        }}
-      />
-
-      <TaskDetailsDrawer
-        open={Boolean(viewTaskId)}
-        taskId={viewTaskId}
-        onOpenChange={(open) => {
-          if (!open) {
-            setViewTaskId(null);
-            deepLink.clearDeepLinkParams();
-          }
-        }}
-        canEditTask={canEditTask}
-        canDelete={canDelete}
-        canComment={canComment}
-        onEdit={(task) => {
-          setViewTaskId(null);
-          setEditTask(task);
-        }}
-        onDelete={(task) => {
-          setViewTaskId(null);
-          setDeleteTask(task);
         }}
       />
 

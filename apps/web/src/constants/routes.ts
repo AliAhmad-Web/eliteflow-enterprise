@@ -44,3 +44,11 @@ export const ROUTES = {
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
+
+export function taskDetailPath(id: string): string {
+  return `${ROUTES.TASKS}/${id}`;
+}
+
+export function invoiceDetailPath(id: string): string {
+  return `${ROUTES.INVOICES}/${id}`;
+}

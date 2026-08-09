@@ -507,7 +507,7 @@ export class SearchService {
         type: "task",
         title: row.title,
         subtitle: [row.project?.name, row.status].filter(Boolean).join(" · "),
-        href: `/tasks?open=${encodeURIComponent(row.id)}`,
+        href: `/tasks/${row.id}`,
       }),
     );
   }
@@ -743,7 +743,7 @@ export class SearchService {
         ]
           .filter(Boolean)
           .join(" · "),
-        href: `/invoices?open=${encodeURIComponent(row.id)}`,
+        href: `/invoices/${row.id}`,
       }),
     );
   }

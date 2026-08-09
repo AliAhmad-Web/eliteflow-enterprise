@@ -15,8 +15,9 @@ import {
   Search,
   Wallet,
 } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useRouter } from "next/navigation";
 
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
@@ -25,6 +26,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { invoiceDetailPath } from "@/constants/routes";
 import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
 import {
@@ -38,7 +40,6 @@ import { useDownloadInvoicePdf } from "../hooks/use-invoice-mutations";
 import { useInvoiceStats, useInvoices } from "../hooks/use-invoices";
 import { INVOICE_STATUS_LABELS } from "../types/invoices.types";
 import { DeleteInvoiceDialog } from "./delete-invoice-dialog";
-import { InvoiceDetailsDrawer } from "./invoice-details-drawer";
 import { InvoiceFormDialog } from "./invoice-form-dialog";
 import { InvoicesTable } from "./invoices-table";
 
@@ -53,6 +54,7 @@ function formatMoney(value: number): string {
 }
 
 export function InvoicesPageContent() {
+  const router = useRouter();
   const { isAdmin, isClient } = useRole();
   const hasWrite = useHasPermission(PERMISSIONS.INVOICES_WRITE);
   const hasDelete = useHasPermission(PERMISSIONS.INVOICES_DELETE);
@@ -72,9 +74,13 @@ export function InvoicesPageContent() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
-  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
-  const deepLink = useEntityDeepLink((openId) => setViewInvoiceId(openId));
+  const deepLink = useEntityDeepLink();
+
+  useEffect(() => {
+    if (!deepLink.openId) return;
+    router.replace(invoiceDetailPath(deepLink.openId));
+  }, [deepLink.openId, router]);
 
   const query = useMemo<ListInvoicesQueryInput>(
     () => ({
@@ -289,7 +295,9 @@ export function InvoicesPageContent() {
                   sortBy={sortBy}
                   sortOrder={sortOrder}
                   onSort={handleSort}
-                  onView={(invoice) => setViewInvoiceId(invoice.id)}
+                  onView={(invoice) =>
+                    router.push(invoiceDetailPath(invoice.id))
+                  }
                   onEdit={(invoice) => setEditInvoice(invoice)}
                   onDelete={(invoice) => setDeleteInvoice(invoice)}
                   onDownloadPdf={(invoice) => {
@@ -348,27 +356,6 @@ export function InvoicesPageContent() {
         invoice={editInvoice}
         onOpenChange={(open) => {
           if (!open) setEditInvoice(null);
-        }}
-      />
-
-      <InvoiceDetailsDrawer
-        open={Boolean(viewInvoiceId)}
-        invoiceId={viewInvoiceId}
-        onOpenChange={(open) => {
-          if (!open) {
-            setViewInvoiceId(null);
-            deepLink.clearDeepLinkParams();
-          }
-        }}
-        canWrite={canWrite}
-        canDelete={canDelete}
-        onEdit={(invoice) => {
-          setViewInvoiceId(null);
-          setEditInvoice(invoice);
-        }}
-        onDelete={(invoice) => {
-          setViewInvoiceId(null);
-          setDeleteInvoice(invoice);
         }}
       />
 

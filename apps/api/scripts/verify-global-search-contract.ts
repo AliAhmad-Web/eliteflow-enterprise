@@ -42,9 +42,9 @@ const invoice = globalSearchHitSchema.parse({
   type: "invoice",
   title: "INV-1001",
   subtitle: "Acme · PAID",
-  href: "/invoices?open=00000000-0000-4000-8000-000000000002",
+  href: "/invoices/00000000-0000-4000-8000-000000000002",
 });
-assert.match(invoice.href, /^\/invoices\?open=/);
+assert.match(invoice.href, /^\/invoices\//);
 
 const emptyGroups = {
   users: [],

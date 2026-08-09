@@ -1,4 +1,4 @@
-import { ROUTES } from "@/constants/routes";
+import { ROUTES, invoiceDetailPath, taskDetailPath } from "@/constants/routes";
 import {
   DEEP_LINK_PARAMS,
   type DeepLinkSourceModule,
@@ -223,7 +223,6 @@ export function buildLinkedRecordDeepLink(
   options?: { messageId?: string },
 ): string {
   const params = new URLSearchParams({
-    [DEEP_LINK_PARAMS.OPEN]: entityId,
     [DEEP_LINK_PARAMS.FROM]: "messages",
     [DEEP_LINK_PARAMS.ACTION]: "view",
     [DEEP_LINK_PARAMS.HIGHLIGHT]: "1",
@@ -232,6 +231,15 @@ export function buildLinkedRecordDeepLink(
   if (options?.messageId) {
     params.set("mid", options.messageId);
   }
+
+  if (type === "TASK") {
+    return `${taskDetailPath(entityId)}?${params.toString()}`;
+  }
+  if (type === "INVOICE") {
+    return `${invoiceDetailPath(entityId)}?${params.toString()}`;
+  }
+
+  params.set(DEEP_LINK_PARAMS.OPEN, entityId);
 
   const base = baseRouteForType(type);
   if (base === ROUTES.CALENDAR) params.set("event", entityId);

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ROUTES } from "@/constants/routes";
+import { ROUTES, taskDetailPath } from "@/constants/routes";
 import { useTodaysTasks } from "@/features/dashboard/hooks/use-todays-tasks";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { useUpdateTask } from "@/features/tasks/hooks/use-task-mutations";
@@ -81,7 +81,7 @@ export function TodaysTasksWidget({
   };
 
   const openTask = (taskId: string) => {
-    router.push(`${ROUTES.TASKS}?open=${encodeURIComponent(taskId)}`);
+    router.push(taskDetailPath(taskId));
   };
 
   return (

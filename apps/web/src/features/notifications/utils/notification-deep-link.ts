@@ -1,6 +1,6 @@
 import type { Notification } from "@enterprise/shared";
 
-import { ROUTES } from "@/constants/routes";
+import { ROUTES, invoiceDetailPath, taskDetailPath } from "@/constants/routes";
 
 export const DEEP_LINK_PARAMS = {
   OPEN: "open",
@@ -68,13 +68,13 @@ function baseRouteForNotification(notification: Notification): string | null {
 
   if (entityId) {
     if (entityType.includes("task") || notification.category === "TASK") {
-      return ROUTES.TASKS;
+      return taskDetailPath(entityId);
     }
     if (entityType.includes("project") || notification.category === "PROJECT") {
       return ROUTES.PROJECTS;
     }
     if (entityType.includes("invoice") || notification.category === "INVOICE") {
-      return ROUTES.INVOICES;
+      return invoiceDetailPath(entityId);
     }
     if (
       entityType.includes("calendar") ||
@@ -137,13 +137,28 @@ export function buildEntityDeepLink(
     // Fall back to stored linkUrl only when it already includes a record focus param.
     if (notification.linkUrl?.includes("?")) return notification.linkUrl;
     if (notification.linkUrl?.match(/\/[0-9a-f-]{36}/i)) {
-      // Convert /tasks/:id → /tasks?open=:id&...
+      // Keep path-based task/invoice detail links and attach notification context.
       const match = notification.linkUrl.match(
-        /^(\/(?:tasks|projects|invoices|clients))\/([0-9a-f-]{36})/i,
+        /^(\/(?:tasks|invoices))\/([0-9a-f-]{36})/i,
       );
       if (match) {
         const base = match[1];
         const id = match[2];
+        const params = new URLSearchParams({
+          [DEEP_LINK_PARAMS.FROM]: "notification",
+          [DEEP_LINK_PARAMS.NOTIFICATION_ID]: notification.id,
+          [DEEP_LINK_PARAMS.ACTION]: options?.actionType ?? "view",
+          [DEEP_LINK_PARAMS.HIGHLIGHT]: "1",
+          [DEEP_LINK_PARAMS.SOURCE]: moduleFromCategory(notification.category),
+        });
+        return `${base}/${id}?${params.toString()}`;
+      }
+      const legacy = notification.linkUrl.match(
+        /^(\/(?:projects|clients))\/([0-9a-f-]{36})/i,
+      );
+      if (legacy) {
+        const base = legacy[1];
+        const id = legacy[2];
         const params = new URLSearchParams({
           [DEEP_LINK_PARAMS.OPEN]: id,
           [DEEP_LINK_PARAMS.FROM]: "notification",
@@ -161,6 +176,18 @@ export function buildEntityDeepLink(
 
   const base = baseRouteForNotification(notification);
   if (!base) return notification.linkUrl;
+
+  // Task / invoice detail pages are path-based (like files).
+  if (base.startsWith(`${ROUTES.TASKS}/`) || base.startsWith(`${ROUTES.INVOICES}/`)) {
+    const params = new URLSearchParams({
+      [DEEP_LINK_PARAMS.FROM]: "notification",
+      [DEEP_LINK_PARAMS.NOTIFICATION_ID]: notification.id,
+      [DEEP_LINK_PARAMS.ACTION]: options?.actionType ?? "view",
+      [DEEP_LINK_PARAMS.HIGHLIGHT]: "1",
+      [DEEP_LINK_PARAMS.SOURCE]: moduleFromCategory(notification.category),
+    });
+    return `${base}?${params.toString()}`;
+  }
 
   const params = new URLSearchParams({
     [DEEP_LINK_PARAMS.OPEN]: entityId,
