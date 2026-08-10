@@ -196,11 +196,43 @@ model LeaveRequest {
   reviewedBy User?           @relation("LeaveReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   createdBy  User?           @relation("LeaveCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy  User?           @relation("LeaveUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  workflowState LeaveWorkflowState?
 
   @@index([employeeId, status])
   @@index([startDate, endDate])
   @@index([deletedAt])
   @@map("leave_requests")
+}
+
+/// Durable leave multi-stage approval state (PostgreSQL source of truth; Redis optional cache).
+model LeaveWorkflowState {
+  id              String                  @id @default(uuid()) @db.Uuid
+  leaveRequestId  String                  @unique @map("leave_request_id") @db.Uuid
+  employeeId      String                  @map("employee_id") @db.Uuid
+  subjectUserId   String                  @map("subject_user_id") @db.Uuid
+  state           LeaveWorkflowStageState
+  stageStatus     String                  @default("ACTIVE") @map("stage_status") @db.VarChar(40)
+  managerApproverId String?               @map("manager_approver_id") @db.Uuid
+  managerApprovedAt DateTime?             @map("manager_approved_at")
+  hrApproverId    String?                 @map("hr_approver_id") @db.Uuid
+  hrApprovedAt    DateTime?               @map("hr_approved_at")
+  finalApproverId String?                 @map("final_approver_id") @db.Uuid
+  finalApprovedAt DateTime?               @map("final_approved_at")
+  overrideById    String?                 @map("override_by_id") @db.Uuid
+  overrideAt      DateTime?               @map("override_at")
+  overrideAction  String?                 @map("override_action") @db.VarChar(20)
+  submittedAt     DateTime                @map("submitted_at")
+  expiresAt       DateTime                @map("expires_at")
+  revision        Int                     @default(1)
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([state, expiresAt])
+  @@index([employeeId])
+  @@index([expiresAt])
+  @@map("leave_workflow_states")
 }
 
 model PerformanceReview {

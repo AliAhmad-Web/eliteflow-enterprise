@@ -27,7 +27,7 @@ import {
 import {
   deleteLeaveWorkflowStage,
   getLeaveWorkflowStage,
-  listMemoryLeaveWorkflowStages,
+  listExpiredInProgressLeaveWorkflowStages,
   saveLeaveWorkflowStage,
 } from "./leave-approval.store.js";
 import {
@@ -1315,22 +1315,14 @@ export class LeaveApprovalWorkflowService {
       expired += 1;
     }
 
-    // Also expire memory-tracked stages past expiresAt
-    for (const stage of listMemoryLeaveWorkflowStages()) {
-      if (
-        stage.state === "SUBMITTED" ||
-        stage.state === "MANAGER_APPROVED" ||
-        stage.state === "HR_APPROVED"
-      ) {
-        if (Date.parse(stage.expiresAt) < Date.now()) {
-          const leave = await teamRepository.getLeave(stage.leaveId);
-          if (leave && leave.status === "PENDING") {
-            await this.expireLeave(leave, stage, "job");
-            expired += 1;
-          } else {
-            await deleteLeaveWorkflowStage(stage.leaveId);
-          }
-        }
+    // Expire durable DB stages past expiresAt (works across restarts / multi-instance).
+    for (const stage of await listExpiredInProgressLeaveWorkflowStages()) {
+      const leave = await teamRepository.getLeave(stage.leaveId);
+      if (leave && leave.status === "PENDING") {
+        await this.expireLeave(leave, stage, "job");
+        expired += 1;
+      } else {
+        await deleteLeaveWorkflowStage(stage.leaveId);
       }
     }
 

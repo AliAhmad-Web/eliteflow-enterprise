@@ -64,7 +64,7 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
   {
     id: "backup",
     title: "Backup",
-    description: "Manual backups and history",
+    description: "Metadata snapshots and history (not full DB dumps)",
     orgOnly: true,
   },
   {

@@ -25,6 +25,7 @@ import { storageProvider } from "./modules/files/storage/storage.provider.js";
 import { runSaasStartupValidation } from "./shared/services/saas-operational.helpers.js";
 import { reportSecurityHeadersStartup } from "./shared/security/security-headers/index.js";
 import { startSiemSubscriptions } from "./shared/security/siem/index.js";
+import { assertSiemProductionConfig } from "./shared/security/siem/siem.assert.js";
 import {
   getRateLimitRedisUrl,
   isRateLimitEnabled,
@@ -36,6 +37,7 @@ import { reportCoreConnectivity, reportSupabaseStorageProbe } from "./shared/sec
 assertAuthConfig();
 assertEnterpriseEncryptionConfig();
 assertProductionUploadHardeningEnabled();
+assertSiemProductionConfig();
 runSaasStartupValidation();
 reportSecurityHeadersStartup();
 reportCoreConnectivity();

@@ -42,6 +42,8 @@ import {
 import { isApiKeySlug } from "../lib/api-key-providers";
 import {
   connectionBadgeVariant,
+  connectionStatusLabel,
+  implementationStatusLabel,
   formatIntegrationWhen,
   getIntegrationLogo,
   healthBadgeVariant,
@@ -149,10 +151,13 @@ function IntegrationCard({
             </div>
           </button>
           <Badge variant={connectionBadgeVariant(integration.isConnected)}>
-            {integration.isConnected ? "Connected" : "Not Connected"}
+            {connectionStatusLabel(integration)}
           </Badge>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">
+            {implementationStatusLabel(integration.implementationStatus)}
+          </Badge>
           <Badge variant={statusBadgeVariant(integration.status)}>
             {integration.status.replaceAll("_", " ")}
           </Badge>

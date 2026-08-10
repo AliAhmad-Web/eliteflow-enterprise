@@ -968,7 +968,8 @@ export class SettingsService {
       storageKey: `backups/${backup.id}.meta.json`,
       sizeBytes: BigInt(Buffer.byteLength(snapshot)),
       checksum,
-      message: "Metadata backup recorded (full restore architecture prepared)",
+      message:
+        "Metadata-only snapshot recorded (not a full database dump; Railway/Postgres owns infrastructure backups)",
     });
 
     await logSettingsAuditEvent({

@@ -222,7 +222,8 @@ export const BackupSection = memo(function BackupSection({
       <CardHeader>
         <CardTitle>Backup</CardTitle>
         <CardDescription>
-          Manual backups and history. Restore automation is prepared for later.
+          Metadata-only snapshots and history. This is not a full database dump —
+          Railway/Postgres infrastructure owns actual backups and restore.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -237,7 +238,7 @@ export const BackupSection = memo(function BackupSection({
                 .catch(feedback.fromError)
             }
           >
-            {mutation.isPending ? "Running…" : "Run manual backup"}
+            {mutation.isPending ? "Running…" : "Record metadata snapshot"}
           </Button>
         </div>
         {query.isLoading && !query.data ? (

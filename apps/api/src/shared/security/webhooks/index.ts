@@ -10,6 +10,7 @@ export {
 } from "./webhook.constants.js";
 export {
   webhookSecurityService,
+  WebhookSecurityService,
   WebhookSecurityError,
 } from "./webhook.service.js";
 export {
@@ -20,6 +21,7 @@ export {
   toSecurityHeaders,
 } from "./webhook.signing.js";
 export { verifyWebhookRequest } from "./webhook.validation.js";
+export { verifyInboundWebhookMiddleware } from "./webhook.inbound.middleware.js";
 export type {
   WebhookAlgorithm,
   WebhookDeliveryStatus,

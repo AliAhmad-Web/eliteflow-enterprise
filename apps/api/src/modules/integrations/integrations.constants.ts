@@ -28,7 +28,7 @@ export const INTEGRATIONS_MESSAGES = {
   TEST_OK: "Integration health check passed.",
   TEST_FAIL: "Integration health check failed.",
   OAUTH_NOT_READY:
-    "OAuth handshake is not enabled in Phase 19.1 — connection architecture only.",
+    "OAuth credentials are not configured for this provider — connect is blocked until provider OAuth is ready.",
   OAUTH_REDIRECT: "Redirect to the provider to complete OAuth.",
 } as const;
 
@@ -51,6 +51,13 @@ export interface IntegrationCatalogItem {
   sortOrder: number;
   visibleToEmployee: boolean;
   visibleToClient: boolean;
+  /**
+   * Honest implementation maturity (P1-09).
+   * REAL = connect + credential validation works for intended use.
+   * PARTIAL = connect/credentials work; some product features deferred.
+   * PLACEHOLDER = architecture / catalog only — never show as fully live.
+   */
+  implementationStatus: "REAL" | "PARTIAL" | "PLACEHOLDER";
 }
 
 /** Canonical Phase 19 catalog — seeded on first Integration Center access. */
@@ -66,6 +73,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 10,
     visibleToEmployee: true,
     visibleToClient: false,
+    implementationStatus: "PARTIAL",
   },
   {
     slug: "google_calendar",
@@ -78,6 +86,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 20,
     visibleToEmployee: true,
     visibleToClient: true,
+    implementationStatus: "PARTIAL",
   },
   {
     slug: "github",
@@ -90,6 +99,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 30,
     visibleToEmployee: true,
     visibleToClient: false,
+    implementationStatus: "PARTIAL",
   },
   {
     slug: "gemini",
@@ -102,6 +112,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 35,
     visibleToEmployee: true,
     visibleToClient: false,
+    implementationStatus: "REAL",
   },
   {
     slug: "openai",
@@ -114,6 +125,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 40,
     visibleToEmployee: true,
     visibleToClient: false,
+    implementationStatus: "PARTIAL",
   },
   {
     slug: "stripe",
@@ -126,6 +138,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 50,
     visibleToEmployee: false,
     visibleToClient: false,
+    implementationStatus: "PLACEHOLDER",
   },
   {
     slug: "cloudinary",
@@ -138,6 +151,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 60,
     visibleToEmployee: true,
     visibleToClient: false,
+    implementationStatus: "REAL",
   },
   {
     slug: "supabase",
@@ -150,6 +164,7 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 70,
     visibleToEmployee: false,
     visibleToClient: false,
+    implementationStatus: "PARTIAL",
   },
   {
     slug: "resend",
@@ -162,5 +177,13 @@ export const INTEGRATION_CATALOG: readonly IntegrationCatalogItem[] = [
     sortOrder: 80,
     visibleToEmployee: false,
     visibleToClient: false,
+    implementationStatus: "REAL",
   },
 ] as const;
+
+export function getIntegrationImplementationStatus(
+  slug: string,
+): IntegrationCatalogItem["implementationStatus"] {
+  const item = INTEGRATION_CATALOG.find((row) => row.slug === slug);
+  return item?.implementationStatus ?? "PLACEHOLDER";
+}

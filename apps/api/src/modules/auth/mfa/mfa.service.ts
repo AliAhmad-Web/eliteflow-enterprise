@@ -341,7 +341,7 @@ export class MfaService {
 
 export const mfaService = new MfaService();
 
-/** Roles that must enroll MFA (soft requirement — not an immediate lock). */
+/** Roles that must enroll MFA (hard server-side gate for privileged APIs). */
 export function isMfaMandatoryRole(roleCode: string): boolean {
   return roleCode === "SUPER_ADMIN" || roleCode === "ADMIN";
 }

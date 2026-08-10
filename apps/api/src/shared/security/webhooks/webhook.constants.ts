@@ -8,6 +8,7 @@ export const WEBHOOK_HEADERS = {
   NONCE: "X-EliteFlow-Nonce",
   DELIVERY: "X-EliteFlow-Delivery",
   KEY_ID: "X-EliteFlow-Key-Id",
+  EVENT_ID: "X-EliteFlow-Event-Id",
 } as const;
 
 export const WEBHOOK_STORE_PREFIX = "ebm:webhook";

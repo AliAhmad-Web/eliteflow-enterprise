@@ -94,7 +94,8 @@ export class AntivirusService {
         engine: "noop",
         scannedAt: new Date().toISOString(),
         status: "skipped",
-        detail: "Antivirus scanning disabled",
+        detail:
+          "Antivirus scanning disabled — file NOT verified clean (unscanned)",
       };
     }
 

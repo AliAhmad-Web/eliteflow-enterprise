@@ -6,6 +6,7 @@ export {
   getEnabledSiemProviders,
   resetSiemConfigCache,
 } from "./siem.config.js";
+export { assertSiemProductionConfig } from "./siem.assert.js";
 export {
   SIEM_PROVIDERS,
   SIEM_TRANSPORTS,

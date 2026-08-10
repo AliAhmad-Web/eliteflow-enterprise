@@ -239,6 +239,27 @@ export const PROTECTED_ACTION_CATALOG: readonly ProtectedActionDefinition[] = [
     toolIds: ["security_override"],
     summaryTemplate: "Override security controls",
   },
+  {
+    actionKey: "create_task",
+    action: "Create Task",
+    riskLevel: CONFIRMATION_RISK_LEVELS.HIGH,
+    toolIds: ["create_task"],
+    summaryTemplate: "Create a task via AI tool",
+  },
+  {
+    actionKey: "create_calendar_event",
+    action: "Create Calendar Event",
+    riskLevel: CONFIRMATION_RISK_LEVELS.HIGH,
+    toolIds: ["create_calendar_event"],
+    summaryTemplate: "Create a calendar event via AI tool",
+  },
+  {
+    actionKey: "save_ai_document",
+    action: "Save AI Document",
+    riskLevel: CONFIRMATION_RISK_LEVELS.HIGH,
+    toolIds: ["save_ai_document"],
+    summaryTemplate: "Persist an AI-generated document",
+  },
 ] as const;
 
 const BY_TOOL_ID = new Map<string, ProtectedActionDefinition>();

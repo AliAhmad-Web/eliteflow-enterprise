@@ -141,12 +141,15 @@ cd apps/api && npx tsx scripts/verify-siem.ts
 
 ## Failure / retry behavior
 
+- **Startup fail-closed:** if `SIEM_ENABLED` / `SECURITY_SIEM_ENABLED` is true but no provider endpoint/auth is configured, API startup throws (`assertSiemProductionConfig`).
 - Request timeout (`SIEM_REQUEST_TIMEOUT_MS`)
 - Bounded retries (`SIEM_MAX_RETRIES`) with exponential backoff
 - Circuit breaker per provider
 - Dead-letter queue after max retries
 - Queue full → encrypted offline buffer
-- Provider down → no app crash; request path remains non-blocking
+- Provider down after valid config → no app crash; request path remains non-blocking
+
+**Do not mark SIEM production-enabled without a successful export verification** (`verify-siem` + live test event).
 
 ---
 

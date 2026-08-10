@@ -15,6 +15,7 @@ import { AuthRepository } from "../modules/auth/auth.repository.js";
 import { verifyAccessToken } from "../modules/auth/auth.tokens.js";
 import { sessionService } from "../modules/auth/session/index.js";
 import { passwordPolicyService } from "../shared/security/password-policy/index.js";
+import { enforceMfaEnrollment } from "../shared/security/mfa-enrollment/index.js";
 import { sessionHardeningService } from "../shared/security/session-hardening/index.js";
 import { deviceManagementService } from "../shared/security/device-management/index.js";
 import { evaluateZeroTrust } from "../shared/security/zero-trust/index.js";
@@ -154,6 +155,20 @@ export async function authenticate(
         passwordChangedAt: validated.passwordChangedAt,
         deletedAt: null,
       },
+    });
+
+    // Hard MFA for ADMIN / SUPER_ADMIN — fail-closed until enrolled.
+    await enforceMfaEnrollment({
+      userId: payload.sub,
+      role: req.auth.role,
+      twoFactorEnabled: validated.twoFactorEnabled,
+      method: req.method,
+      path: passwordPolicyService.resolveRequestPath(
+        req.baseUrl ?? "",
+        req.path ?? "",
+      ),
+      ipAddress: req.ip ?? null,
+      userAgent: req.get("user-agent") ?? null,
     });
 
     // Continuous Zero Trust — never assume trust from login alone.

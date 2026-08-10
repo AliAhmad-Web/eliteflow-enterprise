@@ -2,8 +2,9 @@
  * Webhook Security configuration.
  *
  * Env:
- * - WEBHOOK_SECURITY_ENABLED / SECURITY_WEBHOOK_SECURITY (default OFF)
- * - WEBHOOK_SIGNING_SECRET (primary)
+ * - WEBHOOK_SECURITY_ENABLED / SECURITY_WEBHOOK_SECURITY
+ *   default ON in production, OFF otherwise (fail-closed when enabled without secret)
+ * - WEBHOOK_SIGNING_SECRET (primary) — required when security enabled
  * - WEBHOOK_SIGNING_SECRET_PREVIOUS (rotation window)
  * - WEBHOOK_SIGNING_KEY_ID (default "whsec_primary")
  * - WEBHOOK_SIGNING_KEY_ID_PREVIOUS
@@ -52,6 +53,10 @@ function parseAlgorithm(raw: string | undefined): WebhookAlgorithm {
   return "HMAC_SHA256";
 }
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 let cached: WebhookSecurityConfig | null = null;
 
 export function getWebhookSecurityConfig(
@@ -62,7 +67,7 @@ export function getWebhookSecurityConfig(
     enabled: parseEnvFlag(
       process.env.WEBHOOK_SECURITY_ENABLED ??
         process.env.SECURITY_WEBHOOK_SECURITY,
-      false,
+      isProduction(),
     ),
     algorithm: parseAlgorithm(process.env.WEBHOOK_SIGNING_ALG),
     timestampToleranceSeconds: parsePositiveInt(

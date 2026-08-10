@@ -380,6 +380,22 @@ enum LeaveRequestStatus {
   @@map("leave_request_status")
 }
 
+/// Multi-stage leave approval workflow state (durable; Redis may cache).
+enum LeaveWorkflowStageState {
+  DRAFT
+  SUBMITTED
+  MANAGER_APPROVED
+  MANAGER_REJECTED
+  HR_APPROVED
+  HR_REJECTED
+  FINAL_APPROVED
+  FINAL_REJECTED
+  CANCELLED
+  EXPIRED
+
+  @@map("leave_workflow_stage_state")
+}
+
 /// Performance review rating.
 enum PerformanceRating {
   POOR

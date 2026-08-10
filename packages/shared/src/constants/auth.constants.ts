@@ -85,8 +85,11 @@ export const TOKEN_EXPIRATION = {
   SESSION_ACTIVITY_TOUCH_SECONDS: 60,
   /** How long to retain revoked sessions before hard-delete (days) */
   REVOKED_SESSION_RETENTION_DAYS: 30,
-  /** How long to retain audit logs before cleanup (days); 0 = never delete */
-  AUDIT_LOG_RETENTION_DAYS: 90,
+  /** How long to retain audit logs before cleanup (days); 0 = never delete.
+   * Compliance policy retains audit ~7 years with no automatic deletion.
+   * Session cleanup must NOT purge compliance audit records.
+   */
+  AUDIT_LOG_RETENTION_DAYS: 0,
 } as const;
 
 // =============================================================================
@@ -215,6 +218,11 @@ export const AUTH_ERROR_CODES = {
    * Generic message only — do not leak reason details to the client.
    */
   PASSWORD_CHANGE_REQUIRED: "AUTH_PASSWORD_CHANGE_REQUIRED",
+  /**
+   * ADMIN / SUPER_ADMIN must enroll MFA before accessing privileged APIs.
+   * Machine-readable — clients should route to MFA setup, not retry login.
+   */
+  MFA_ENROLLMENT_REQUIRED: "AUTH_MFA_ENROLLMENT_REQUIRED",
   /** Server-side session is missing, revoked, expired, or otherwise invalid. */
   SESSION_INVALID: "AUTH_SESSION_INVALID",
 } as const;

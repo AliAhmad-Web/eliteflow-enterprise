@@ -60,6 +60,36 @@ export function connectionBadgeVariant(
   return connected ? "success" : "secondary";
 }
 
+/** Honest connection label — never imply full product readiness for PLACEHOLDER. */
+export function connectionStatusLabel(
+  integration: Pick<IntegrationDto, "isConnected" | "implementationStatus">,
+): string {
+  const status = integration.implementationStatus ?? "PLACEHOLDER";
+  if (status === "PLACEHOLDER") {
+    return integration.isConnected
+      ? "Configured (architecture only)"
+      : "Not configured";
+  }
+  if (status === "PARTIAL") {
+    return integration.isConnected ? "Connected (partial)" : "Not Connected";
+  }
+  return integration.isConnected ? "Connected" : "Not Connected";
+}
+
+export function implementationStatusLabel(
+  status: IntegrationDto["implementationStatus"] | undefined,
+): string {
+  switch (status) {
+    case "REAL":
+      return "Real";
+    case "PARTIAL":
+      return "Partial";
+    case "PLACEHOLDER":
+    default:
+      return "Architecture only";
+  }
+}
+
 export function healthBadgeVariant(
   status: IntegrationDto["healthStatus"],
 ): "success" | "warning" | "destructive" | "outline" {

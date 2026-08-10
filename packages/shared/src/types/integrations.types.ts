@@ -37,6 +37,8 @@ export interface IntegrationDto {
   healthStatus: IntegrationHealthStatusValue;
   healthMessage: string | null;
   isConnected: boolean;
+  /** Catalog honesty: REAL | PARTIAL | PLACEHOLDER */
+  implementationStatus: "REAL" | "PARTIAL" | "PLACEHOLDER";
   connectedAt: string | null;
   disconnectedAt: string | null;
   lastSyncAt: string | null;

@@ -14,6 +14,8 @@ import type {
   WebhookEndpointDto,
 } from "@enterprise/shared";
 
+import { getIntegrationImplementationStatus } from "./integrations.constants.js";
+
 function toIso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }
@@ -80,6 +82,7 @@ export function mapIntegrationDto(
     healthStatus: row.healthStatus,
     healthMessage: row.healthMessage,
     isConnected: row.isConnected,
+    implementationStatus: getIntegrationImplementationStatus(row.slug),
     connectedAt: toIso(row.connectedAt),
     disconnectedAt: toIso(row.disconnectedAt),
     lastSyncAt: toIso(row.lastSyncAt),

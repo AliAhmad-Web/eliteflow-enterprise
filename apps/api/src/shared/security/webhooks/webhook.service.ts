@@ -96,7 +96,7 @@ function toPublicDelivery(record: WebhookDeliveryRecord): Omit<
   return rest;
 }
 
-class WebhookSecurityService {
+export class WebhookSecurityService {
   isEnabled(): boolean {
     return isWebhookSecurityEnabled();
   }
@@ -108,6 +108,7 @@ class WebhookSecurityService {
   /**
    * Build signed EliteFlow security headers for an outbound body.
    * Used by SIEM / dispatchers when security is enabled.
+   * Fail-closed: when security is enabled but no secret is configured, throws.
    */
   signOutbound(input: {
     body: string;
@@ -116,7 +117,11 @@ class WebhookSecurityService {
   }): { headers: WebhookSecurityHeaders; signed: WebhookSignResult } | null {
     if (!isWebhookSecurityEnabled()) return null;
     const { secret, keyId } = activeSecret();
-    if (!secret) return null;
+    if (!secret) {
+      throw new Error(
+        "WEBHOOK_SECURITY_ENABLED but WEBHOOK_SIGNING_SECRET is missing — refusing unsigned outbound webhook",
+      );
+    }
 
     const cfg = getWebhookSecurityConfig();
     const signed = signWebhookPayload({
@@ -204,7 +209,22 @@ class WebhookSecurityService {
       deliveredAt: string;
     };
 
-    if (isWebhookSecurityEnabled() && secret) {
+    if (isWebhookSecurityEnabled()) {
+      if (!secret) {
+        record.status = "FAILED";
+        record.failureClass = "CONFIGURATION";
+        record.lastError =
+          "WEBHOOK_SECURITY_ENABLED but signing secret is missing — fail closed";
+        record.updatedAt = new Date().toISOString();
+        webhookMetrics.failures += 1;
+        await saveDelivery(record, cfg.deliveryTtlMs, cfg.historyLimit);
+        emitWebhookFailed({
+          deliveryId: record.deliveryId,
+          eventType: record.eventType,
+          reason: "missing_signing_secret",
+        });
+        return toPublicDelivery(record);
+      }
       const signed = signWebhookPayload({
         body,
         eventId: record.eventId,
