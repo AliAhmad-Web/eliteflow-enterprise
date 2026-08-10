@@ -123,6 +123,7 @@ export type {
   Invoice,
   InvoiceItem,
   InvoicePaymentHistory,
+  PublicApiKey,
   AiConversation,
   AiMessage,
   AiDocument,

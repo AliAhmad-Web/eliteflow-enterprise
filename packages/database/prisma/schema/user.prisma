@@ -176,6 +176,7 @@ model User {
   backupsTriggered             BackupRecord[]        @relation("BackupTriggeredBy")
   accountDeletionRequests      AccountDeletionRequest[] @relation("AccountDeletionUser")
   accountDeletionsProcessed    AccountDeletionRequest[] @relation("AccountDeletionProcessor")
+  publicApiKeysOwned           PublicApiKey[]        @relation("PublicApiKeyOwner")
 
   // Phase 19.1 — Integrations
   integrationsConnected        Integration[]         @relation("IntegrationConnectedBy")

@@ -39,6 +39,8 @@ export const CSRF_EXEMPT_PATH_PATTERNS: readonly RegExp[] = [
   /\/health\/?$/i,
   /** Stripe billing webhooks — verified via Stripe-Signature, not CSRF. */
   /\/billing\/webhooks\/stripe\/?$/i,
+  /** Public API v1 — machine credentials (API key / Bearer key), not browser CSRF. */
+  /\/public(?:\/|$)/i,
   /** AI SSE streaming — CSRF would break EventSource-style POST streams. */
   /\/ai\/chat\/stream\/?$/i,
 ];

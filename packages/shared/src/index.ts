@@ -1669,3 +1669,32 @@ export type {
   SubscriptionEventDto,
   SubscriptionPlanDto,
 } from "./types/billing.types.js";
+
+// Public API v1
+export {
+  PUBLIC_API_ERROR_CODES,
+  PUBLIC_API_KEY_PREFIX,
+  PUBLIC_API_SCOPES,
+  PUBLIC_API_SCOPE_VALUES,
+} from "./constants/public-api.constants.js";
+
+export type {
+  PublicApiErrorCode,
+  PublicApiScope,
+} from "./constants/public-api.constants.js";
+
+export {
+  createPublicApiKeySchema,
+  publicApiIdParamsSchema,
+  publicApiKeyDtoSchema,
+  publicApiKeyIdParamsSchema,
+  publicApiListQuerySchema,
+} from "./schemas/public-api.schema.js";
+
+export type {
+  CreatePublicApiKeyInput,
+  PublicApiIdParamsInput,
+  PublicApiKeyDto,
+  PublicApiKeyIdParamsInput,
+  PublicApiListQueryInput,
+} from "./schemas/public-api.schema.js";

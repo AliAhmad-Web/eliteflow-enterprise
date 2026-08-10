@@ -32,6 +32,7 @@ model Client {
   calendarEvents CalendarEvent[]
   whiteboards    Whiteboard[]
   activities  ClientActivity[]
+  publicApiKeys PublicApiKey[] @relation("PublicApiKeyClient")
 
   @@index([email])
   @@index([companyName])

@@ -106,6 +106,9 @@ export const RATE_LIMIT = {
   REFRESH_TOKEN: { max: 30, windowMs: 15 * 60 * 1000 },
   OAUTH_CALLBACK: { max: 10, windowMs: 15 * 60 * 1000 },
   GLOBAL_API: { max: 100, windowMs: 60 * 1000 },
+  /** Public API v1 — per API-key / IP budget */
+  PUBLIC_API: { max: 60, windowMs: 60 * 1000 },
+  PUBLIC_API_KEY_MANAGE: { max: 20, windowMs: 60 * 1000 },
   /** Phase 17 — stricter API-class limits */
   AI_CHAT: { max: 40, windowMs: 15 * 60 * 1000 },
   FILE_UPLOAD: { max: 40, windowMs: 15 * 60 * 1000 },
