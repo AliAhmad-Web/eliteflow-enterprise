@@ -343,7 +343,11 @@ export const mfaService = new MfaService();
 
 /** Roles that must enroll MFA (hard server-side gate for privileged APIs). */
 export function isMfaMandatoryRole(roleCode: string): boolean {
-  return roleCode === "SUPER_ADMIN" || roleCode === "ADMIN";
+  const normalized = String(roleCode ?? "")
+    .trim()
+    .toUpperCase();
+  // CLIENT / EMPLOYEE / HR / MANAGER are never MFA-mandatory.
+  return normalized === "SUPER_ADMIN" || normalized === "ADMIN";
 }
 
 /** Roles allowed to optionally enroll MFA (clients excluded). */

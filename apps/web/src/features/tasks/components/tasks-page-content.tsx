@@ -28,7 +28,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { taskDetailPath } from "@/constants/routes";
+import { taskDetailPath, ROUTES } from "@/constants/routes";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
 import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
@@ -38,6 +38,7 @@ import {
 } from "@/features/rbac/hooks/use-permissions";
 import { FORM_SELECT_CLASS } from "@/lib/form-styles";
 import { cn } from "@/lib/utils";
+import { ApiClientError } from "@/services/api/api-error";
 
 import { useTaskStats, useTasks } from "../hooks/use-tasks";
 import {
@@ -280,15 +281,41 @@ export function TasksPageContent() {
           ) : null}
 
           {isError ? (
-            <ErrorState
-              title="Could not load tasks"
-              description={
-                error instanceof Error
-                  ? error.message
-                  : "Please try again in a moment."
+            (() => {
+              const isMfaEnrollment =
+                error instanceof ApiClientError &&
+                (error.code === "AUTH_MFA_ENROLLMENT_REQUIRED" ||
+                  /multi-factor authentication enrollment/i.test(
+                    error.message,
+                  ));
+
+              if (isMfaEnrollment) {
+                return (
+                  <ErrorState
+                    title="Authenticator MFA required"
+                    description={
+                      isClient
+                        ? "This account is not expected to require admin MFA. Sign out and sign in with your Client Portal account (for example client@eliteflow.dev), then open Tasks again."
+                        : "Admin and Super Admin accounts must enroll authenticator MFA before tasks and other privileged APIs are available."
+                    }
+                    retryLabel="Open Security Center"
+                    onRetry={() => router.push(ROUTES.SECURITY)}
+                  />
+                );
               }
-              onRetry={() => void refetch()}
-            />
+
+              return (
+                <ErrorState
+                  title="Could not load tasks"
+                  description={
+                    error instanceof Error
+                      ? error.message
+                      : "Please try again in a moment."
+                  }
+                  onRetry={() => void refetch()}
+                />
+              );
+            })()
           ) : null}
 
           {!showInitialLoading && !isError ? (

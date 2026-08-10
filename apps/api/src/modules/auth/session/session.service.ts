@@ -170,6 +170,7 @@ export class SessionService {
             lockedUntil: true,
             mustChangePassword: true,
             passwordHash: true,
+            role: { select: { code: true } },
           },
         },
       },
@@ -303,6 +304,7 @@ export class SessionService {
       mustChangePassword: user.mustChangePassword,
       passwordHash: user.passwordHash,
       lockedUntil: user.lockedUntil,
+      roleCode: user.role?.code ?? null,
     };
   }
 

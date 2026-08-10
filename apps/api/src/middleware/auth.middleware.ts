@@ -157,10 +157,17 @@ export async function authenticate(
       },
     });
 
+    // Prefer DB role from session validation over JWT claims so CLIENT/EMPLOYEE
+    // never inherit a stale privileged role for the MFA enrollment gate.
+    if (validated.roleCode) {
+      req.auth.role = validated.roleCode as UserRole;
+    }
+
     // Hard MFA for ADMIN / SUPER_ADMIN — fail-closed until enrolled.
+    // Role source: DB (session.user.role) with JWT fallback only if missing.
     await enforceMfaEnrollment({
       userId: payload.sub,
-      role: req.auth.role,
+      role: validated.roleCode ?? req.auth.role,
       twoFactorEnabled: validated.twoFactorEnabled,
       method: req.method,
       path: passwordPolicyService.resolveRequestPath(

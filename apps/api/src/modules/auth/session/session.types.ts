@@ -42,6 +42,8 @@ export interface ValidatedSession {
   mustChangePassword: boolean;
   passwordHash: string | null;
   lockedUntil: Date | null;
+  /** DB-authoritative role code — used by MFA enrollment gate (never trust JWT alone). */
+  roleCode: string | null;
 }
 
 export interface RevokeSessionInput {

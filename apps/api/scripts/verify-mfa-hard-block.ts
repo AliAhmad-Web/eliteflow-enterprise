@@ -84,6 +84,39 @@ async function main(): Promise<void> {
     });
   });
 
+  await check("CLIENT unchanged on /tasks (portal)", async () => {
+    await enforceMfaEnrollment({
+      userId: "u-client",
+      role: "CLIENT",
+      twoFactorEnabled: false,
+      method: "GET",
+      path: "/tasks",
+    });
+    await enforceMfaEnrollment({
+      userId: "u-client",
+      role: "CLIENT",
+      twoFactorEnabled: false,
+      method: "GET",
+      path: "/tasks/stats",
+    });
+  });
+
+  await check("ADMIN without MFA still blocked on /tasks", async () => {
+    await assert.rejects(
+      () =>
+        enforceMfaEnrollment({
+          userId: "u-admin",
+          role: "ADMIN",
+          twoFactorEnabled: false,
+          method: "GET",
+          path: "/tasks",
+        }),
+      (err: unknown) =>
+        err instanceof AuthError &&
+        err.code === AUTH_ERROR_CODES.MFA_ENROLLMENT_REQUIRED,
+    );
+  });
+
   await check("CLIENT unchanged (no MFA gate)", async () => {
     await enforceMfaEnrollment({
       userId: "u-client",
