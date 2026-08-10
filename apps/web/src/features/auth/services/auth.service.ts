@@ -18,10 +18,24 @@ import {
   refreshAccessToken,
 } from "@/services/api/api-client";
 import { ApiClientError } from "@/services/api/api-error";
+import {
+  clearPersistedQueryCache,
+  getQueryClient,
+} from "@/services/api/query-client";
 
 import { useAuthStore } from "../stores/auth.store";
+import { applyAuthoritativeAuthUser } from "../utils/apply-authoritative-auth-user";
 import { resetSessionBootstrap } from "../utils/session-bootstrap-mutex";
 import { clearSessionHintCookie } from "../utils/session-hint";
+
+function prepareFreshAuthSession() {
+  try {
+    getQueryClient().clear();
+  } catch {
+    // ignore
+  }
+  clearPersistedQueryCache();
+}
 
 export const authService = {
   async signup(input: SignupInput) {
@@ -54,7 +68,8 @@ export const authService = {
     });
 
     if (data.tokens?.accessToken && data.user) {
-      useAuthStore.getState().setSession(data.user, data.tokens.accessToken);
+      prepareFreshAuthSession();
+      applyAuthoritativeAuthUser(data.user, data.tokens.accessToken);
     }
 
     return data;
@@ -76,7 +91,8 @@ export const authService = {
     });
 
     if (data.tokens?.accessToken && data.user) {
-      useAuthStore.getState().setSession(data.user, data.tokens.accessToken);
+      prepareFreshAuthSession();
+      applyAuthoritativeAuthUser(data.user, data.tokens.accessToken);
     }
 
     return data;
@@ -140,7 +156,7 @@ export const authService = {
 
     const token = useAuthStore.getState().accessToken;
     if (token) {
-      useAuthStore.getState().setSession(data.user, token);
+      applyAuthoritativeAuthUser(data.user, token);
     } else {
       useAuthStore.getState().setUser(data.user);
     }
@@ -200,7 +216,8 @@ export const authService = {
       body: input,
     });
 
-    useAuthStore.getState().setSession(data.user, data.tokens.accessToken);
+    prepareFreshAuthSession();
+    applyAuthoritativeAuthUser(data.user, data.tokens.accessToken);
     return data;
   },
 

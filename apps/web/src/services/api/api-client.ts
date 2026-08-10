@@ -1,7 +1,14 @@
-import { AUTH_API_PREFIX, AUTH_HEADERS } from "@enterprise/shared";
+import { AUTH_API_PREFIX, AUTH_ERROR_CODES, AUTH_HEADERS } from "@enterprise/shared";
 
 import { useAuthStore } from "@/features/auth/stores/auth.store";
+import {
+  applyAuthoritativeAuthUser,
+  forceClientAuthReset,
+  isClientRole,
+  isPrivilegedRole,
+} from "@/features/auth/utils/apply-authoritative-auth-user";
 import { clearSessionHintCookie } from "@/features/auth/utils/session-hint";
+import { ROUTES } from "@/constants/routes";
 
 import { ApiClientError, getApiBaseUrl, parseApiResponse } from "./api-error";
 import {
@@ -179,10 +186,35 @@ export async function refreshAccessToken(): Promise<string | null> {
       const result = await parseApiResponse<{
         accessToken: string;
         expiresIn: number;
+        user?: {
+          id: string;
+          email: string;
+          firstName: string;
+          lastName: string;
+          avatarUrl: string | null;
+          role: { id: string; code: string; name: string };
+          status: string;
+          emailVerified: boolean;
+          permissions: string[];
+          mustChangePassword?: boolean;
+          twoFactorEnabled?: boolean;
+          mfaEnrollmentRequired?: boolean;
+          companyId?: string | null;
+          companyName?: string | null;
+          createdAt: string;
+        };
       }>(response);
 
-      useAuthStore.getState().setAccessToken(result.data.accessToken);
-      return result.data.accessToken;
+      const accessToken = result.data.accessToken;
+      if (result.data.user) {
+        applyAuthoritativeAuthUser(
+          result.data.user as Parameters<typeof applyAuthoritativeAuthUser>[0],
+          accessToken,
+        );
+      } else {
+        useAuthStore.getState().setAccessToken(accessToken);
+      }
+      return accessToken;
     } catch {
       // Transient failures must not log the user out on refresh / F5.
       return null;
@@ -324,6 +356,26 @@ export async function apiRequest<T>(
     }
   }
 
-  const result = await parseApiResponse<T>(response);
-  return result.data;
+  try {
+    const result = await parseApiResponse<T>(response);
+    return result.data;
+  } catch (error) {
+    if (
+      error instanceof ApiClientError &&
+      error.code === AUTH_ERROR_CODES.MFA_ENROLLMENT_REQUIRED
+    ) {
+      const uiRole = useAuthStore.getState().user?.role.code;
+      if (isClientRole(uiRole)) {
+        forceClientAuthReset(
+          "Your session no longer matches the Client Portal account. Please sign in again with your client credentials.",
+        );
+      } else if (isPrivilegedRole(uiRole) && typeof window !== "undefined") {
+        const path = window.location.pathname;
+        if (!path.startsWith(ROUTES.SECURITY) && !path.startsWith("/login")) {
+          window.location.assign(ROUTES.SECURITY);
+        }
+      }
+    }
+    throw error;
+  }
 }

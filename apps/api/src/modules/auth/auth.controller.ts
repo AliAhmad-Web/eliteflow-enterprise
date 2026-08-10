@@ -161,6 +161,7 @@ export class AuthController {
         {
           accessToken: result.accessToken,
           expiresIn: result.expiresIn,
+          user: result.user,
         },
         "Token refreshed successfully",
       ),

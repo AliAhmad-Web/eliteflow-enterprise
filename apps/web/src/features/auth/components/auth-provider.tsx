@@ -54,8 +54,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!isInitialized || !isAuthenticated || !accessToken) return;
 
       try {
-        const refreshResult = await authService.refresh();
-        useAuthStore.getState().setAccessToken(refreshResult.accessToken);
+        await authService.refresh();
+        // refreshAccessToken already applies authoritative user when present.
         void setSessionHintCookie();
       } catch {
         // Leave session as-is; next API call will clear if refresh cookie is gone.

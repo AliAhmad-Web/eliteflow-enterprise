@@ -354,10 +354,12 @@ export class AuthService {
 
         // Access token only — browser already has (or will get) the winning
         // refresh cookie from the request that completed rotation.
+        const safeUser = toSafeUser(await this.syncMfaEnrollmentFlag(user));
         return {
           accessToken,
           refreshToken: null as string | null,
           expiresIn: getAccessTokenExpiresIn(),
+          user: safeUser,
         };
       }
 
@@ -428,6 +430,7 @@ export class AuthService {
         accessToken,
         refreshToken: null as string | null,
         expiresIn: getAccessTokenExpiresIn(),
+        user: toSafeUser(await this.syncMfaEnrollmentFlag(user)),
       };
     }
 
@@ -461,6 +464,7 @@ export class AuthService {
         accessToken,
         refreshToken: null as string | null,
         expiresIn: getAccessTokenExpiresIn(),
+        user: toSafeUser(await this.syncMfaEnrollmentFlag(user)),
       };
     }
 
@@ -475,6 +479,7 @@ export class AuthService {
       accessToken,
       expiresIn: getAccessTokenExpiresIn(),
       refreshToken: newOpaqueToken,
+      user: toSafeUser(await this.syncMfaEnrollmentFlag(user)),
     };
   }
 

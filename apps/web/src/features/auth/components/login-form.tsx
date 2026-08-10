@@ -71,7 +71,23 @@ export function LoginForm() {
   const oauthExisting = searchParams.get("oauthExisting") === "1";
   const oauthProvider = searchParams.get("provider");
   const otpRequired = searchParams.get("otpRequired") === "1";
+  const sessionReset = searchParams.get("sessionReset") === "1";
   const [signupEmailError, setSignupEmailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionReset) return;
+    try {
+      const reason =
+        sessionStorage.getItem("eliteflow-auth-reset-reason") ??
+        "Your previous session was reset. Sign in with your Client Portal account.";
+      sessionStorage.removeItem("eliteflow-auth-reset-reason");
+      setApiError(reason);
+    } catch {
+      setApiError(
+        "Your previous session was reset. Sign in with your Client Portal account.",
+      );
+    }
+  }, [sessionReset]);
 
   useEffect(() => {
     if (!registered || !emailSentFailed) {

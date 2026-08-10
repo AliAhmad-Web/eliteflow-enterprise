@@ -158,13 +158,38 @@ export async function authenticate(
     });
 
     // Prefer DB role from session validation over JWT claims so CLIENT/EMPLOYEE
-    // never inherit a stale privileged role for the MFA enrollment gate.
+    // never inherit a stale privileged role for the MFA enrollment gate / RBAC.
     if (validated.roleCode) {
-      req.auth.role = validated.roleCode as UserRole;
+      const jwtRole = String(req.auth.role ?? "");
+      if (validated.roleCode !== jwtRole) {
+        const user = await authRepository.findUserById(payload.sub);
+        if (!user?.role) {
+          throw new AuthError(
+            "Authentication required",
+            401,
+            AUTH_ERROR_CODES.TOKEN_INVALID,
+          );
+        }
+        req.auth.role = user.role.code as UserRole;
+        req.auth.permissions = user.role.rolePermissions.map(
+          (rp) => rp.permission.key,
+        );
+        req.auth.email = user.email;
+        await sessionHardeningService.rotateAfterPrivilegeChange({
+          userId: payload.sub,
+          currentSessionId: payload.sessionId,
+          ipAddress: req.ip ?? null,
+          userAgent: req.get("user-agent") ?? null,
+          previousRole: jwtRole,
+          nextRole: req.auth.role,
+        });
+      } else {
+        req.auth.role = validated.roleCode as UserRole;
+      }
     }
 
     // Hard MFA for ADMIN / SUPER_ADMIN — fail-closed until enrolled.
-    // Role source: DB (session.user.role) with JWT fallback only if missing.
+    // Role source: DB (session.user.role) — never trust JWT alone.
     await enforceMfaEnrollment({
       userId: payload.sub,
       role: validated.roleCode ?? req.auth.role,
