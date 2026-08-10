@@ -244,32 +244,33 @@ export class ClientsRepository {
     }>;
     total: number;
   }> {
-    const baseWhere: Prisma.ClientWhereInput = { deletedAt: null };
+    // Single query — avoid N parallel pool connections (Supabase session pool is small).
+    const clients = await prisma.client.findMany({
+      where: { deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+    });
 
-    const [total, stageResults] = await Promise.all([
-      prisma.client.count({ where: baseWhere }),
-      Promise.all(
-        CLIENT_PIPELINE_STAGES.map(async (stage) => {
-          const where: Prisma.ClientWhereInput = {
-            ...baseWhere,
-            pipelineStage: stage as ClientPipelineStage,
-          };
+    const byStage = new Map<ClientPipelineStageValue, Client[]>();
+    for (const stage of CLIENT_PIPELINE_STAGES) {
+      byStage.set(stage, []);
+    }
 
-          const [clients, count] = await Promise.all([
-            prisma.client.findMany({
-              where,
-              orderBy: { updatedAt: "desc" },
-              take: PIPELINE_BOARD_LIMIT,
-            }),
-            prisma.client.count({ where }),
-          ]);
+    for (const client of clients) {
+      const stage = client.pipelineStage as ClientPipelineStageValue | null;
+      if (!stage || !byStage.has(stage)) continue;
+      byStage.get(stage)!.push(client);
+    }
 
-          return { stage, count, clients };
-        }),
-      ),
-    ]);
+    const columns = CLIENT_PIPELINE_STAGES.map((stage) => {
+      const all = byStage.get(stage) ?? [];
+      return {
+        stage,
+        count: all.length,
+        clients: all.slice(0, PIPELINE_BOARD_LIMIT),
+      };
+    });
 
-    return { columns: stageResults, total };
+    return { columns, total: clients.length };
   }
 
   async listActivities(

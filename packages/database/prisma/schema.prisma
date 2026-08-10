@@ -11,6 +11,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Supabase: use pooler for runtime (DATABASE_URL) and direct PG for migrations (DIRECT_URL).
+  // Never commit real credentials. If direct host is unreachable, DIRECT_URL may temporarily
+  // point at the session-mode pooler used for migrate deploy.
+  directUrl = env("DIRECT_URL")
 }
