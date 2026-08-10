@@ -64,6 +64,7 @@ export function TaskDetailsPageContent() {
   const activityQuery = useTaskActivity(taskId);
   const commentMutation = useAddTaskComment();
   const [commentBody, setCommentBody] = useState("");
+  const [commentSuccess, setCommentSuccess] = useState<string | null>(null);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
 
@@ -76,13 +77,19 @@ export function TaskDetailsPageContent() {
   };
 
   const handleComment = async () => {
-    if (!taskId || !commentBody.trim()) return;
+    if (!taskId || !commentBody.trim() || commentMutation.isPending) return;
+    setCommentSuccess(null);
     try {
       await commentMutation.mutateAsync({
         id: taskId,
         input: { body: commentBody.trim() },
       });
       setCommentBody("");
+      setCommentSuccess(
+        isClient
+          ? "Feedback submitted successfully."
+          : "Comment posted successfully.",
+      );
     } catch {
       // surfaced below
     }
@@ -257,23 +264,35 @@ export function TaskDetailsPageContent() {
                   <Textarea
                     rows={3}
                     value={commentBody}
-                    onChange={(event) => setCommentBody(event.target.value)}
+                    onChange={(event) => {
+                      setCommentBody(event.target.value);
+                      if (commentSuccess) setCommentSuccess(null);
+                    }}
                     placeholder={
                       isClient
                         ? "Share feedback or a change request…"
                         : "Add a comment..."
                     }
+                    disabled={commentMutation.isPending}
                   />
                   {commentMutation.error instanceof ApiClientError ? (
                     <p className="text-sm text-destructive" role="alert">
                       {commentMutation.error.message}
                     </p>
                   ) : null}
+                  {commentSuccess ? (
+                    <p
+                      className="text-sm text-emerald-700 dark:text-emerald-400"
+                      role="status"
+                    >
+                      {commentSuccess}
+                    </p>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
                     isLoading={commentMutation.isPending}
-                    disabled={!commentBody.trim()}
+                    disabled={!commentBody.trim() || commentMutation.isPending}
                     onClick={() => {
                       void handleComment();
                     }}

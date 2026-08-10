@@ -274,7 +274,16 @@ export class TasksService {
     }
 
     // CLIENT may leave feedback/change requests only on company-scoped tasks
-    // (already enforced by resolveScope + findById above).
+    // (already enforced by resolveScope + findById above). Never trust
+    // companyId/clientId from the request body — comments only carry `body`.
+
+    if (actor.role === UserRole.CLIENT && !scope.clientCompanyId) {
+      throw new TasksError(
+        "Your account is not linked to a company workspace",
+        403,
+        TASKS_ERROR_CODES.FORBIDDEN,
+      );
+    }
 
     const comment = await tasksRepository.addComment(id, input, actor.userId);
 
@@ -285,6 +294,8 @@ export class TasksService {
       metadata: {
         commentId: comment.id,
         fromClient: actor.role === UserRole.CLIENT,
+        role: actor.role,
+        companyId: scope.clientCompanyId ?? null,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,

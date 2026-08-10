@@ -130,8 +130,16 @@ tasksRouter.delete(
 
 tasksRouter.post(
   "/:id/comments",
-  authorizePermissions(PERMISSIONS.TASKS_WRITE),
-  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.EMPLOYEE),
+  // CLIENT has tasks:read only — comments/feedback reuse the read-scoped
+  // surface; write/create/delete of tasks remain staff-gated above.
+  // Service enforces company isolation for CLIENT and assignee rules for EMPLOYEE.
+  authorizePermissions(PERMISSIONS.TASKS_READ),
+  authorizeRoles(
+    UserRole.ADMIN,
+    UserRole.SUPER_ADMIN,
+    UserRole.EMPLOYEE,
+    UserRole.CLIENT,
+  ),
   rateLimit({
     name: "tasks.comments",
     max: 60,
