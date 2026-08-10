@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  CLIENT_PIPELINE_STAGES,
   CLIENT_STATUSES,
   createClientSchema,
   type Client,
@@ -18,7 +19,10 @@ import { FormFieldError } from "@/features/auth/components/form-field-error";
 import { FORM_SELECT_CLASS_MD } from "@/lib/form-styles";
 import { cn } from "@/lib/utils";
 
-import { CLIENT_STATUS_LABELS } from "../types/clients.types";
+import {
+  CLIENT_PIPELINE_STAGE_LABELS,
+  CLIENT_STATUS_LABELS,
+} from "../types/clients.types";
 
 const selectClassName = FORM_SELECT_CLASS_MD;
 
@@ -42,6 +46,7 @@ function toFormValues(client?: Client | null): CreateClientInput {
     city: client?.city ?? "",
     country: client?.country ?? "",
     status: client?.status ?? "LEAD",
+    pipelineStage: client?.pipelineStage ?? "NEW",
     notes: client?.notes ?? "",
   };
 }
@@ -191,6 +196,26 @@ export function ClientForm({
             ))}
           </select>
           <FormFieldError message={errors.status?.message} />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="pipelineStage">Pipeline stage</Label>
+          <select
+            id="pipelineStage"
+            className={cn(
+              selectClassName,
+              errors.pipelineStage && "border-destructive",
+            )}
+            aria-invalid={Boolean(errors.pipelineStage)}
+            {...register("pipelineStage")}
+          >
+            {CLIENT_PIPELINE_STAGES.map((stage) => (
+              <option key={stage} value={stage}>
+                {CLIENT_PIPELINE_STAGE_LABELS[stage]}
+              </option>
+            ))}
+          </select>
+          <FormFieldError message={errors.pipelineStage?.message} />
         </div>
 
         <div className="space-y-2 sm:col-span-2">

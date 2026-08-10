@@ -53,6 +53,31 @@ enum ClientStatus {
   @@map("client_status")
 }
 
+/// Sales pipeline stage for CRM leads (Commercial Core CRM MVP).
+enum ClientPipelineStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+
+  @@map("client_pipeline_stage")
+}
+
+/// CRM activity types logged against a client / lead.
+enum ClientActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  STATUS_CHANGE
+  OTHER
+
+  @@map("client_activity_type")
+}
+
 /// Project delivery lifecycle status.
 enum ProjectStatus {
   NOT_STARTED

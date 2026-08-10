@@ -1,7 +1,12 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { CreateClientInput, UpdateClientInput } from "@enterprise/shared";
+import type {
+  ClientPipelineStageValue,
+  CreateClientActivityInput,
+  CreateClientInput,
+  UpdateClientInput,
+} from "@enterprise/shared";
 
 import { clientsService } from "../services/clients.service";
 import { CLIENTS_QUERY_KEYS } from "../types/clients.types";
@@ -37,6 +42,55 @@ export function useDeleteClient() {
 
   return useMutation({
     mutationFn: (id: string) => clientsService.remove(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CLIENTS_QUERY_KEYS.all });
+    },
+  });
+}
+
+export function useUpdateClientPipelineStage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      pipelineStage,
+    }: {
+      id: string;
+      pipelineStage: ClientPipelineStageValue;
+    }) => clientsService.updatePipelineStage(id, pipelineStage),
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: CLIENTS_QUERY_KEYS.all });
+      await queryClient.invalidateQueries({
+        queryKey: CLIENTS_QUERY_KEYS.detail(variables.id),
+      });
+    },
+  });
+}
+
+export function useCreateClientActivity(clientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: CreateClientActivityInput) =>
+      clientsService.createActivity(clientId!, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: CLIENTS_QUERY_KEYS.all });
+      if (clientId) {
+        await queryClient.invalidateQueries({
+          queryKey: CLIENTS_QUERY_KEYS.detail(clientId),
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteClientActivity(clientId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (activityId: string) =>
+      clientsService.deleteActivity(clientId!, activityId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: CLIENTS_QUERY_KEYS.all });
     },

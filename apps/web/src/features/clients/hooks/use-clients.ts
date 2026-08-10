@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type {
+  ListClientActivitiesQueryInput,
   ListClientsQueryInput,
   ListUnlinkedPortalUsersQueryInput,
 } from "@enterprise/shared";
@@ -26,12 +27,34 @@ export function useClientStats() {
   });
 }
 
+export function useClientPipelineBoard(enabled = true) {
+  return useQuery({
+    queryKey: CLIENTS_QUERY_KEYS.pipeline(),
+    queryFn: () => clientsService.getPipelineBoard(),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 export function useClient(id: string | null) {
   return useQuery({
     queryKey: CLIENTS_QUERY_KEYS.detail(id ?? "none"),
     queryFn: () => clientsService.getById(id!),
     enabled: Boolean(id),
     staleTime: 30_000,
+  });
+}
+
+export function useClientActivities(
+  clientId: string | null,
+  query: ListClientActivitiesQueryInput,
+) {
+  return useQuery({
+    queryKey: CLIENTS_QUERY_KEYS.activities(clientId ?? "none", query),
+    queryFn: () => clientsService.listActivities(clientId!, query),
+    enabled: Boolean(clientId),
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
   });
 }
 

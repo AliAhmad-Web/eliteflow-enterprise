@@ -1,12 +1,24 @@
 import {
+  CLIENT_PIPELINE_STAGES,
+  type ClientPipelineStageValue,
+} from "@enterprise/shared";
+import {
   type Client,
+  type ClientActivity,
+  type ClientActivityType,
+  type ClientPipelineStage,
   type ClientStatus,
+  ClientActivityType as ClientActivityTypeEnum,
+  ClientPipelineStage as ClientPipelineStageEnum,
+  ClientStatus as ClientStatusEnum,
   type Prisma,
   prisma,
 } from "@enterprise/database";
 
 import type {
+  CreateClientActivityInput,
   CreateClientInput,
+  ListClientActivitiesQueryInput,
   ListClientsQueryInput,
   UpdateClientInput,
 } from "./clients.validation.js";
@@ -16,12 +28,39 @@ const SORT_FIELD_MAP = {
   contactName: "contactName",
   email: "email",
   status: "status",
+  pipelineStage: "pipelineStage",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
 } as const satisfies Record<
   ListClientsQueryInput["sortBy"],
   keyof Prisma.ClientOrderByWithRelationInput
 >;
+
+const PIPELINE_BOARD_LIMIT = 50;
+
+export function defaultPipelineForStatus(
+  status: ClientStatus,
+): ClientPipelineStage {
+  switch (status) {
+    case ClientStatusEnum.ACTIVE:
+      return ClientPipelineStageEnum.WON;
+    case ClientStatusEnum.INACTIVE:
+      return ClientPipelineStageEnum.LOST;
+    default:
+      return ClientPipelineStageEnum.NEW;
+  }
+}
+
+export function statusForPipelineStage(stage: ClientPipelineStage): ClientStatus {
+  switch (stage) {
+    case ClientPipelineStageEnum.WON:
+      return ClientStatusEnum.ACTIVE;
+    case ClientPipelineStageEnum.LOST:
+      return ClientStatusEnum.INACTIVE;
+    default:
+      return ClientStatusEnum.LEAD;
+  }
+}
 
 function nullIfEmpty(value: string | undefined): string | null | undefined {
   if (value === undefined) {
@@ -30,6 +69,10 @@ function nullIfEmpty(value: string | undefined): string | null | undefined {
 
   return value.length === 0 ? null : value;
 }
+
+type ClientActivityWithCreator = ClientActivity & {
+  createdBy?: { firstName: string; lastName: string } | null;
+};
 
 export class ClientsRepository {
   async findMany(query: ListClientsQueryInput): Promise<{
@@ -42,6 +85,10 @@ export class ClientsRepository {
 
     if (query.status) {
       where.status = query.status as ClientStatus;
+    }
+
+    if (query.pipelineStage) {
+      where.pipelineStage = query.pipelineStage as ClientPipelineStage;
     }
 
     if (query.search) {
@@ -95,6 +142,9 @@ export class ClientsRepository {
     input: CreateClientInput,
     createdById: string | null,
   ): Promise<Client> {
+    const pipelineStage =
+      input.pipelineStage ?? defaultPipelineForStatus(input.status as ClientStatus);
+
     return prisma.client.create({
       data: {
         companyName: input.companyName,
@@ -106,6 +156,7 @@ export class ClientsRepository {
         city: nullIfEmpty(input.city) ?? null,
         country: nullIfEmpty(input.country) ?? null,
         status: input.status as ClientStatus,
+        pipelineStage: pipelineStage as ClientPipelineStage,
         notes: nullIfEmpty(input.notes) ?? null,
         createdById,
       },
@@ -142,6 +193,11 @@ export class ClientsRepository {
     if (input.status !== undefined) {
       data.status = input.status as ClientStatus;
     }
+    if (input.pipelineStage !== undefined) {
+      data.pipelineStage = input.pipelineStage as ClientPipelineStage;
+    } else if (input.status !== undefined) {
+      data.pipelineStage = defaultPipelineForStatus(input.status as ClientStatus);
+    }
     if (input.notes !== undefined) {
       data.notes = nullIfEmpty(input.notes) ?? null;
     }
@@ -149,6 +205,17 @@ export class ClientsRepository {
     return prisma.client.update({
       where: { id },
       data,
+    });
+  }
+
+  async updatePipelineStage(
+    id: string,
+    pipelineStage: ClientPipelineStage,
+    status: ClientStatus,
+  ): Promise<Client> {
+    return prisma.client.update({
+      where: { id },
+      data: { pipelineStage, status },
     });
   }
 
@@ -166,6 +233,112 @@ export class ClientsRepository {
   async countByStatus(status: ClientStatus): Promise<number> {
     return prisma.client.count({
       where: { deletedAt: null, status },
+    });
+  }
+
+  async findPipelineBoard(): Promise<{
+    columns: Array<{
+      stage: ClientPipelineStageValue;
+      count: number;
+      clients: Client[];
+    }>;
+    total: number;
+  }> {
+    const baseWhere: Prisma.ClientWhereInput = { deletedAt: null };
+
+    const [total, stageResults] = await Promise.all([
+      prisma.client.count({ where: baseWhere }),
+      Promise.all(
+        CLIENT_PIPELINE_STAGES.map(async (stage) => {
+          const where: Prisma.ClientWhereInput = {
+            ...baseWhere,
+            pipelineStage: stage as ClientPipelineStage,
+          };
+
+          const [clients, count] = await Promise.all([
+            prisma.client.findMany({
+              where,
+              orderBy: { updatedAt: "desc" },
+              take: PIPELINE_BOARD_LIMIT,
+            }),
+            prisma.client.count({ where }),
+          ]);
+
+          return { stage, count, clients };
+        }),
+      ),
+    ]);
+
+    return { columns: stageResults, total };
+  }
+
+  async listActivities(
+    clientId: string,
+    query: ListClientActivitiesQueryInput,
+  ): Promise<{ items: ClientActivityWithCreator[]; total: number }> {
+    const where: Prisma.ClientActivityWhereInput = {
+      clientId,
+      deletedAt: null,
+    };
+    const skip = (query.page - 1) * query.limit;
+
+    const [items, total] = await Promise.all([
+      prisma.clientActivity.findMany({
+        where,
+        orderBy: { occurredAt: "desc" },
+        skip,
+        take: query.limit,
+        include: {
+          createdBy: { select: { firstName: true, lastName: true } },
+        },
+      }),
+      prisma.clientActivity.count({ where }),
+    ]);
+
+    return { items, total };
+  }
+
+  async createActivity(
+    clientId: string,
+    input: {
+      type: ClientActivityType;
+      title: string;
+      body?: string | null;
+      occurredAt?: Date;
+      createdById: string | null;
+    },
+  ): Promise<ClientActivityWithCreator> {
+    return prisma.clientActivity.create({
+      data: {
+        clientId,
+        type: input.type,
+        title: input.title,
+        body: input.body ?? null,
+        occurredAt: input.occurredAt ?? new Date(),
+        createdById: input.createdById,
+      },
+      include: {
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async findActivityById(
+    clientId: string,
+    activityId: string,
+  ): Promise<ClientActivityWithCreator | null> {
+    return prisma.clientActivity.findFirst({
+      where: { id: activityId, clientId, deletedAt: null },
+      include: {
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async softDeleteActivity(activityId: string): Promise<ClientActivity> {
+    return prisma.clientActivity.update({
+      where: { id: activityId },
+      data: { deletedAt: new Date() },
     });
   }
 
@@ -271,3 +444,5 @@ export class ClientsRepository {
 }
 
 export const clientsRepository = new ClientsRepository();
+
+export { ClientActivityTypeEnum };

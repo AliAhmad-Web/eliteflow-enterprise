@@ -1,9 +1,14 @@
 import { ClientStatus, prisma } from "@enterprise/database";
 import type {
+  ClientActivityDto,
   ClientDto,
   ClientListResponse,
+  ClientPipelineBoardDto,
+  ClientPipelineStageValue,
+  CreateClientActivityInput,
   CreateClientInput,
   LinkPortalUserInput,
+  ListClientActivitiesQueryInput,
   ListClientsQueryInput,
   ListUnlinkedPortalUsersQueryInput,
   PortalUserDto,
@@ -15,14 +20,22 @@ import {
   logClientsAuditEvent,
 } from "./clients.audit.js";
 import { CLIENTS_ERROR_CODES, ClientsError } from "./clients.errors.js";
-import { clientsRepository } from "./clients.repository.js";
-import { toClientDto } from "./clients.types.js";
+import { clientsRepository, ClientActivityTypeEnum, statusForPipelineStage } from "./clients.repository.js";
+import { toClientActivityDto, toClientDto } from "./clients.types.js";
 
 export type ClientsActor = {
   userId: string;
   ipAddress?: string | null;
   userAgent?: string | null;
 };
+
+function nullIfEmpty(value: string | undefined): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value.length === 0 ? null : value;
+}
 
 function toPortalUserDto(user: {
   id: string;
@@ -141,6 +154,25 @@ export class ClientsService {
 
     const updated = await clientsRepository.update(id, input);
 
+    const statusChanged =
+      input.status !== undefined && input.status !== existing.status;
+    const stageChanged =
+      input.pipelineStage !== undefined &&
+      input.pipelineStage !== existing.pipelineStage;
+    const stageSyncedFromStatus =
+      input.status !== undefined &&
+      input.pipelineStage === undefined &&
+      updated.pipelineStage !== existing.pipelineStage;
+
+    if (statusChanged || stageChanged || stageSyncedFromStatus) {
+      await clientsRepository.createActivity(id, {
+        type: ClientActivityTypeEnum.STATUS_CHANGE,
+        title: "Client status or pipeline updated",
+        body: this.formatStatusChangeBody(existing, updated),
+        createdById: actor?.userId ?? null,
+      });
+    }
+
     await logClientsAuditEvent({
       userId: actor?.userId,
       action: CLIENTS_AUDIT_ACTIONS.UPDATE,
@@ -151,6 +183,214 @@ export class ClientsService {
     });
 
     return toClientDto(updated);
+  }
+
+  async getPipelineBoard(): Promise<ClientPipelineBoardDto> {
+    const board = await clientsRepository.findPipelineBoard();
+
+    return {
+      columns: board.columns.map((column) => ({
+        stage: column.stage,
+        count: column.count,
+        clients: column.clients.map(toClientDto),
+      })),
+      total: board.total,
+    };
+  }
+
+  async updatePipelineStage(
+    id: string,
+    stage: ClientPipelineStageValue,
+    actor?: ClientsActor | null,
+  ): Promise<ClientDto> {
+    const existing = await clientsRepository.findById(id);
+    if (!existing) {
+      throw new ClientsError(
+        "Client not found",
+        404,
+        CLIENTS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const newStatus = statusForPipelineStage(stage);
+    const statusChanged = existing.status !== newStatus;
+    const stageChanged = existing.pipelineStage !== stage;
+
+    if (!stageChanged && !statusChanged) {
+      return toClientDto(existing);
+    }
+
+    const updated = await clientsRepository.updatePipelineStage(
+      id,
+      stage,
+      newStatus,
+    );
+
+    await logClientsAuditEvent({
+      userId: actor?.userId,
+      action: CLIENTS_AUDIT_ACTIONS.PIPELINE_STAGE_UPDATE,
+      resourceId: id,
+      metadata: {
+        previousStage: existing.pipelineStage,
+        pipelineStage: stage,
+        previousStatus: existing.status,
+        status: newStatus,
+      },
+      ipAddress: actor?.ipAddress,
+      userAgent: actor?.userAgent,
+    });
+
+    if (statusChanged) {
+      await clientsRepository.createActivity(id, {
+        type: ClientActivityTypeEnum.STATUS_CHANGE,
+        title: "Status changed via pipeline update",
+        body: this.formatStatusChangeBody(existing, updated),
+        createdById: actor?.userId ?? null,
+      });
+    }
+
+    return toClientDto(updated);
+  }
+
+  async listActivities(
+    clientId: string,
+    query: ListClientActivitiesQueryInput,
+  ): Promise<{
+    items: ClientActivityDto[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      timestamp: string;
+    };
+  }> {
+    const client = await clientsRepository.findById(clientId);
+    if (!client) {
+      throw new ClientsError(
+        "Client not found",
+        404,
+        CLIENTS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const { items, total } = await clientsRepository.listActivities(
+      clientId,
+      query,
+    );
+    const totalPages = Math.max(1, Math.ceil(total / query.limit));
+
+    return {
+      items: items.map(toClientActivityDto),
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages,
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
+
+  async createActivity(
+    clientId: string,
+    input: CreateClientActivityInput,
+    actor?: ClientsActor | null,
+  ): Promise<ClientActivityDto> {
+    const client = await clientsRepository.findById(clientId);
+    if (!client) {
+      throw new ClientsError(
+        "Client not found",
+        404,
+        CLIENTS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const activity = await clientsRepository.createActivity(clientId, {
+      type: input.type as ClientActivityTypeEnum,
+      title: input.title,
+      body: nullIfEmpty(input.body) ?? null,
+      occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
+      createdById: actor?.userId ?? null,
+    });
+
+    await logClientsAuditEvent({
+      userId: actor?.userId,
+      action: CLIENTS_AUDIT_ACTIONS.ACTIVITY_CREATE,
+      resourceId: clientId,
+      metadata: {
+        activityId: activity.id,
+        type: activity.type,
+        title: activity.title,
+      },
+      ipAddress: actor?.ipAddress,
+      userAgent: actor?.userAgent,
+    });
+
+    return toClientActivityDto(activity);
+  }
+
+  async deleteActivity(
+    clientId: string,
+    activityId: string,
+    actor?: ClientsActor | null,
+  ): Promise<{ id: string }> {
+    const client = await clientsRepository.findById(clientId);
+    if (!client) {
+      throw new ClientsError(
+        "Client not found",
+        404,
+        CLIENTS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    const activity = await clientsRepository.findActivityById(
+      clientId,
+      activityId,
+    );
+    if (!activity) {
+      throw new ClientsError(
+        "Activity not found",
+        404,
+        CLIENTS_ERROR_CODES.ACTIVITY_NOT_FOUND,
+      );
+    }
+
+    await clientsRepository.softDeleteActivity(activityId);
+
+    await logClientsAuditEvent({
+      userId: actor?.userId,
+      action: CLIENTS_AUDIT_ACTIONS.ACTIVITY_DELETE,
+      resourceId: clientId,
+      metadata: {
+        activityId,
+        type: activity.type,
+        title: activity.title,
+      },
+      ipAddress: actor?.ipAddress,
+      userAgent: actor?.userAgent,
+    });
+
+    return { id: activityId };
+  }
+
+  private formatStatusChangeBody(
+    before: { status: string; pipelineStage: string | null },
+    after: { status: string; pipelineStage: string | null },
+  ): string {
+    const parts: string[] = [];
+
+    if (before.status !== after.status) {
+      parts.push(`Status: ${before.status} → ${after.status}`);
+    }
+
+    if (before.pipelineStage !== after.pipelineStage) {
+      parts.push(
+        `Pipeline: ${before.pipelineStage ?? "none"} → ${after.pipelineStage ?? "none"}`,
+      );
+    }
+
+    return parts.join(". ");
   }
 
   async remove(

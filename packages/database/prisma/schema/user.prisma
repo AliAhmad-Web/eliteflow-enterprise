@@ -55,6 +55,7 @@ model User {
   passwordHistory         PasswordHistory[]
   securityEvents          SecurityEvent[]
   clientsCreated          Client[]          @relation("ClientCreatedBy")
+  clientActivitiesCreated ClientActivity[]  @relation("ClientActivityCreatedBy")
   projectsCreated         Project[]         @relation("ProjectCreatedBy")
   projectMemberships      ProjectMember[]
   attachmentsUploaded     ProjectAttachment[] @relation("AttachmentUploadedBy")

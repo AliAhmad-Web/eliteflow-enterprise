@@ -1,13 +1,17 @@
 import type { Request, Response } from "express";
 
 import type {
+  ClientActivityIdParamsInput,
   ClientIdParamsInput,
+  CreateClientActivityInput,
   CreateClientInput,
   LinkPortalUserInput,
+  ListClientActivitiesQueryInput,
   ListClientsQueryInput,
   ListUnlinkedPortalUsersQueryInput,
   PortalUserIdParamsInput,
   UpdateClientInput,
+  UpdateClientPipelineStageInput,
 } from "@enterprise/shared";
 
 import { successResponse } from "../../shared/utils/api-response.js";
@@ -43,6 +47,13 @@ export class ClientsController {
     res.json(successResponse(result, "Client stats retrieved successfully"));
   }
 
+  async getPipelineBoard(_req: Request, res: Response): Promise<void> {
+    const result = await clientsService.getPipelineBoard();
+    res.json(
+      successResponse(result, "Client pipeline board retrieved successfully"),
+    );
+  }
+
   async getById(req: Request, res: Response): Promise<void> {
     const params = req.params as unknown as ClientIdParamsInput;
     const result = await clientsService.getById(params.id);
@@ -61,6 +72,56 @@ export class ClientsController {
     const body = req.body as UpdateClientInput;
     const result = await clientsService.update(params.id, body, getActor(req));
     res.json(successResponse(result, "Client updated successfully"));
+  }
+
+  async updatePipelineStage(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as ClientIdParamsInput;
+    const body = req.body as UpdateClientPipelineStageInput;
+    const result = await clientsService.updatePipelineStage(
+      params.id,
+      body.pipelineStage,
+      getActor(req),
+    );
+    res.json(
+      successResponse(result, "Client pipeline stage updated successfully"),
+    );
+  }
+
+  async listActivities(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as ClientIdParamsInput;
+    const query = req.query as unknown as ListClientActivitiesQueryInput;
+    const result = await clientsService.listActivities(params.id, query);
+    res.json(
+      successResponse(result, "Client activities retrieved successfully"),
+    );
+  }
+
+  async createActivity(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as ClientIdParamsInput;
+    const body = req.body as CreateClientActivityInput;
+    const result = await clientsService.createActivity(
+      params.id,
+      body,
+      getActor(req),
+    );
+    res
+      .status(201)
+      .json(successResponse(result, "Client activity created successfully"));
+  }
+
+  async deleteActivity(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as ClientActivityIdParamsInput;
+    const result = await clientsService.deleteActivity(
+      params.id,
+      params.activityId,
+      getActor(req),
+    );
+    res.json(
+      successResponse(
+        { id: result.id, message: "Client activity deleted successfully" },
+        "Client activity deleted successfully",
+      ),
+    );
   }
 
   async remove(req: Request, res: Response): Promise<void> {

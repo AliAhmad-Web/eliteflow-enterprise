@@ -364,32 +364,51 @@ export type {
 
 // Schemas — Clients
 export {
+  CLIENT_ACTIVITY_TYPES,
+  CLIENT_PIPELINE_STAGES,
   CLIENT_SORT_FIELDS,
   CLIENT_STATUSES,
+  clientActivityIdParamsSchema,
+  clientActivitySchema,
+  clientActivityTypeSchema,
   clientFieldsSchema,
   clientIdParamsSchema,
+  clientPipelineBoardSchema,
+  clientPipelineStageSchema,
   clientSchema,
   clientStatusSchema,
+  createClientActivitySchema,
   createClientSchema,
   linkPortalUserSchema,
+  listClientActivitiesQuerySchema,
   listClientsQuerySchema,
   listUnlinkedPortalUsersQuerySchema,
   portalUserIdParamsSchema,
   portalUserSchema,
+  updateClientPipelineStageSchema,
   updateClientSchema,
 } from "./schemas/clients.schema.js";
 
 export type {
+  ClientActivityDto,
+  ClientActivityIdParamsInput,
+  ClientActivityTypeValue,
   ClientDto,
   ClientIdParamsInput,
+  ClientPipelineBoardDto,
+  ClientPipelineColumnDto,
+  ClientPipelineStageValue,
   ClientStatusValue,
+  CreateClientActivityInput,
   CreateClientInput,
   LinkPortalUserInput,
+  ListClientActivitiesQueryInput,
   ListClientsQueryInput,
   ListUnlinkedPortalUsersQueryInput,
   PortalUserDto,
   PortalUserIdParamsInput,
   UpdateClientInput,
+  UpdateClientPipelineStageInput,
 } from "./schemas/clients.schema.js";
 
 // Schemas — Projects

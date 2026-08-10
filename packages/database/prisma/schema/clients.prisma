@@ -14,6 +14,8 @@ model Client {
   city         String?      @db.VarChar(100)
   country      String?      @db.VarChar(100)
   status       ClientStatus @default(LEAD)
+  /// Sales pipeline stage — primarily for LEAD records; WON/LOST align with ACTIVE/INACTIVE.
+  pipelineStage ClientPipelineStage? @map("pipeline_stage")
   notes        String?      @db.Text
   createdById  String?      @map("created_by_id") @db.Uuid
   createdAt    DateTime     @default(now()) @map("created_at")
@@ -29,12 +31,37 @@ model Client {
   fileShares  FileShare[]
   calendarEvents CalendarEvent[]
   whiteboards    Whiteboard[]
+  activities  ClientActivity[]
 
   @@index([email])
   @@index([companyName])
   @@index([status])
+  @@index([pipelineStage])
   @@index([deletedAt])
   @@index([createdById])
   @@index([createdAt])
   @@map("clients")
+}
+
+/// CRM activity timeline against a client / lead (notes, calls, meetings, etc.).
+model ClientActivity {
+  id          String             @id @default(uuid()) @db.Uuid
+  clientId    String             @map("client_id") @db.Uuid
+  type        ClientActivityType @default(NOTE)
+  title       String             @db.VarChar(200)
+  body        String?            @db.VarChar(5000)
+  occurredAt  DateTime           @default(now()) @map("occurred_at")
+  createdById String?            @map("created_by_id") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ClientActivityCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([clientId, occurredAt])
+  @@index([type])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@map("client_activities")
 }

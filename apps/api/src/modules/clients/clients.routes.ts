@@ -14,12 +14,16 @@ import { validate } from "../../middleware/validate.middleware.js";
 import { asyncHandler } from "../../shared/utils/async-handler.js";
 import { clientsController } from "./clients.controller.js";
 import {
+  clientActivityIdParamsSchema,
   clientIdParamsSchema,
+  createClientActivitySchema,
   createClientSchema,
   linkPortalUserSchema,
+  listClientActivitiesQuerySchema,
   listClientsQuerySchema,
   listUnlinkedPortalUsersQuerySchema,
   portalUserIdParamsSchema,
+  updateClientPipelineStageSchema,
   updateClientSchema,
 } from "./clients.validation.js";
 
@@ -48,6 +52,17 @@ clientsRouter.get(
     keyGenerator: rateLimitByUser,
   }),
   asyncHandler((req, res) => clientsController.stats(req, res)),
+);
+
+clientsRouter.get(
+  "/pipeline",
+  authorizePermissions(PERMISSIONS.CLIENTS_READ),
+  rateLimit({
+    name: "clients.pipeline",
+    ...RATE_LIMIT.GLOBAL_API,
+    keyGenerator: rateLimitByUser,
+  }),
+  asyncHandler((req, res) => clientsController.getPipelineBoard(req, res)),
 );
 
 // Must be registered before `/:id` so "portal-users" is not captured as an id.
@@ -102,6 +117,60 @@ clientsRouter.delete(
   }),
   validate(portalUserIdParamsSchema, "params"),
   asyncHandler((req, res) => clientsController.unlinkPortalUser(req, res)),
+);
+
+clientsRouter.get(
+  "/:id/activities",
+  authorizePermissions(PERMISSIONS.CLIENTS_READ),
+  rateLimit({
+    name: "clients.activities.list",
+    ...RATE_LIMIT.GLOBAL_API,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(clientIdParamsSchema, "params"),
+  validate(listClientActivitiesQuerySchema, "query"),
+  asyncHandler((req, res) => clientsController.listActivities(req, res)),
+);
+
+clientsRouter.post(
+  "/:id/activities",
+  authorizePermissions(PERMISSIONS.CLIENTS_WRITE),
+  rateLimit({
+    name: "clients.activities.create",
+    max: 60,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(clientIdParamsSchema, "params"),
+  validate(createClientActivitySchema),
+  asyncHandler((req, res) => clientsController.createActivity(req, res)),
+);
+
+clientsRouter.delete(
+  "/:id/activities/:activityId",
+  authorizePermissions(PERMISSIONS.CLIENTS_WRITE),
+  rateLimit({
+    name: "clients.activities.delete",
+    max: 30,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(clientActivityIdParamsSchema, "params"),
+  asyncHandler((req, res) => clientsController.deleteActivity(req, res)),
+);
+
+clientsRouter.patch(
+  "/:id/pipeline-stage",
+  authorizePermissions(PERMISSIONS.CLIENTS_WRITE),
+  rateLimit({
+    name: "clients.pipeline_stage.update",
+    max: 60,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(clientIdParamsSchema, "params"),
+  validate(updateClientPipelineStageSchema),
+  asyncHandler((req, res) => clientsController.updatePipelineStage(req, res)),
 );
 
 clientsRouter.get(

@@ -22,8 +22,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+import { CLIENT_PIPELINE_STAGE_LABELS } from "../types/clients.types";
 import { ClientStatusBadge } from "./client-status-badge";
 
 type SortField = ListClientsQueryInput["sortBy"];
@@ -139,6 +141,11 @@ export function ClientsTable({
     { field: "contactName", label: "Contact", className: "hidden lg:table-cell" },
     { field: "email", label: "Email", className: "hidden xl:table-cell" },
     { field: "status", label: "Status" },
+    {
+      field: "pipelineStage",
+      label: "Pipeline",
+      className: "hidden md:table-cell",
+    },
     { field: "createdAt", label: "Created", className: "hidden 2xl:table-cell" },
   ];
 
@@ -205,6 +212,15 @@ export function ClientsTable({
               <td className="px-3 py-3 lg:px-4">
                 <ClientStatusBadge status={client.status} />
               </td>
+              <td className="hidden px-3 py-3 md:table-cell md:px-4">
+                {client.pipelineStage ? (
+                  <Badge variant="secondary">
+                    {CLIENT_PIPELINE_STAGE_LABELS[client.pipelineStage]}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </td>
               <td className="hidden px-3 py-3 text-muted-foreground 2xl:table-cell 2xl:px-4">
                 {new Date(client.createdAt).toLocaleDateString()}
               </td>
@@ -247,6 +263,11 @@ export function ClientsTable({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <ClientStatusBadge status={client.status} />
+              {client.pipelineStage ? (
+                <Badge variant="secondary">
+                  {CLIENT_PIPELINE_STAGE_LABELS[client.pipelineStage]}
+                </Badge>
+              ) : null}
               <span className="text-xs text-muted-foreground">
                 {new Date(client.createdAt).toLocaleDateString()}
               </span>

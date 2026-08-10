@@ -1,8 +1,8 @@
 ﻿"use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import type { Client, PortalUserDto } from "@enterprise/shared";
-import { PERMISSIONS } from "@enterprise/shared";
+import type { Client, ClientPipelineStageValue, PortalUserDto } from "@enterprise/shared";
+import { CLIENT_PIPELINE_STAGES, PERMISSIONS } from "@enterprise/shared";
 import {
   ExternalLink,
   Link2,
@@ -28,17 +28,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
+import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
+import { FORM_SELECT_CLASS } from "@/lib/form-styles";
+import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api/api-error";
 
 import {
   useLinkPortalUser,
   useUnlinkPortalUser,
+  useUpdateClientPipelineStage,
 } from "../hooks/use-client-mutations";
 import {
   useClient,
   useClientPortalUsers,
   useUnlinkedPortalUsers,
 } from "../hooks/use-clients";
+import { CLIENT_PIPELINE_STAGE_LABELS } from "../types/clients.types";
+import { ClientActivitiesPanel } from "./client-activities-panel";
 import { ClientStatusBadge } from "./client-status-badge";
 
 interface ClientDetailsDialogProps {
@@ -87,9 +93,15 @@ export function ClientDetailsDialog({
   );
   const linkMutation = useLinkPortalUser(clientId);
   const unlinkMutation = useUnlinkPortalUser(clientId);
+  const updatePipeline = useUpdateClientPipelineStage();
+  const canWrite = useHasPermission(PERMISSIONS.CLIENTS_WRITE);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [unlinkTarget, setUnlinkTarget] = useState<PortalUserDto | null>(null);
   const [portalMessage, setPortalMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [pipelineMessage, setPipelineMessage] = useState<{
     tone: "success" | "error";
     text: string;
   } | null>(null);
@@ -100,6 +112,7 @@ export function ClientDetailsDialog({
       setSelectedUserId("");
       setUnlinkTarget(null);
       setPortalMessage(null);
+      setPipelineMessage(null);
     }
   }, [open]);
 
@@ -157,13 +170,34 @@ export function ClientDetailsDialog({
     }
   };
 
+  const handlePipelineChange = async (pipelineStage: ClientPipelineStageValue) => {
+    if (!client || client.pipelineStage === pipelineStage) return;
+    setPipelineMessage(null);
+    try {
+      await updatePipeline.mutateAsync({ id: client.id, pipelineStage });
+      setPipelineMessage({
+        tone: "success",
+        text: `Pipeline moved to ${CLIENT_PIPELINE_STAGE_LABELS[pipelineStage]}.`,
+      });
+      void refetch();
+    } catch (err) {
+      setPipelineMessage({
+        tone: "error",
+        text:
+          err instanceof ApiClientError || err instanceof Error
+            ? err.message
+            : "Could not update pipeline stage.",
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Client details</DialogTitle>
           <DialogDescription>
-            Company profile, contact information, and portal user linking.
+            Company profile, CRM pipeline, activities, and portal user linking.
           </DialogDescription>
         </DialogHeader>
 
@@ -196,7 +230,61 @@ export function ClientDetailsDialog({
                   {client.contactName}
                 </p>
               </div>
-              <ClientStatusBadge status={client.status} />
+              <div className="flex flex-wrap items-center gap-2">
+                <ClientStatusBadge status={client.status} />
+                {client.pipelineStage ? (
+                  <Badge variant="secondary">
+                    {CLIENT_PIPELINE_STAGE_LABELS[client.pipelineStage]}
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="client-pipeline-stage">Pipeline stage</Label>
+                {canWrite ? (
+                  <select
+                    id="client-pipeline-stage"
+                    className={cn(FORM_SELECT_CLASS, "min-w-40")}
+                    value={client.pipelineStage ?? "NEW"}
+                    disabled={updatePipeline.isPending}
+                    onChange={(event) => {
+                      void handlePipelineChange(
+                        event.target.value as ClientPipelineStageValue,
+                      );
+                    }}
+                  >
+                    {CLIENT_PIPELINE_STAGES.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {CLIENT_PIPELINE_STAGE_LABELS[stage]}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-sm font-medium">
+                    {client.pipelineStage
+                      ? CLIENT_PIPELINE_STAGE_LABELS[client.pipelineStage]
+                      : "—"}
+                  </span>
+                )}
+              </div>
+              {pipelineMessage ? (
+                <p
+                  className={
+                    pipelineMessage.tone === "success"
+                      ? "text-sm text-emerald-700 dark:text-emerald-400"
+                      : "text-sm text-destructive"
+                  }
+                  role="status"
+                >
+                  {pipelineMessage.text}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Moving to Won/Lost also syncs Active/Inactive status.
+                </p>
+              )}
             </div>
 
             <dl className="space-y-3 rounded-xl border border-border/50 bg-muted/20 p-4">
@@ -267,6 +355,8 @@ export function ClientDetailsDialog({
                 value={new Date(client.updatedAt).toLocaleString()}
               />
             </dl>
+
+            <ClientActivitiesPanel clientId={client.id} canWrite={canWrite} />
 
             <section className="space-y-4 rounded-xl border border-border/50 p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
