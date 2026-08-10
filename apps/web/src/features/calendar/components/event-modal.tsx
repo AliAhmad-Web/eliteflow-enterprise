@@ -469,12 +469,15 @@ export function EventModal({
           </div>
 
           <div className="grid gap-2">
-            <Label>Attachments (URLs)</Label>
+            <Label>Attachments (File Manager URLs only)</Label>
+            <p className="text-xs text-muted-foreground">
+              Paste an internal File Manager download URL. data: and javascript: URLs are rejected.
+            </p>
             <div className="flex gap-2">
               <Input
                 value={attachmentInput}
                 disabled={readOnly}
-                placeholder="https://..."
+                placeholder="/api/v1/files/&lt;id&gt;/download"
                 onChange={(e) => setAttachmentInput(e.target.value)}
               />
               {!readOnly && (
@@ -482,10 +485,20 @@ export function EventModal({
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    if (!attachmentInput.trim()) return;
+                    const value = attachmentInput.trim();
+                    if (!value) return;
+                    const lower = value.toLowerCase();
+                    if (
+                      lower.startsWith("data:") ||
+                      lower.startsWith("javascript:") ||
+                      lower.startsWith("vbscript:") ||
+                      lower.startsWith("blob:")
+                    ) {
+                      return;
+                    }
                     update("attachmentUrls", [
                       ...(form.attachmentUrls ?? []),
-                      attachmentInput.trim(),
+                      value,
                     ]);
                     setAttachmentInput("");
                   }}

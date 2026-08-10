@@ -1,4 +1,5 @@
 import type { Prisma } from "@enterprise/database";
+import { prisma } from "@enterprise/database";
 import type {
   CreateWhiteboardCommentInput,
   CreateWhiteboardInput,
@@ -14,6 +15,10 @@ import type {
 import { PERMISSIONS, UserRole } from "@enterprise/shared";
 
 import { getAiProvider } from "../ai/providers/index.js";
+import {
+  WHITEBOARDS_AUDIT_ACTIONS,
+  logWhiteboardAuditEvent,
+} from "./whiteboards.audit.js";
 import {
   WHITEBOARDS_ERROR_CODES,
   WhiteboardsError,
@@ -31,6 +36,8 @@ export interface WhiteboardsActor {
   email: string;
   companyId?: string | null;
   permissions: string[];
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 const EMPTY_CANVAS = {
@@ -81,12 +88,76 @@ function scopeWhere(actor: WhiteboardsActor): Prisma.WhiteboardWhereInput {
   if (isAdmin(actor)) {
     return {};
   }
-  if (actor.role === UserRole.CLIENT && actor.companyId) {
+  if (actor.role === UserRole.CLIENT) {
+    if (!actor.companyId) {
+      return { ownerId: actor.userId };
+    }
     return {
       OR: [{ ownerId: actor.userId }, { clientId: actor.companyId }],
     };
   }
-  return { ownerId: actor.userId };
+
+  // Employee / staff: own boards + project membership + team membership
+  return {
+    OR: [
+      { ownerId: actor.userId },
+      {
+        projectId: { not: null },
+        project: {
+          members: { some: { userId: actor.userId } },
+        },
+      },
+      {
+        teamId: { not: null },
+        team: {
+          members: { some: { userId: actor.userId } },
+        },
+      },
+    ],
+  };
+}
+
+async function canAccessBoard(
+  row: {
+    ownerId: string;
+    clientId: string | null;
+    projectId: string | null;
+    teamId: string | null;
+  },
+  actor: WhiteboardsActor,
+): Promise<boolean> {
+  if (isAdmin(actor)) return true;
+  if (row.ownerId === actor.userId) return true;
+
+  if (
+    actor.role === UserRole.CLIENT &&
+    actor.companyId &&
+    row.clientId === actor.companyId
+  ) {
+    return true;
+  }
+
+  if (actor.role === UserRole.CLIENT) {
+    return false;
+  }
+
+  if (row.projectId) {
+    const member = await prisma.projectMember.findFirst({
+      where: { projectId: row.projectId, userId: actor.userId },
+      select: { id: true },
+    });
+    if (member) return true;
+  }
+
+  if (row.teamId) {
+    const member = await prisma.teamMember.findFirst({
+      where: { teamId: row.teamId, userId: actor.userId },
+      select: { id: true },
+    });
+    if (member) return true;
+  }
+
+  return false;
 }
 
 async function getOwnedOrThrow(id: string, actor: WhiteboardsActor) {
@@ -99,16 +170,7 @@ async function getOwnedOrThrow(id: string, actor: WhiteboardsActor) {
     );
   }
 
-  if (isAdmin(actor)) {
-    return row;
-  }
-
-  const allowed =
-    row.ownerId === actor.userId ||
-    (actor.role === UserRole.CLIENT &&
-      actor.companyId &&
-      row.clientId === actor.companyId);
-
+  const allowed = await canAccessBoard(row, actor);
   if (!allowed) {
     throw new WhiteboardsError(
       "Whiteboard not found",
@@ -193,13 +255,19 @@ export class WhiteboardsService {
   ): Promise<WhiteboardDto> {
     assertWrite(actor);
 
+    // Never trust client-supplied company binding from CLIENT actors.
+    const boundClientId =
+      actor.role === UserRole.CLIENT
+        ? actor.companyId ?? null
+        : (input.clientId ?? null);
+
     const row = await whiteboardsRepository.create({
       title: input.title ?? "Untitled Whiteboard",
       canvasData: (input.canvasData ?? EMPTY_CANVAS) as Prisma.InputJsonValue,
       thumbnail: input.thumbnail ?? null,
       projectId: input.projectId ?? null,
       taskId: input.taskId ?? null,
-      clientId: input.clientId ?? null,
+      clientId: boundClientId,
       teamId: input.teamId ?? null,
       organizationId: input.organizationId ?? null,
       workspaceId: input.workspaceId ?? null,
@@ -219,6 +287,20 @@ export class WhiteboardsService {
       label: "Initial",
     });
 
+    void logWhiteboardAuditEvent({
+      userId: actor.userId,
+      action: WHITEBOARDS_AUDIT_ACTIONS.CREATE,
+      resourceId: row.id,
+      metadata: {
+        title: row.title,
+        projectId: row.projectId,
+        clientId: row.clientId,
+        teamId: row.teamId,
+      },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
+
     return toWhiteboardDto(row);
   }
 
@@ -230,7 +312,13 @@ export class WhiteboardsService {
     assertWrite(actor);
     const existing = await getOwnedOrThrow(id, actor);
 
-    if (existing.ownerId !== actor.userId && !isAdmin(actor)) {
+    // Shared project/team members with write permission may update canvas.
+    // CLIENT may only update if they own the board.
+    if (
+      actor.role === UserRole.CLIENT &&
+      existing.ownerId !== actor.userId &&
+      !isAdmin(actor)
+    ) {
       throw new WhiteboardsError(
         "Permission denied",
         403,
@@ -242,6 +330,13 @@ export class WhiteboardsService {
       ? existing.version + 1
       : existing.version;
 
+    const nextClientId =
+      actor.role === UserRole.CLIENT
+        ? existing.clientId
+        : input.clientId !== undefined
+          ? input.clientId
+          : undefined;
+
     const row = await whiteboardsRepository.update(id, {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.canvasData !== undefined
@@ -250,7 +345,7 @@ export class WhiteboardsService {
       ...(input.thumbnail !== undefined ? { thumbnail: input.thumbnail } : {}),
       ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
       ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
-      ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
+      ...(nextClientId !== undefined ? { clientId: nextClientId } : {}),
       ...(input.teamId !== undefined ? { teamId: input.teamId } : {}),
       version: nextVersion,
       updatedById: actor.userId,
@@ -267,6 +362,15 @@ export class WhiteboardsService {
         label: input.versionLabel ?? "Manual save",
       });
     }
+
+    void logWhiteboardAuditEvent({
+      userId: actor.userId,
+      action: WHITEBOARDS_AUDIT_ACTIONS.UPDATE,
+      resourceId: id,
+      metadata: { fields: Object.keys(input), version: nextVersion },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
 
     return toWhiteboardDto(row);
   }
@@ -316,6 +420,16 @@ export class WhiteboardsService {
     }
 
     await whiteboardsRepository.softDelete(id, actor.userId);
+
+    void logWhiteboardAuditEvent({
+      userId: actor.userId,
+      action: WHITEBOARDS_AUDIT_ACTIONS.DELETE,
+      resourceId: id,
+      metadata: { title: existing.title },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
+
     return { id };
   }
 

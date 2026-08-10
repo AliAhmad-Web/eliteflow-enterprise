@@ -4,7 +4,7 @@ import type {
   CommentDto,
   CommentEntityTypeValue,
 } from "@enterprise/shared";
-import { PERMISSIONS } from "@enterprise/shared";
+import { FILES_API_PREFIX, PERMISSIONS } from "@enterprise/shared";
 import {
   Edit3,
   MessageCircle,
@@ -13,12 +13,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { Button } from "@/components/ui/button";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
+import { filesService } from "@/features/files/services/files.service";
+import { getApiBaseUrl } from "@/services/api/api-error";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
 
@@ -37,6 +39,14 @@ interface EntityCommentsPanelProps {
   className?: string;
 }
 
+type PendingAttachment = {
+  fileName: string;
+  fileUrl: string;
+  managedFileId: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
 export function EntityCommentsPanel({
   entityType,
   entityId,
@@ -44,7 +54,9 @@ export function EntityCommentsPanel({
 }: EntityCommentsPanelProps) {
   const canRead = useHasPermission(PERMISSIONS.CHAT_READ);
   const canWrite = useHasPermission(PERMISSIONS.CHAT_WRITE);
+  const canUpload = useHasPermission(PERMISSIONS.FILES_UPLOAD);
   const currentUserId = useAuthStore((s) => s.user?.id ?? "");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const query = { entityType, entityId, page: 1, pageSize: 30 };
 
@@ -56,18 +68,56 @@ export function EntityCommentsPanel({
   const [newBody, setNewBody] = useState("");
   const [replyTo, setReplyTo] = useState<CommentDto | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [attachInput, setAttachInput] = useState({ fileName: "", fileUrl: "" });
-  const [showAttachForm, setShowAttachForm] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<
-    Array<{ fileName: string; fileUrl: string }>
+    PendingAttachment[]
   >([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const topLevelComments = (data?.items ?? []).filter((c) => !c.parentId);
+
+  async function handleAttachFiles(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    setAttachError(null);
+    if (!canUpload) {
+      setAttachError("File upload permission is required to attach files.");
+      return;
+    }
+    setUploading(true);
+    try {
+      for (const file of [...fileList]) {
+        const uploaded = await filesService.uploadFiles({ files: [file] });
+        const managed = uploaded[0];
+        if (!managed) {
+          throw new Error(`Upload failed for ${file.name}`);
+        }
+        setPendingAttachments((prev) => [
+          ...prev,
+          {
+            fileName: managed.originalName || managed.name || file.name,
+            fileUrl: `${getApiBaseUrl()}${FILES_API_PREFIX}/${managed.id}/download`,
+            managedFileId: managed.id,
+            mimeType: managed.mimeType ?? file.type,
+            sizeBytes: managed.sizeBytes ?? file.size,
+          },
+        ]);
+      }
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     const body = newBody.trim();
     if (!body) return;
+    if (uploading) {
+      setAttachError("Wait for uploads to finish.");
+      return;
+    }
 
     await createMut.mutateAsync({
       entityType,
@@ -82,7 +132,7 @@ export function EntityCommentsPanel({
     setNewBody("");
     setReplyTo(null);
     setPendingAttachments([]);
-    setShowAttachForm(false);
+    setAttachError(null);
   }
 
   async function handleUpdate(id: string, body: string) {
@@ -164,12 +214,11 @@ export function EntityCommentsPanel({
             </div>
           )}
 
-          {/* Pending attachments */}
           {pendingAttachments.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {pendingAttachments.map((att, i) => (
+              {pendingAttachments.map((att) => (
                 <div
-                  key={i}
+                  key={att.managedFileId}
                   className="flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-xs"
                 >
                   <Paperclip className="h-3 w-3 text-muted-foreground" />
@@ -177,7 +226,9 @@ export function EntityCommentsPanel({
                   <button
                     type="button"
                     onClick={() =>
-                      setPendingAttachments((prev) => prev.filter((_, j) => j !== i))
+                      setPendingAttachments((prev) =>
+                        prev.filter((p) => p.managedFileId !== att.managedFileId),
+                      )
                     }
                     className="ml-0.5 text-muted-foreground hover:text-destructive"
                   >
@@ -188,54 +239,10 @@ export function EntityCommentsPanel({
             </div>
           )}
 
-          {/* Attachment form */}
-          {showAttachForm && (
-            <div className="rounded border border-border bg-muted/30 p-2 space-y-1.5">
-              <input
-                className="w-full rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
-                placeholder="File name"
-                value={attachInput.fileName}
-                onChange={(e) =>
-                  setAttachInput((p) => ({ ...p, fileName: e.target.value }))
-                }
-              />
-              <input
-                className="w-full rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
-                placeholder="File URL (https://…)"
-                value={attachInput.fileUrl}
-                onChange={(e) =>
-                  setAttachInput((p) => ({ ...p, fileUrl: e.target.value }))
-                }
-              />
-              <div className="flex gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => {
-                    if (attachInput.fileName && attachInput.fileUrl) {
-                      setPendingAttachments((p) => [...p, attachInput]);
-                      setAttachInput({ fileName: "", fileUrl: "" });
-                      setShowAttachForm(false);
-                    }
-                  }}
-                >
-                  Add
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => setShowAttachForm(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
+          {attachError ? (
+            <p className="text-xs text-destructive">{attachError}</p>
+          ) : null}
 
-          {/* Textarea */}
           <div className="flex gap-2">
             <textarea
               value={newBody}
@@ -247,7 +254,9 @@ export function EntityCommentsPanel({
                 }
               }}
               placeholder={
-                replyTo ? `Reply to ${replyTo.author?.firstName ?? "comment"}…` : "Write a comment…"
+                replyTo
+                  ? `Reply to ${replyTo.author?.firstName ?? "comment"}…`
+                  : "Write a comment…"
               }
               rows={2}
               className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
@@ -255,18 +264,33 @@ export function EntityCommentsPanel({
           </div>
 
           <div className="flex items-center justify-between">
-            <button
-              type="button"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setShowAttachForm(true)}
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-              Attach
-            </button>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                multiple
+                onChange={(e) => void handleAttachFiles(e.target.files)}
+              />
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                disabled={uploading || !canUpload}
+                onClick={() => fileInputRef.current?.click()}
+                title={
+                  canUpload
+                    ? "Attach via File Manager upload"
+                    : "Upload permission required"
+                }
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                {uploading ? "Uploading…" : "Attach"}
+              </button>
+            </div>
             <Button
               type="submit"
               size="sm"
-              disabled={!newBody.trim() || createMut.isPending}
+              disabled={!newBody.trim() || createMut.isPending || uploading}
             >
               {createMut.isPending ? "Posting…" : replyTo ? "Reply" : "Comment"}
             </Button>

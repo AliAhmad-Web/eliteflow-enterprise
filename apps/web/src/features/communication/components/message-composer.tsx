@@ -66,7 +66,6 @@ import { EmojiPicker } from "./emoji-picker";
 import { LinkRecordPicker } from "./link-record-picker";
 
 const MAX_CHARS = 10_000;
-const DATA_URL_MAX_BYTES = 750_000;
 
 type MemberSuggestion = { id: string; firstName: string; lastName: string };
 
@@ -480,18 +479,16 @@ export function MessageComposer({
               managedFileId = managed.id;
               fileUrl = `${getApiBaseUrl()}${FILES_API_PREFIX}/${managed.id}/download`;
             }
-          } catch {
-            // Fall through to data-URL fallback for small files.
+          } catch (err) {
+            throw err instanceof Error ? err : new Error("Upload failed.");
           }
         }
 
-        if (!managedFileId && file.size <= DATA_URL_MAX_BYTES) {
-          fileUrl = await readAsDataUrl(file);
-        }
-
-        if (!managedFileId && file.size > DATA_URL_MAX_BYTES && !canUpload) {
+        if (!managedFileId) {
           throw new Error(
-            `${file.name} is too large to embed. Upload permission is required.`,
+            canUpload
+              ? `Upload failed for ${file.name}.`
+              : `${file.name} requires File Manager upload permission.`,
           );
         }
 
@@ -1192,13 +1189,4 @@ function ToolbarIcon({
       <TooltipContent side="top">{label}</TooltipContent>
     </Tooltip>
   );
-}
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("Could not read file"));
-    reader.readAsDataURL(file);
-  });
 }

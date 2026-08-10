@@ -578,19 +578,19 @@ export function WhiteboardPageContent() {
             <div className="grid gap-3 md:grid-cols-4">
               <div className="space-y-1">
                 <Label htmlFor="projectId">Project ID</Label>
-                <Input id="projectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Optional UUID" />
+                <Input id="projectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Project UUID — shared with members" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="taskId">Task ID</Label>
-                <Input id="taskId" value={taskId} onChange={(e) => setTaskId(e.target.value)} placeholder="Optional UUID" />
+                <Input id="taskId" value={taskId} onChange={(e) => setTaskId(e.target.value)} placeholder="Task UUID (optional)" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="clientId">Client ID</Label>
-                <Input id="clientId" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Optional UUID" />
+                <Input id="clientId" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client UUID — portal company link" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="teamId">Team ID</Label>
-                <Input id="teamId" value={teamId} onChange={(e) => setTeamId(e.target.value)} placeholder="Optional UUID" />
+                <Input id="teamId" value={teamId} onChange={(e) => setTeamId(e.target.value)} placeholder="Team UUID — shared with members" />
               </div>
             </div>
 

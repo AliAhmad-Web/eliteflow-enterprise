@@ -15,12 +15,17 @@ import type {
   RecurrenceFrequencyValue,
 } from "@enterprise/shared";
 import { UserRole } from "@enterprise/shared";
+import {
+  NotificationCategory,
+  NotificationPriority,
+} from "@enterprise/database";
 
 import { CALENDAR_AUDIT_ACTIONS, logCalendarAuditEvent } from "./calendar.audit.js";
 import { CALENDAR_ERROR_CODES, CalendarError } from "./calendar.errors.js";
 import { calendarRepository } from "./calendar.repository.js";
 import { toCalendarEventDto, toHolidayDto } from "./calendar.types.js";
 import { attachmentSecurityService } from "../files/attachment-security.service.js";
+import { notificationDispatcher } from "../notifications/index.js";
 
 type StoredEvent = NonNullable<
   Awaited<ReturnType<typeof calendarRepository.getEvent>>
@@ -471,6 +476,14 @@ export class CalendarService {
       userAgent: actor.userAgent,
     });
 
+    this.notifyAttendeesInvited({
+      eventId: event.id,
+      title: event.title,
+      startsAt: event.startsAt,
+      actorUserId: actor.userId,
+      attendeeUserIds: attendees.map((a) => a.userId),
+    });
+
     return toCalendarEventDto(event);
   }
 
@@ -548,6 +561,16 @@ export class CalendarService {
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
+
+    if (replaceAttendees?.length) {
+      this.notifyAttendeesInvited({
+        eventId: event.id,
+        title: event.title,
+        startsAt: event.startsAt,
+        actorUserId: actor.userId,
+        attendeeUserIds: replaceAttendees.map((a) => a.userId),
+      });
+    }
 
     return toCalendarEventDto(event);
   }
@@ -809,6 +832,35 @@ export class CalendarService {
     });
 
     return { id };
+  }
+
+  /** Best-effort invite notifications — never blocks calendar mutations. */
+  private notifyAttendeesInvited(input: {
+    eventId: string;
+    title: string;
+    startsAt: Date;
+    actorUserId: string;
+    attendeeUserIds: string[];
+  }): void {
+    const unique = [...new Set(input.attendeeUserIds)].filter(
+      (id) => id !== input.actorUserId,
+    );
+    if (unique.length === 0) return;
+
+    const when = input.startsAt.toISOString();
+    for (const userId of unique) {
+      void notificationDispatcher.notify({
+        title: "Calendar invitation",
+        body: `You were invited to "${input.title}" (${when}).`,
+        category: NotificationCategory.CALENDAR,
+        priority: NotificationPriority.NORMAL,
+        linkUrl: `/calendar?event=${input.eventId}`,
+        entityType: "CalendarEvent",
+        entityId: input.eventId,
+        audience: { type: "INDIVIDUAL", userId },
+        createdById: input.actorUserId,
+      });
+    }
   }
 }
 

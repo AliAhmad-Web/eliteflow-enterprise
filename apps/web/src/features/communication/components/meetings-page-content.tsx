@@ -148,7 +148,7 @@ export function MeetingsPageContent() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-1 pb-8 sm:gap-6">
       <PageHeader
         title="Meetings"
-        description="Schedule rooms, invite participants, and prepare for live sessions."
+        description="Schedule meeting rooms and participants. Live A/V (WebRTC) is not enabled — rooms are scheduling/metadata only."
         actionLabel={canManage ? "Schedule meeting" : undefined}
         onAction={canManage ? () => setCreateOpen(true) : undefined}
       />

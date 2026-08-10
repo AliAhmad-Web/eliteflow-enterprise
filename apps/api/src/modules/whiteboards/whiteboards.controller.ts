@@ -31,21 +31,19 @@ async function getActor(req: Request): Promise<WhiteboardsActor> {
     );
   }
 
-  let companyId: string | null = null;
-  if (req.auth.role === "CLIENT") {
-    const user = await prisma.user.findUnique({
-      where: { id: req.auth.userId },
-      select: { companyId: true },
-    });
-    companyId = user?.companyId ?? null;
-  }
+  const user = await prisma.user.findUnique({
+    where: { id: req.auth.userId },
+    select: { companyId: true },
+  });
 
   return {
     userId: req.auth.userId,
     role: req.auth.role,
     email: req.auth.email,
-    companyId,
+    companyId: user?.companyId ?? null,
     permissions: req.auth.permissions,
+    ipAddress: req.ip ?? null,
+    userAgent: req.get("user-agent") ?? null,
   };
 }
 
