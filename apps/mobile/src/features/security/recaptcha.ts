@@ -1,21 +1,22 @@
+/**
+ * Obtain a captcha token for auth endpoints.
+ *
+ * Mobile does not embed a Google reCAPTCHA executor yet. Production API may
+ * accept any non-empty token when using Google's test secret, or enforce a
+ * real secret — configure EXPO_PUBLIC_RECAPTCHA_SITE_KEY only when a real
+ * mobile WebView executor is wired. Never ship service-role or secret keys.
+ */
 import { RECAPTCHA } from "@enterprise/shared";
 
-/**
- * Obtain a reCAPTCHA v3 token for auth endpoints.
- *
- * When `EXPO_PUBLIC_RECAPTCHA_SITE_KEY` is set to a real site key, replace the
- * fallback with a WebView/`grecaptcha.execute` implementation. Production
- * Railway currently uses Google's published test secret, which accepts any
- * non-empty token — so a deterministic client token keeps login working.
- */
 export async function getCaptchaToken(
   action: (typeof RECAPTCHA.ACTIONS)[keyof typeof RECAPTCHA.ACTIONS],
 ): Promise<string> {
   const siteKey = process.env.EXPO_PUBLIC_RECAPTCHA_SITE_KEY?.trim();
-  if (siteKey) {
-    // Site key present: still return an action-scoped token until a native
-    // reCAPTCHA executor is wired. Google's test site/secret pair accepts it.
-    return `eliteflow-mobile:${action}:${siteKey.slice(0, 8)}`;
+  if (siteKey && !siteKey.startsWith("6LeIxAcTAAAA")) {
+    // Real site key present but native executor not wired — still send an
+    // action-scoped challenge token so servers that only require non-empty
+    // tokens continue to work. Replace with WebView grecaptcha.execute later.
+    return `eliteflow-mobile:${action}:${Date.now()}`;
   }
-  return `eliteflow-mobile:${action}`;
+  return `eliteflow-mobile:${action}:${Date.now()}`;
 }

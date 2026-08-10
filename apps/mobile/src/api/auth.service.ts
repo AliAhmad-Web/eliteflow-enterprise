@@ -11,6 +11,12 @@ import { useAuthStore } from "@/auth/auth.store";
 import { apiRequest, refreshAccessToken } from "./api-client";
 import { ApiClientError } from "./api-error";
 
+export type MfaStatus = {
+  enabled: boolean;
+  enrollmentRequired: boolean;
+  hasRecoveryCodes: boolean;
+};
+
 export const authService = {
   async login(input: LoginInput) {
     const data = await apiRequest<{
@@ -19,6 +25,7 @@ export const authService = {
       requiresOtp?: boolean;
       otpSessionId?: string;
       expiresIn?: number;
+      mfaMethod?: "totp" | "email";
     }>(`${AUTH_API_PREFIX}/login`, {
       method: "POST",
       body: input,
@@ -99,5 +106,39 @@ export const authService = {
       .getState()
       .setSession(data.user, data.tokens.accessToken);
     return data;
+  },
+
+  async getMfaStatus() {
+    return apiRequest<MfaStatus>(`${AUTH_API_PREFIX}/mfa/status`, {
+      auth: true,
+    });
+  },
+
+  async setupMfa() {
+    return apiRequest<{
+      secret: string;
+      otpauthUrl: string;
+      qrCodeDataUrl?: string;
+    }>(`${AUTH_API_PREFIX}/mfa/setup`, {
+      method: "POST",
+      auth: true,
+      body: {},
+    });
+  },
+
+  async enableMfa(input: { code: string }) {
+    return apiRequest<{ message: string }>(`${AUTH_API_PREFIX}/mfa/enable`, {
+      method: "POST",
+      auth: true,
+      body: input,
+    });
+  },
+
+  async disableMfa(input: { code: string }) {
+    return apiRequest<{ message: string }>(`${AUTH_API_PREFIX}/mfa/disable`, {
+      method: "POST",
+      auth: true,
+      body: input,
+    });
   },
 };

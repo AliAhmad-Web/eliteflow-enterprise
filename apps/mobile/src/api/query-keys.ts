@@ -10,6 +10,8 @@ export const queryKeys = {
     details: () => ["clients", "detail"] as const,
     detail: (id: string) => ["clients", "detail", id] as const,
     stats: ["clients", "stats"] as const,
+    pipeline: ["clients", "pipeline"] as const,
+    activities: (id: string) => ["clients", "activities", id] as const,
   },
 
   projects: {
@@ -74,6 +76,30 @@ export const queryKeys = {
       ["files", "list", filters] as const,
     detail: (id: string) => ["files", "detail", id] as const,
   },
+
+  invoices: {
+    all: ["invoices"] as const,
+    lists: () => ["invoices", "list"] as const,
+    list: (filters: Record<string, unknown>) =>
+      ["invoices", "list", filters] as const,
+    detail: (id: string) => ["invoices", "detail", id] as const,
+    stats: ["invoices", "stats"] as const,
+  },
+
+  billing: {
+    all: ["billing"] as const,
+    plans: ["billing", "plans"] as const,
+    subscription: ["billing", "subscription"] as const,
+  },
+
+  whiteboards: {
+    all: ["whiteboards"] as const,
+    list: (filters: Record<string, unknown>) =>
+      ["whiteboards", "list", filters] as const,
+    detail: (id: string) => ["whiteboards", "detail", id] as const,
+  },
+
+  mfaStatus: ["auth", "mfa", "status"] as const,
 
   // Legacy aliases used by M1 dashboard
   projectStats: ["projects", "stats"] as const,

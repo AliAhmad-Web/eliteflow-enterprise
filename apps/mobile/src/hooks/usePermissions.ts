@@ -14,6 +14,8 @@ export function usePermissions() {
   return {
     subject,
     can,
+    roleCode: user?.role.code ?? null,
+    isClient: user?.role.code === "CLIENT",
     canReadClients: can(PERMISSIONS.CLIENTS_READ),
     canWriteClients: can(PERMISSIONS.CLIENTS_WRITE),
     canDeleteClients: can(PERMISSIONS.CLIENTS_DELETE),
@@ -32,5 +34,10 @@ export function usePermissions() {
     canReadFiles: can(PERMISSIONS.FILES_READ),
     canUploadFiles: can(PERMISSIONS.FILES_UPLOAD),
     canDeleteFiles: can(PERMISSIONS.FILES_DELETE),
+    canReadInvoices: can(PERMISSIONS.INVOICES_READ),
+    canWriteInvoices: can(PERMISSIONS.INVOICES_WRITE),
+    canReadWhiteboards: can(PERMISSIONS.WHITEBOARDS_READ),
+    canWriteWhiteboards: can(PERMISSIONS.WHITEBOARDS_WRITE),
+    canManageSettings: can(PERMISSIONS.SETTINGS_MANAGE),
   };
 }

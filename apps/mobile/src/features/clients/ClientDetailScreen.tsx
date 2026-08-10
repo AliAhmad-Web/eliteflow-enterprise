@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -5,11 +6,13 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { clientsService } from "@/api/clients.service";
 import { queryKeys } from "@/api/query-keys";
+import { ApiClientError } from "@/api/api-error";
 import { StackHeader } from "@/components/navigation/StackHeader";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { TextField } from "@/components/ui/TextField";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatDate } from "@/lib/utils";
 import { useTheme } from "@/theme/theme.store";
@@ -21,6 +24,7 @@ export default function ClientDetailScreen() {
   const router = useRouter();
   const perms = usePermissions();
   const queryClient = useQueryClient();
+  const [activityTitle, setActivityTitle] = useState("");
 
   const detail = useQuery({
     queryKey: queryKeys.clients.detail(id!),
@@ -28,11 +32,47 @@ export default function ClientDetailScreen() {
     enabled: Boolean(id),
   });
 
+  const activities = useQuery({
+    queryKey: queryKeys.clients.activities(id!),
+    queryFn: () => clientsService.listActivities(id!, { page: 1, limit: 20 }),
+    enabled: Boolean(id) && perms.canReadClients,
+  });
+
   const remove = useMutation({
     mutationFn: () => clientsService.remove(id!),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
       router.replace("/(app)/clients");
+    },
+  });
+
+  const createActivity = useMutation({
+    mutationFn: () =>
+      clientsService.createActivity(id!, {
+        type: "NOTE",
+        title: activityTitle.trim(),
+      }),
+    onSuccess: () => {
+      setActivityTitle("");
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.clients.activities(id!),
+      });
+    },
+    onError: (err) => {
+      Alert.alert(
+        "Unable to add activity",
+        err instanceof ApiClientError ? err.message : "Please try again.",
+      );
+    },
+  });
+
+  const deleteActivity = useMutation({
+    mutationFn: (activityId: string) =>
+      clientsService.deleteActivity(id!, activityId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.clients.activities(id!),
+      });
     },
   });
 
@@ -121,6 +161,87 @@ export default function ClientDetailScreen() {
             value={formatDate(client.updatedAt)}
             colors={colors}
           />
+          <Field
+            label="Pipeline stage"
+            value={client.pipelineStage || "—"}
+            colors={colors}
+          />
+
+          <Text style={[styles.name, { color: colors.foreground, fontSize: 17 }]}>
+            Activities
+          </Text>
+          {activities.isLoading ? (
+            <LoadingState message="Loading activities…" />
+          ) : null}
+          {activities.data?.items.map((activity) => (
+            <View
+              key={activity.id}
+              style={[
+                styles.field,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  gap: 6,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <StatusBadge label={activity.type} />
+                {perms.canWriteClients ? (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() =>
+                      Alert.alert("Delete activity?", activity.title, [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => deleteActivity.mutate(activity.id),
+                        },
+                      ])
+                    }
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={18}
+                      color={colors.destructive}
+                    />
+                  </Pressable>
+                ) : null}
+              </View>
+              <Text style={{ color: colors.foreground, fontWeight: "600" }}>
+                {activity.title}
+              </Text>
+              {activity.body ? (
+                <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>
+                  {activity.body}
+                </Text>
+              ) : null}
+            </View>
+          ))}
+
+          {perms.canWriteClients ? (
+            <View style={{ gap: spacing[2] }}>
+              <TextField
+                label="New activity"
+                value={activityTitle}
+                onChangeText={setActivityTitle}
+                placeholder="Call summary, note, follow-up…"
+              />
+              <Button
+                title="Add activity"
+                loading={createActivity.isPending}
+                disabled={!activityTitle.trim()}
+                onPress={() => createActivity.mutate()}
+              />
+            </View>
+          ) : null}
 
           {perms.canDeleteClients ? (
             <Button

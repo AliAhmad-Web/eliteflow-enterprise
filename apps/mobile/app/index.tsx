@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { useAuthStore } from "@/auth/auth.store";
+import { getAuthenticatedHomePath } from "@/lib/home-route";
 import { useTheme } from "@/theme/theme.store";
 
 /**
@@ -13,11 +14,16 @@ export default function IndexScreen() {
   const router = useRouter();
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const roleCode = useAuthStore((s) => s.user?.role.code);
 
   useEffect(() => {
     if (!isInitialized) return;
-    router.replace(isAuthenticated ? "/(app)/(tabs)" : "/(auth)/login");
-  }, [isInitialized, isAuthenticated, router]);
+    router.replace(
+      (isAuthenticated
+        ? getAuthenticatedHomePath(roleCode)
+        : "/(auth)/login") as never,
+    );
+  }, [isInitialized, isAuthenticated, roleCode, router]);
 
   return (
     <View

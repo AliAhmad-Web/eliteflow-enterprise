@@ -77,14 +77,28 @@ export default function ClientsListScreen() {
         title="Clients"
         subtitle="CRM"
         right={
-          perms.canWriteClients ? (
-            <Pressable
-              hitSlop={10}
-              onPress={() => router.push("/(app)/clients/create")}
-            >
-              <Ionicons name="add-circle" size={28} color={colors.primary} />
-            </Pressable>
-          ) : null
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            {perms.canReadClients ? (
+              <Pressable
+                hitSlop={10}
+                onPress={() => router.push("/(app)/clients/pipeline")}
+              >
+                <Ionicons
+                  name="git-branch-outline"
+                  size={24}
+                  color={colors.primary}
+                />
+              </Pressable>
+            ) : null}
+            {perms.canWriteClients ? (
+              <Pressable
+                hitSlop={10}
+                onPress={() => router.push("/(app)/clients/create")}
+              >
+                <Ionicons name="add-circle" size={28} color={colors.primary} />
+              </Pressable>
+            ) : null}
+          </View>
         }
       />
 

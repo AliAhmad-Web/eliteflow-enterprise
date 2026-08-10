@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { UserRole } from "@enterprise/shared";
 
 import { dashboardService, notificationsService } from "@/api/dashboard.service";
 import { queryKeys } from "@/api/query-keys";
@@ -38,6 +40,12 @@ export default function DashboardScreen() {
   const { colors, spacing } = theme;
   const user = useAuthStore((s) => s.user);
   const router = useRouter();
+
+  useEffect(() => {
+    if (user?.role.code === UserRole.CLIENT) {
+      router.replace("/(app)/portal");
+    }
+  }, [user?.role.code, router]);
 
   const results = useQueries({
     queries: [

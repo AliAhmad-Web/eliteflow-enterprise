@@ -12,10 +12,12 @@ import { RECAPTCHA } from "@enterprise/shared";
 
 import { authService } from "@/api/auth.service";
 import { ApiClientError } from "@/api/api-error";
+import { useAuthStore } from "@/auth/auth.store";
 import { Button } from "@/components/ui/Button";
 import { Screen } from "@/components/ui/Screen";
 import { TextField } from "@/components/ui/TextField";
 import { getCaptchaToken } from "@/features/security/recaptcha";
+import { getAuthenticatedHomePath } from "@/lib/home-route";
 import { useTheme } from "@/theme/theme.store";
 
 export default function LoginScreen() {
@@ -27,8 +29,14 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [otpSessionId, setOtpSessionId] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
+  const [mfaMethod, setMfaMethod] = useState<"totp" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function goHome() {
+    const role = useAuthStore.getState().user?.role.code;
+    router.replace(getAuthenticatedHomePath(role) as never);
+  }
 
   async function onSubmit() {
     setError(null);
@@ -36,7 +44,7 @@ export default function LoginScreen() {
     try {
       if (otpSessionId) {
         await authService.verifyOtp({ otpSessionId, code: otpCode.trim() });
-        router.replace("/(app)/(tabs)");
+        goHome();
         return;
       }
 
@@ -44,15 +52,17 @@ export default function LoginScreen() {
       const result = await authService.login({
         email: email.trim().toLowerCase(),
         password,
+        rememberMe: false,
         captchaToken,
       });
 
       if (result.requiresOtp && result.otpSessionId) {
         setOtpSessionId(result.otpSessionId);
+        setMfaMethod(result.mfaMethod ?? "email");
         return;
       }
 
-      router.replace("/(app)/(tabs)");
+      goHome();
     } catch (err) {
       const message =
         err instanceof ApiClientError
@@ -63,6 +73,11 @@ export default function LoginScreen() {
       setLoading(false);
     }
   }
+
+  const otpHint =
+    mfaMethod === "totp"
+      ? "Enter the 6-digit code from your authenticator app."
+      : "Enter the one-time code sent to your email.";
 
   return (
     <Screen>
@@ -80,7 +95,7 @@ export default function LoginScreen() {
             </Text>
             <Text style={[styles.sub, { color: colors.mutedForeground }]}>
               {otpSessionId
-                ? "Enter the one-time code sent to your email."
+                ? otpHint
                 : "Access your workspace with the same account as the web app."}
             </Text>
           </View>
@@ -88,7 +103,7 @@ export default function LoginScreen() {
           <View style={{ gap: spacing[4] }}>
             {otpSessionId ? (
               <TextField
-                label="Verification code"
+                label={mfaMethod === "totp" ? "Authenticator code" : "Verification code"}
                 value={otpCode}
                 onChangeText={setOtpCode}
                 keyboardType="number-pad"
@@ -142,6 +157,7 @@ export default function LoginScreen() {
                 onPress={() => {
                   setOtpSessionId(null);
                   setOtpCode("");
+                  setMfaMethod(null);
                   setError(null);
                 }}
               />

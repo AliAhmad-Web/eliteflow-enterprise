@@ -28,15 +28,38 @@ export class ApiClientError extends Error {
   }
 }
 
+const PRODUCTION_API_URL = "https://api-production-a778.up.railway.app";
+
+function isProductionBuild(): boolean {
+  return (
+    process.env.APP_ENV === "production" ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
+function isDisallowedProductionApiUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes("localhost") ||
+    lower.includes("127.0.0.1") ||
+    lower.includes("10.0.2.2") ||
+    lower.startsWith("http://")
+  );
+}
+
 export function getApiBaseUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (configured) {
-    return configured.replace(/\/$/, "");
+    const base = configured.replace(/\/$/, "");
+    // Production EAS builds must never ship a local/insecure API origin.
+    if (isProductionBuild() && isDisallowedProductionApiUrl(base)) {
+      return PRODUCTION_API_URL;
+    }
+    return base;
   }
   // Release APKs must never throw during module init / first paint.
-  // Prefer the known Railway production origin when env was not inlined.
-  if (process.env.NODE_ENV === "production" || process.env.APP_ENV === "production") {
-    return "https://api-production-a778.up.railway.app";
+  if (isProductionBuild()) {
+    return PRODUCTION_API_URL;
   }
   return "http://localhost:4000";
 }

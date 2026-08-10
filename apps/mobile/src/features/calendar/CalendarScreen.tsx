@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import type { CalendarEvent } from "@enterprise/shared";
 
 import { calendarService } from "@/api/calendar.service";
 import { queryKeys } from "@/api/query-keys";
+import { ApiClientError } from "@/api/api-error";
 import { StackHeader } from "@/components/navigation/StackHeader";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -50,8 +53,23 @@ export default function CalendarScreen() {
   const theme = useTheme();
   const { colors, spacing, radius } = theme;
   const perms = usePermissions();
+  const router = useRouter();
+  const qc = useQueryClient();
   const [view, setView] = useState<CalView>("month");
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
+
+  const remove = useMutation({
+    mutationFn: (id: string) => calendarService.deleteEvent(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.calendar.all });
+    },
+    onError: (err) => {
+      Alert.alert(
+        "Unable to delete",
+        err instanceof ApiClientError ? err.message : "Please try again.",
+      );
+    },
+  });
 
   const range = useMemo(() => {
     if (view === "day") {
@@ -137,7 +155,22 @@ export default function CalendarScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <StackHeader title="Calendar" subtitle={title} />
+      <StackHeader
+        title="Calendar"
+        subtitle={title}
+        right={
+          perms.canWriteCalendar ? (
+            <Pressable
+              hitSlop={10}
+              onPress={() => router.push("/(app)/calendar/create")}
+            >
+              <Text style={{ color: colors.primary, fontWeight: "700" }}>
+                New
+              </Text>
+            </Pressable>
+          ) : null
+        }
+      />
 
       <ScrollView
         contentContainerStyle={{
@@ -300,8 +333,19 @@ export default function CalendarScreen() {
           />
         ) : (
           visibleEvents.map((ev) => (
-            <View
+            <Pressable
               key={ev.id}
+              onLongPress={() => {
+                if (!perms.canWriteCalendar) return;
+                Alert.alert("Delete event?", ev.title, [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => remove.mutate(ev.id),
+                  },
+                ]);
+              }}
               style={[
                 styles.event,
                 {
@@ -330,7 +374,7 @@ export default function CalendarScreen() {
                 {formatDateTime(ev.startsAt)}
                 {ev.location ? ` · ${ev.location}` : ""}
               </Text>
-            </View>
+            </Pressable>
           ))
         )}
       </ScrollView>

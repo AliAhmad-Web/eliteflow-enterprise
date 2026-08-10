@@ -9,6 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "type-check": "tsc --noEmit",
+    "verify:parity": "node ./scripts/verify-mobile-parity.mjs",
+    "verify:step5": "node ./scripts/verify-step5-production.mjs",
     "eas-build-post-install": "npm run build --workspace=@enterprise/shared"
   },
   "dependencies": {
