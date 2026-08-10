@@ -296,46 +296,42 @@ export class TasksRepository {
     input: CreateTaskCommentInput,
     authorId: string,
   ) {
-    const comment = await prisma.$transaction(
-      async (tx) => {
-        const created = await tx.taskComment.create({
-          data: {
-            taskId,
-            authorId,
-            body: input.body,
-          },
-          include: {
-            author: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-        });
-
-        await tx.taskActivityLog.create({
-          data: {
-            taskId,
-            actorId: authorId,
-            action: "task.commented",
-            message: "Added a comment",
-          },
-        });
-
-        await tx.task.update({
-          where: { id: taskId },
-          data: { updatedById: authorId },
-        });
-
-        return created;
+    // Avoid interactive transactions against Supabase pooler under load
+    // ("Unable to start a transaction in the given time"). Sequential writes
+    // keep comment creation reliable while preserving the same side effects.
+    const created = await prisma.taskComment.create({
+      data: {
+        taskId,
+        authorId,
+        body: input.body,
       },
-      { timeout: 20_000 },
-    );
+      include: {
+        author: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
 
-    return comment;
+    await prisma.taskActivityLog.create({
+      data: {
+        taskId,
+        actorId: authorId,
+        action: "task.commented",
+        message: "Added a comment",
+      },
+    });
+
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { updatedById: authorId },
+    });
+
+    return created;
   }
 
   async listActivity(taskId: string): Promise<ActivityWithActor[]> {
