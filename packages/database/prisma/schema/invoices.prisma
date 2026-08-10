@@ -17,6 +17,8 @@ model Invoice {
   taxAmount      Decimal       @default(0) @map("tax_amount") @db.Decimal(14, 2)
   total          Decimal       @default(0) @db.Decimal(14, 2)
   notes          String?       @db.Text
+  /// Optional Stripe invoice id when synchronized from Stripe billing.
+  stripeInvoiceId String?      @unique @map("stripe_invoice_id") @db.VarChar(255)
   createdById    String?       @map("created_by_id") @db.Uuid
   updatedById    String?       @map("updated_by_id") @db.Uuid
   createdAt      DateTime      @default(now()) @map("created_at")

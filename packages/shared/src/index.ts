@@ -15,6 +15,7 @@ export {
   PROJECTS_API_PREFIX,
   TASKS_API_PREFIX,
   INVOICES_API_PREFIX,
+  BILLING_API_PREFIX,
   AI_API_PREFIX,
   FILES_API_PREFIX,
   CALENDAR_API_PREFIX,
@@ -1648,3 +1649,23 @@ export type {
   WhiteboardListResponse,
   WhiteboardVersionDto,
 } from "./schemas/whiteboard.schema.js";
+
+// Schemas / types — Subscription & Billing
+export {
+  SUBSCRIPTION_PLAN_INTERVALS,
+  cancelSubscriptionSchema,
+  checkoutSessionResponseSchema,
+  createCheckoutSessionSchema,
+  organizationSubscriptionDtoSchema,
+  subscriptionEventDtoSchema,
+  subscriptionPlanDtoSchema,
+} from "./schemas/billing.schema.js";
+
+export type {
+  CancelSubscriptionInput,
+  CheckoutSessionResponse,
+  CreateCheckoutSessionInput,
+  OrganizationSubscriptionDto,
+  SubscriptionEventDto,
+  SubscriptionPlanDto,
+} from "./types/billing.types.js";

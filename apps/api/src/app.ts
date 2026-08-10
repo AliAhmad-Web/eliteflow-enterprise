@@ -48,6 +48,11 @@ export function createApp() {
       ],
     }),
   );
+  // Stripe webhooks require the raw body for signature verification.
+  app.use(
+    `${API_PREFIX}/billing/webhooks/stripe`,
+    express.raw({ type: "application/json" }),
+  );
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use(csrfProtection);

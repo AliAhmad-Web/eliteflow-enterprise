@@ -293,9 +293,21 @@ export function toBillingDto(
     billingEmail: string | null;
     currentPeriodStart: Date | null;
     currentPeriodEnd: Date | null;
+    cancelAtPeriodEnd?: boolean;
+    trialEndsAt?: Date | null;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
   },
   seatsUsedLive: number,
   storageUsedLive: bigint,
+  history: Array<{
+    id: string;
+    description: string;
+    amount: number;
+    currency: string;
+    status: string;
+    createdAt: string;
+  }> = [],
 ): BillingSettingsDto {
   return {
     planCode: row.planCode,
@@ -310,24 +322,9 @@ export function toBillingDto(
     billingEmail: row.billingEmail,
     currentPeriodStart: row.currentPeriodStart?.toISOString() ?? null,
     currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
-    paymentMethods: [
-      {
-        id: "pm_demo_visa",
-        brand: "Visa",
-        last4: "4242",
-        isDefault: true,
-      },
-    ],
-    history: [
-      {
-        id: "inv_demo_001",
-        description: `${row.planName} plan � current period`,
-        amount: 99,
-        currency: "USD",
-        status: "paid",
-        createdAt: new Date().toISOString(),
-      },
-    ],
+    // Never invent payment methods — Stripe Customer Portal manages cards.
+    paymentMethods: [],
+    history,
   };
 }
 

@@ -31,6 +31,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ROUTES } from "@/constants/routes";
+import {
+  useBillingCancel,
+  useBillingCheckout,
+  useBillingEvents,
+  useBillingPlans,
+  useBillingPortal,
+  useBillingReactivate,
+  useBillingRuntime,
+  useBillingSubscription,
+} from "@/features/billing";
 import { isCommunicationWhatsappPresentationEnabled } from "@/features/communication/feature-flags";
 import { ApiClientError } from "@/services/api/api-error";
 import { cn } from "@/lib/utils";
@@ -1076,90 +1086,265 @@ const StorageSection = memo(function StorageSection({ data }: { data: SettingsOv
 
 const BillingSection = memo(function BillingSection({ data }: { data: SettingsOverviewDto }) {
   const billing = data.billing!;
+  const canManage = data.canManageOrganization;
   const feedback = useSaveState();
   const mutation = useSettingsMutation(settingsService.updateBilling);
   const [email, setEmail] = useState(billing.billingEmail ?? "");
 
+  const plansQuery = useBillingPlans(canManage);
+  const subQuery = useBillingSubscription(true);
+  const eventsQuery = useBillingEvents(canManage);
+  const runtimeQuery = useBillingRuntime(canManage);
+  const checkout = useBillingCheckout();
+  const cancelMut = useBillingCancel();
+  const reactivateMut = useBillingReactivate();
+  const portalMut = useBillingPortal();
+
+  const subscription = subQuery.data ?? null;
+  const runtime = runtimeQuery.data;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Billing & subscription</CardTitle>
-        <CardDescription>
-          Current plan, seat usage, AI credits, and billing contact.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
-        <div className="grid gap-2 lg:grid-cols-2">
-          <p>
-            <span className="text-muted-foreground">Plan:</span>{" "}
-            <span className="font-medium">
-              {billing.planName}
-            </span>{" "}
-            ({billing.status})
-          </p>
-          <p>
-            <span className="text-muted-foreground">Seats:</span>{" "}
-            <span className="font-medium">
-              {billing.seatsUsed} / {billing.seatsIncluded}
-            </span>
-          </p>
-          <p>
-            <span className="text-muted-foreground">AI credits:</span>{" "}
-            <span className="font-medium">
-              {billing.aiCreditsUsed} / {billing.aiCreditsIncluded}
-            </span>
-          </p>
-          <p>
-            <span className="text-muted-foreground">Period ends:</span>{" "}
-            <span className="font-medium">
-              {billing.currentPeriodEnd
-                ? new Date(billing.currentPeriodEnd).toLocaleDateString()
-                : "—"}
-            </span>
-          </p>
-        </div>
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            feedback.clear();
-            void mutation
-              .mutateAsync({ billingEmail: email || null })
-              .then((r) => feedback.setSuccess(r.message))
-              .catch(feedback.fromError);
-          }}
-        >
-          <div className="min-w-[220px] flex-1 space-y-2">
-            <Label>Billing email</Label>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Billing & subscription</CardTitle>
+          <CardDescription>
+            Current plan, usage, and Stripe-backed subscription controls.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <div className="grid gap-2 lg:grid-cols-2">
+            <p>
+              <span className="text-muted-foreground">Plan:</span>{" "}
+              <span className="font-medium">
+                {subscription?.planName ?? billing.planName}
+              </span>{" "}
+              ({subscription?.status ?? billing.status})
+            </p>
+            <p>
+              <span className="text-muted-foreground">Seats:</span>{" "}
+              <span className="font-medium">
+                {subscription?.seatsUsed ?? billing.seatsUsed} /{" "}
+                {subscription?.seatsIncluded ?? billing.seatsIncluded}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">AI credits:</span>{" "}
+              <span className="font-medium">
+                {subscription?.aiCreditsUsed ?? billing.aiCreditsUsed} /{" "}
+                {subscription?.aiCreditsIncluded ?? billing.aiCreditsIncluded}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">Period ends:</span>{" "}
+              <span className="font-medium">
+                {(subscription?.currentPeriodEnd ?? billing.currentPeriodEnd)
+                  ? new Date(
+                      (subscription?.currentPeriodEnd ??
+                        billing.currentPeriodEnd) as string,
+                    ).toLocaleDateString()
+                  : "—"}
+              </span>
+            </p>
+            {subscription?.cancelAtPeriodEnd ? (
+              <p className="text-amber-700 dark:text-amber-400 lg:col-span-2">
+                Cancellation scheduled at period end.
+              </p>
+            ) : null}
           </div>
-          <Button type="submit" disabled={mutation.isPending}>
-            Save
-          </Button>
-        </form>
-        <Feedback error={feedback.error} success={feedback.success} />
-        <div>
-          <p className="mb-2 font-medium">Payment methods</p>
-          <ul className="space-y-1">
-            {billing.paymentMethods.map((method) => (
-              <li key={method.id}>
-                {method.brand} •••• {method.last4}
-                {method.isDefault ? " (default)" : ""}
-              </li>
+
+          {canManage ? (
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                feedback.clear();
+                void mutation
+                  .mutateAsync({ billingEmail: email || null })
+                  .then((r) => feedback.setSuccess(r.message))
+                  .catch(feedback.fromError);
+              }}
+            >
+              <div className="min-w-[220px] flex-1 space-y-2">
+                <Label>Billing email</Label>
+                <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <Button type="submit" disabled={mutation.isPending}>
+                Save
+              </Button>
+            </form>
+          ) : null}
+
+          <Feedback error={feedback.error} success={feedback.success} />
+
+          {canManage && runtime ? (
+            <p className="text-muted-foreground">
+              Stripe mode: <span className="font-medium">{runtime.mode}</span>
+              {runtime.paymentsEnabled ? " (checkout enabled)" : " (payments disabled)"}
+              {runtime.webhookConfigured ? " · webhooks configured" : " · webhooks not configured"}
+            </p>
+          ) : null}
+
+          {canManage ? (
+            <div className="flex flex-wrap gap-2">
+              {subscription?.hasStripeCustomer ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={portalMut.isPending}
+                  onClick={() => {
+                    feedback.clear();
+                    void portalMut
+                      .mutateAsync()
+                      .then((r) => {
+                        window.location.href = r.url;
+                      })
+                      .catch(feedback.fromError);
+                  }}
+                >
+                  Open Stripe customer portal
+                </Button>
+              ) : null}
+              {subscription?.hasStripeSubscription &&
+              !subscription.cancelAtPeriodEnd ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={cancelMut.isPending}
+                  onClick={() => {
+                    feedback.clear();
+                    void cancelMut
+                      .mutateAsync(true)
+                      .then(() =>
+                        feedback.setSuccess("Cancellation scheduled at period end."),
+                      )
+                      .catch(feedback.fromError);
+                  }}
+                >
+                  Cancel at period end
+                </Button>
+              ) : null}
+              {subscription?.cancelAtPeriodEnd ? (
+                <Button
+                  type="button"
+                  disabled={reactivateMut.isPending}
+                  onClick={() => {
+                    feedback.clear();
+                    void reactivateMut
+                      .mutateAsync()
+                      .then(() => feedback.setSuccess("Subscription reactivated."))
+                      .catch(feedback.fromError);
+                  }}
+                >
+                  Reactivate
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {canManage ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Available plans</CardTitle>
+            <CardDescription>
+              Checkout uses server-side Stripe price IDs only — plan codes cannot escalate privileges.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {plansQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading plans…</p>
+            ) : null}
+            {plansQuery.data?.map((plan) => (
+              <div
+                key={plan.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
+              >
+                <div>
+                  <p className="font-medium">
+                    {plan.name}{" "}
+                    <span className="text-muted-foreground">
+                      ${(plan.amountCents / 100).toFixed(2)}/{plan.interval}
+                    </span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {plan.description ?? "—"} · {plan.seatsIncluded} seats
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    !plan.checkoutReady ||
+                    checkout.isPending ||
+                    subscription?.planCode === plan.code
+                  }
+                  onClick={() => {
+                    feedback.clear();
+                    void checkout
+                      .mutateAsync(plan.code)
+                      .then((r) => {
+                        if (r.url) {
+                          window.location.href = r.url;
+                          return;
+                        }
+                        feedback.setSuccess("Checkout session created.");
+                      })
+                      .catch(feedback.fromError);
+                  }}
+                >
+                  {subscription?.planCode === plan.code
+                    ? "Current"
+                    : plan.checkoutReady
+                      ? "Subscribe"
+                      : "Not linked"}
+                </Button>
+              </div>
             ))}
-          </ul>
-        </div>
-        <div>
-          <p className="mb-2 font-medium">Billing history</p>
-          <ul className="space-y-1">
-            {billing.history.map((item) => (
-              <li key={item.id}>
-                {item.description} — {item.amount} {item.currency} ({item.status})
-              </li>
-            ))}
-          </ul>
-        </div>
-      </CardContent>
-    </Card>
+            {!runtime?.paymentsEnabled ? (
+              <p className="text-sm text-muted-foreground">
+                Production money collection is disabled until Stripe credentials and
+                STRIPE_PAYMENTS_ENABLED=true are configured. Test/sandbox keys are supported.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Billing history</CardTitle>
+          <CardDescription>
+            Subscription events and invoice history from the organization record.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {canManage && eventsQuery.data && eventsQuery.data.length > 0 ? (
+            <ul className="space-y-1 text-sm">
+              {eventsQuery.data.map((item) => (
+                <li key={item.id}>
+                  {item.eventType}
+                  {item.fromStatus || item.toStatus
+                    ? ` (${item.fromStatus ?? "—"} → ${item.toStatus ?? "—"})`
+                    : ""}{" "}
+                  · {new Date(item.createdAt).toLocaleString()}
+                </li>
+              ))}
+            </ul>
+          ) : billing.history.length > 0 ? (
+            <ul className="space-y-1 text-sm">
+              {billing.history.map((item) => (
+                <li key={item.id}>
+                  {item.description} — {item.amount} {item.currency} ({item.status})
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No billing history yet.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 });

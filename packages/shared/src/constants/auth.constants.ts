@@ -168,6 +168,7 @@ export const CLIENTS_API_PREFIX = `${API_PREFIX}/clients` as const;
 export const PROJECTS_API_PREFIX = `${API_PREFIX}/projects` as const;
 export const TASKS_API_PREFIX = `${API_PREFIX}/tasks` as const;
 export const INVOICES_API_PREFIX = `${API_PREFIX}/invoices` as const;
+export const BILLING_API_PREFIX = `${API_PREFIX}/billing` as const;
 export const AI_API_PREFIX = `${API_PREFIX}/ai` as const;
 export const FILES_API_PREFIX = `${API_PREFIX}/files` as const;
 export const CALENDAR_API_PREFIX = `${API_PREFIX}/calendar` as const;

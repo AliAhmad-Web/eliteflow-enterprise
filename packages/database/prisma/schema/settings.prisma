@@ -131,26 +131,93 @@ model BackupRecord {
   @@map("backup_records")
 }
 
-/// Organization billing / subscription snapshot (Stripe wiring is Phase 19).
+/// Organization billing / subscription snapshot (Stripe-backed SaaS plan).
 model OrganizationBilling {
-  id                 String             @id @default(uuid()) @db.Uuid
-  key                String             @unique @db.VarChar(50)
-  planCode           String             @default("starter") @map("plan_code") @db.VarChar(50)
-  planName           String             @default("Starter") @map("plan_name") @db.VarChar(100)
-  status             BillingPlanStatus  @default(ACTIVE)
-  seatsIncluded      Int                @default(10) @map("seats_included")
-  seatsUsed          Int                @default(0) @map("seats_used")
-  storageQuotaBytes  BigInt             @default(5368709120) @map("storage_quota_bytes")
-  storageUsedBytes   BigInt             @default(0) @map("storage_used_bytes")
-  aiCreditsIncluded  Int                @default(1000) @map("ai_credits_included")
-  aiCreditsUsed      Int                @default(0) @map("ai_credits_used")
-  billingEmail       String?            @map("billing_email") @db.VarChar(320)
-  currentPeriodStart DateTime?          @map("current_period_start")
-  currentPeriodEnd   DateTime?          @map("current_period_end")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  id                   String             @id @default(uuid()) @db.Uuid
+  key                  String             @unique @db.VarChar(50)
+  planCode             String             @default("starter") @map("plan_code") @db.VarChar(50)
+  planName             String             @default("Starter") @map("plan_name") @db.VarChar(100)
+  status               BillingPlanStatus  @default(ACTIVE)
+  seatsIncluded        Int                @default(10) @map("seats_included")
+  seatsUsed            Int                @default(0) @map("seats_used")
+  storageQuotaBytes    BigInt             @default(5368709120) @map("storage_quota_bytes")
+  storageUsedBytes     BigInt             @default(0) @map("storage_used_bytes")
+  aiCreditsIncluded    Int                @default(1000) @map("ai_credits_included")
+  aiCreditsUsed        Int                @default(0) @map("ai_credits_used")
+  billingEmail         String?            @map("billing_email") @db.VarChar(320)
+  currentPeriodStart   DateTime?          @map("current_period_start")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  /// Catalog plan currently selected (null = legacy/manual snapshot).
+  planId               String?            @map("plan_id") @db.Uuid
+  stripeCustomerId     String?            @unique @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id") @db.VarChar(255)
+  stripePriceId        String?            @map("stripe_price_id") @db.VarChar(255)
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  trialEndsAt          DateTime?          @map("trial_ends_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
+  plan   SubscriptionPlan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
+  events SubscriptionEvent[]
+
+  @@index([status])
+  @@index([planId])
   @@map("organization_billing")
+}
+
+/// SaaS subscription plan catalog (Stripe Price/Product mapping).
+model SubscriptionPlan {
+  id                  String   @id @default(uuid()) @db.Uuid
+  code                String   @unique @db.VarChar(50)
+  name                String   @db.VarChar(100)
+  description         String?  @db.VarChar(500)
+  stripeProductId     String?  @map("stripe_product_id") @db.VarChar(255)
+  stripePriceId       String?  @map("stripe_price_id") @db.VarChar(255)
+  amountCents         Int      @default(0) @map("amount_cents")
+  currency            String   @default("usd") @db.VarChar(10)
+  interval            String   @default("month") @db.VarChar(20)
+  seatsIncluded       Int      @default(10) @map("seats_included")
+  storageQuotaBytes   BigInt   @default(5368709120) @map("storage_quota_bytes")
+  aiCreditsIncluded   Int      @default(1000) @map("ai_credits_included")
+  featuresJson        Json?    @map("features_json")
+  trialDays           Int      @default(0) @map("trial_days")
+  isActive            Boolean  @default(true) @map("is_active")
+  sortOrder           Int      @default(0) @map("sort_order")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  subscriptions OrganizationBilling[]
+
+  @@index([isActive, sortOrder])
+  @@map("subscription_plans")
+}
+
+/// Subscription status / billing event history for the organization.
+model SubscriptionEvent {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationBillingId String   @map("organization_billing_id") @db.Uuid
+  eventType             String   @map("event_type") @db.VarChar(80)
+  fromStatus            String?  @map("from_status") @db.VarChar(40)
+  toStatus              String?  @map("to_status") @db.VarChar(40)
+  stripeEventId         String?  @unique @map("stripe_event_id") @db.VarChar(255)
+  metadata              Json?
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  organizationBilling OrganizationBilling @relation(fields: [organizationBillingId], references: [id], onDelete: Cascade)
+
+  @@index([organizationBillingId, createdAt])
+  @@map("subscription_events")
+}
+
+/// Stripe webhook idempotency ledger (event id is unique).
+model StripeWebhookEvent {
+  id          String   @id @db.VarChar(255)
+  type        String   @db.VarChar(120)
+  processedAt DateTime @default(now()) @map("processed_at")
+  payloadHash String?  @map("payload_hash") @db.VarChar(128)
+
+  @@index([type, processedAt])
+  @@map("stripe_webhook_events")
 }
 
 /// Soft delete-account request workflow.
