@@ -233,6 +233,37 @@ async function main() {
   assert.equal(crossDenied, true);
   assert.equal(crossCode, TASKS_ERROR_CODES.NOT_FOUND);
 
+  // 3b) Unlinked CLIENT → 403 (distinct from scoped 404)
+  const unlinkedUser = await authRepository.createUser({
+    email: email("client-unlinked"),
+    passwordHash: null,
+    firstName: "Client",
+    lastName: "Unlinked",
+    roleId: clientRole.id,
+    status: UserStatus.ACTIVE,
+    emailVerified: true,
+  });
+  let unlinkedDenied = false;
+  let unlinkedCode: string | undefined;
+  try {
+    await tasksService.addComment(
+      taskA.id,
+      { body: "unlinked should fail" },
+      {
+        userId: unlinkedUser.id,
+        role: "CLIENT",
+        email: unlinkedUser.email,
+      },
+    );
+  } catch (error) {
+    unlinkedDenied = true;
+    if (error && typeof error === "object" && "code" in error) {
+      unlinkedCode = String((error as { code: string }).code);
+    }
+  }
+  assert.equal(unlinkedDenied, true);
+  assert.equal(unlinkedCode, TASKS_ERROR_CODES.FORBIDDEN);
+
   // 4) Schema rejects empty / oversized; ignores spoof fields beyond body
   assert.equal(createTaskCommentSchema.safeParse({ body: "" }).success, false);
   assert.equal(

@@ -253,6 +253,17 @@ export class TasksService {
     actor: TaskActor,
   ): Promise<TaskCommentDto> {
     const scope = await this.resolveScope(actor);
+
+    // Unlinked CLIENT must get 403 (not a scoped 404) so the portal can
+    // distinguish "not linked" from "task not found / wrong company".
+    if (actor.role === UserRole.CLIENT && !scope.clientCompanyId) {
+      throw new TasksError(
+        "Your account is not linked to a company workspace",
+        403,
+        TASKS_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
     const task = await tasksRepository.findById(id, scope);
     if (!task) {
       throw new TasksError(
@@ -276,14 +287,6 @@ export class TasksService {
     // CLIENT may leave feedback/change requests only on company-scoped tasks
     // (already enforced by resolveScope + findById above). Never trust
     // companyId/clientId from the request body — comments only carry `body`.
-
-    if (actor.role === UserRole.CLIENT && !scope.clientCompanyId) {
-      throw new TasksError(
-        "Your account is not linked to a company workspace",
-        403,
-        TASKS_ERROR_CODES.FORBIDDEN,
-      );
-    }
 
     const comment = await tasksRepository.addComment(id, input, actor.userId);
 
