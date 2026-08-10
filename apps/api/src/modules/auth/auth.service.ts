@@ -1649,15 +1649,42 @@ export class AuthService {
   ): Promise<LoginSessionResult> {
     await this.assertUserCanLogin(user, context);
 
-    const sessionResult = await this.createUserSession(user, context, {
+    // Self-serve OAuth accounts created before portal linking (or whose link
+    // failed) stay unlinked forever unless we retry here. Email-match only —
+    // never invent a Client CRM row on login.
+    let portalUser = user;
+    if (user.role.code === UserRole.CLIENT && !user.companyId) {
+      try {
+        await ensurePortalCompanyLink(
+          user.id,
+          {
+            userId: user.id,
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+          },
+          { createIfMissing: false },
+        );
+        const refreshed = await authRepository.findUserById(user.id);
+        if (refreshed) {
+          portalUser = refreshed;
+        }
+      } catch (error) {
+        console.error(
+          "[auth] OAuth login portal company email-link retry failed:",
+          error,
+        );
+      }
+    }
+
+    const sessionResult = await this.createUserSession(portalUser, context, {
       deviceFingerprint: context.deviceFingerprint,
     });
 
-    await authRepository.recordSuccessfulLogin(user.id);
+    await authRepository.recordSuccessfulLogin(portalUser.id);
 
     await logLoginAttempt({
-      email: user.email,
-      userId: user.id,
+      email: portalUser.email,
+      userId: portalUser.id,
       success: true,
       context,
     });
@@ -1666,7 +1693,7 @@ export class AuthService {
     // advisory-lock transactions were starving the Supabase pooler and
     // returning opaque 500 "An unexpected error occurred" to the browser.
     scheduleAuthAuditEvent({
-      userId: user.id,
+      userId: portalUser.id,
       action: AUTH_AUDIT_ACTIONS.OAUTH_LOGIN,
       resourceId: sessionResult.sessionId,
       metadata: { provider: identity.provider, source },
@@ -1674,7 +1701,7 @@ export class AuthService {
     });
 
     scheduleAuthAuditEvent({
-      userId: user.id,
+      userId: portalUser.id,
       action: AUTH_AUDIT_ACTIONS.LOGIN,
       resourceId: sessionResult.sessionId,
       metadata: { method: "oauth", provider: identity.provider },
@@ -1682,7 +1709,7 @@ export class AuthService {
     });
 
     return {
-      user: toSafeUser(user),
+      user: toSafeUser(portalUser),
       tokens: {
         accessToken: sessionResult.accessToken,
         expiresIn: sessionResult.expiresIn,
