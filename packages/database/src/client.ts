@@ -57,14 +57,21 @@ function withDatabaseTimeouts(rawUrl: string | undefined): string | undefined {
     }
 
     if (pooler) {
-      const desiredLimit = Number(process.env.PRISMA_CONNECTION_LIMIT ?? "15");
+      const configured = process.env.PRISMA_CONNECTION_LIMIT?.trim();
+      const desiredLimit = Number(configured ?? "5");
       const existingLimit = Number(
         url.searchParams.get("connection_limit") ?? "NaN",
       );
-      if (
+      // Explicit PRISMA_CONNECTION_LIMIT always wins. Otherwise raise a too-low
+      // baked-in limit, but never exceed the configured default (Supabase
+      // session pool is often ~15 total across all clients).
+      if (configured) {
+        url.searchParams.set("connection_limit", String(desiredLimit));
+      } else if (
         !url.searchParams.has("connection_limit") ||
         !Number.isFinite(existingLimit) ||
-        existingLimit < desiredLimit
+        existingLimit < 1 ||
+        existingLimit > desiredLimit
       ) {
         url.searchParams.set("connection_limit", String(desiredLimit));
       }
