@@ -167,9 +167,42 @@ export function SecurityCenterPageContent() {
       dashboardQuery.error instanceof ApiClientError
         ? dashboardQuery.error.message
         : "Failed to load security center";
-    const denied =
-      dashboardQuery.error instanceof ApiClientError &&
-      dashboardQuery.error.status === 403;
+    const apiError =
+      dashboardQuery.error instanceof ApiClientError
+        ? dashboardQuery.error
+        : null;
+    const mfaEnrollmentRequired =
+      apiError?.code === "AUTH_MFA_ENROLLMENT_REQUIRED" ||
+      (apiError != null &&
+        /multi-factor authentication enrollment/i.test(apiError.message));
+    const denied = apiError?.status === 403 && !mfaEnrollmentRequired;
+
+    if (mfaEnrollmentRequired) {
+      return (
+        <div className="space-y-8">
+          <PageHeader
+            title="Security Center"
+            description="Enroll multi-factor authentication to unlock privileged admin APIs."
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldAlert className="h-4 w-4 text-amber-600" />
+                MFA enrollment required
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                Admin accounts must enable authenticator MFA before accessing
+                dashboards and other privileged APIs.
+              </p>
+              <p>{message}</p>
+            </CardContent>
+          </Card>
+          <MfaEnrollmentCard />
+        </div>
+      );
+    }
 
     if (denied) {
       return (

@@ -164,10 +164,14 @@ export function LoginForm() {
     }
   };
 
-  const completeLogin = (roleCode: UserRole) => {
+  const completeLogin = (
+    roleCode: UserRole,
+    options?: { mfaEnrollmentRequired?: boolean },
+  ) => {
     const redirectTo = getPostLoginRedirect(
       roleCode,
       searchParams.get("redirect"),
+      options,
     );
     // Hard navigation avoids Next.js soft-nav "Rendering..." hangs after auth.
     window.location.assign(redirectTo);
@@ -208,7 +212,9 @@ export function LoginForm() {
       }
 
       await setSessionHintCookie();
-      completeLogin(result.user.role.code);
+      completeLogin(result.user.role.code, {
+        mfaEnrollmentRequired: Boolean(result.user.mfaEnrollmentRequired),
+      });
     } catch (error) {
       setApiError(
         getApiErrorMessage(error, "Unable to sign in. Please try again."),
@@ -233,7 +239,9 @@ export function LoginForm() {
         code: otpCode.trim(),
       });
 
-      completeLogin(result.user.role.code);
+      completeLogin(result.user.role.code, {
+        mfaEnrollmentRequired: Boolean(result.user.mfaEnrollmentRequired),
+      });
     } catch (error) {
       setApiError(
         getApiErrorMessage(error, "Unable to verify code. Please try again."),

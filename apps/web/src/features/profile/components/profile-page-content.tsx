@@ -115,17 +115,33 @@ export function ProfilePageContent() {
   }
 
   if (overviewQuery.isError || !profile) {
+    const isMfaEnrollment =
+      overviewQuery.error instanceof ApiClientError &&
+      (overviewQuery.error.code === "AUTH_MFA_ENROLLMENT_REQUIRED" ||
+        /multi-factor authentication enrollment/i.test(
+          overviewQuery.error.message,
+        ));
+
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Unable to load profile</CardTitle>
+          <CardTitle>
+            {isMfaEnrollment
+              ? "MFA enrollment required"
+              : "Unable to load profile"}
+          </CardTitle>
           <CardDescription>
             {overviewQuery.error instanceof ApiClientError
               ? overviewQuery.error.message
               : "Please refresh and try again."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-wrap gap-2">
+          {isMfaEnrollment ? (
+            <Button asChild>
+              <Link href={ROUTES.SECURITY}>Set up authenticator MFA</Link>
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"

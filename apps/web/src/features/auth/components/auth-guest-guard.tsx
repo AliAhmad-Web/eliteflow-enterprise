@@ -26,6 +26,7 @@ export function AuthGuestGuard({ children }: AuthGuestGuardProps) {
     const redirectTo = getPostLoginRedirect(
       user.role.code,
       searchParams.get("redirect"),
+      { mfaEnrollmentRequired: Boolean(user.mfaEnrollmentRequired) },
     );
     window.location.assign(redirectTo);
   }, [isAuthenticated, isInitialized, searchParams, user]);

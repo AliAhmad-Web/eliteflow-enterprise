@@ -26,9 +26,13 @@ const ALLOWED_WHILE_MFA_ENROLLMENT_REQUIRED: readonly AllowedEndpointRule[] = [
   { method: "POST", path: "/auth/logout" },
   { method: "GET", path: "/auth/me" },
   { method: "GET", path: "/users/me" },
+  // Legacy / alternate profile mounts
   { method: "GET", path: "/profile" },
   { method: "PATCH", path: "/profile" },
   { method: "PUT", path: "/profile" },
+  // Actual settings profile surface used by the web app
+  { method: "GET", path: "/settings/overview" },
+  { method: "*", path: "/settings/profile", prefix: true, anyMethod: true },
   { method: "GET", path: "/security/csrf-token" },
   { method: "GET", path: "/security/password-status" },
   { method: "GET", path: "/security/mfa-status" },

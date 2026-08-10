@@ -330,7 +330,9 @@ export function OAuthCallbackHandler() {
         // Await cookie write — navigating before the hint lands causes
         // middleware to bounce protected routes back to /login.
         await setSessionHintCookie();
-        const redirectTo = getPostLoginRedirect(result.user.role.code);
+        const redirectTo = getPostLoginRedirect(result.user.role.code, null, {
+          mfaEnrollmentRequired: Boolean(result.user.mfaEnrollmentRequired),
+        });
         window.location.assign(redirectTo);
       })().catch(async (err) => {
         const supabase = getSupabaseBrowserClient();

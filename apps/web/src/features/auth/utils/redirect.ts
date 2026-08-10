@@ -28,6 +28,7 @@ const AVAILABLE_ROUTES = new Set<string>([
   ROUTES.SETTINGS,
   ROUTES.SETTINGS_SECURITY,
   ROUTES.SETTINGS_SESSIONS,
+  ROUTES.SECURITY,
 ]);
 
 /** Role-exclusive home routes — never send a different role here via ?redirect= */
@@ -113,7 +114,12 @@ function isRedirectAllowedForRole(role: UserRoleType, path: string): boolean {
 export function getPostLoginRedirect(
   role: UserRoleType,
   requestedRedirect?: string | null,
+  options?: { mfaEnrollmentRequired?: boolean },
 ): string {
+  if (options?.mfaEnrollmentRequired) {
+    return ROUTES.SECURITY;
+  }
+
   const roleHome = ROLE_DASHBOARD_ROUTES[role] ?? ROUTES.DASHBOARD;
 
   if (
