@@ -35,7 +35,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           isAuthenticated: true,
         });
       }
-      setSessionHintCookie();
+      void setSessionHintCookie();
       try {
         getQueryClient().setQueryData(AUTH_QUERY_KEYS.me, cached);
       } catch {
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       try {
         const refreshResult = await authService.refresh();
         useAuthStore.getState().setAccessToken(refreshResult.accessToken);
-        setSessionHintCookie();
+        void setSessionHintCookie();
       } catch {
         // Leave session as-is; next API call will clear if refresh cookie is gone.
       }

@@ -9,7 +9,7 @@ export function useVerifyOtp() {
   return useMutation({
     mutationFn: async (input: { otpSessionId: string; code: string }) => {
       const result = await authService.verifyOtp(input);
-      setSessionHintCookie();
+      await setSessionHintCookie();
       return result;
     },
   });

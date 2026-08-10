@@ -26,7 +26,10 @@ export function getSupabaseBrowserClient(): SupabaseClient {
         auth: {
           autoRefreshToken: true,
           persistSession: true,
-          detectSessionInUrl: true,
+          // Manual exchange in OAuthCallbackHandler — avoids racing
+          // detectSessionInUrl + exchangeCodeForSession on the same PKCE code
+          // (which leaves the callback stuck on "Signing you in securely").
+          detectSessionInUrl: false,
           // PKCE returns ?code= (query) which survives Next.js better than
           // implicit #access_token hashes that get stripped during hydration.
           flowType: "pkce",

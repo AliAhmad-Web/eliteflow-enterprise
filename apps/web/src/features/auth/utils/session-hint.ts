@@ -104,16 +104,18 @@ export async function isValidSessionHintValue(
   return ageSeconds >= 0 && ageSeconds <= SESSION_HINT_MAX_AGE_SECONDS;
 }
 
-export function setSessionHintCookie(): void {
+/**
+ * Must be awaited before full-page navigations (OAuth callback → app shell).
+ * Fire-and-forget callers may still call without await when navigation is delayed.
+ */
+export async function setSessionHintCookie(): Promise<void> {
   if (typeof document === "undefined") {
     return;
   }
 
-  void (async () => {
-    const hardened = await buildHardenedHintValue();
-    const value = hardened ?? "1";
-    document.cookie = `${SESSION_HINT_COOKIE}=${value}; ${buildCookieAttributes()}`;
-  })();
+  const hardened = await buildHardenedHintValue();
+  const value = hardened ?? "1";
+  document.cookie = `${SESSION_HINT_COOKIE}=${value}; ${buildCookieAttributes()}`;
 }
 
 export function clearSessionHintCookie(): void {

@@ -48,12 +48,9 @@ export default function OAuthCallbackPage() {
       <Suspense
         fallback={
           <AuthPageShell>
-            <AuthCard
-              title="Completing sign-in"
-              description="Verifying your OAuth identity"
-            >
+            <AuthCard title="Signing you in" description="Preparing secure sign-in…">
               <LoadingState
-                label="Signing you in securely"
+                label="Preparing secure sign-in…"
                 className="min-h-50 border-0 bg-transparent"
               />
             </AuthCard>

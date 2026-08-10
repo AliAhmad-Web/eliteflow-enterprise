@@ -43,6 +43,24 @@ function matchesRoute(pathname: string, route: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Supabase Site URL fallback often lands OAuth `?code=` on `/` (or another
+  // non-callback route) when `/auth/callback` is missing from the allow-list.
+  // Forward those params to the callback handler so social login can complete.
+  if (pathname !== ROUTES.AUTH_CALLBACK) {
+    const params = request.nextUrl.searchParams;
+    if (
+      params.has("code") ||
+      params.has("access_token") ||
+      params.has("error_description") ||
+      (params.has("error") && params.has("state"))
+    ) {
+      const callbackUrl = request.nextUrl.clone();
+      callbackUrl.pathname = ROUTES.AUTH_CALLBACK;
+      return NextResponse.redirect(callbackUrl);
+    }
+  }
+
   const hintName = getSessionHintCookieName();
   const hintValue = request.cookies.get(hintName)?.value;
 
@@ -71,70 +89,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/login",
-    "/signup",
-    "/forgot-password",
-    "/reset-password",
-    "/verify-email",
-    "/admin",
-    "/admin/:path*",
-    "/portal",
-    "/portal/:path*",
-    "/dashboard",
-    "/dashboard/:path*",
-    "/workspace",
-    "/workspace/:path*",
-    "/clients",
-    "/clients/:path*",
-    "/projects",
-    "/projects/:path*",
-    "/tasks",
-    "/tasks/:path*",
-    "/invoices",
-    "/invoices/:path*",
-    "/reports",
-    "/reports/:path*",
-    "/calendar",
-    "/calendar/:path*",
-    "/whiteboard",
-    "/whiteboard/:path*",
-    "/ai-assistant",
-    "/ai-assistant/:path*",
-    "/ai-documents",
-    "/ai-documents/:path*",
-    "/file-manager",
-    "/file-manager/:path*",
-    "/files",
-    "/files/:path*",
-    "/team",
-    "/team/:path*",
-    "/notifications",
-    "/notifications/:path*",
-    "/messages",
-    "/messages/:path*",
-    "/channels",
-    "/channels/:path*",
-    "/announcements",
-    "/announcements/:path*",
-    "/threads",
-    "/threads/:path*",
-    "/meetings",
-    "/meetings/:path*",
-    "/activity",
-    "/activity/:path*",
-    "/voice-ai",
-    "/voice-ai/:path*",
-    "/whatsapp",
-    "/whatsapp/:path*",
-    "/email-automation",
-    "/email-automation/:path*",
-    "/integrations",
-    "/integrations/:path*",
-    "/security",
-    "/security/:path*",
-    "/profile",
-    "/profile/:path*",
-    "/settings",
-    "/settings/:path*",
+    /*
+     * Run on app pages so OAuth `?code=` on Site URL (`/`) is forwarded to
+     * `/auth/callback`. Skip static assets and Next internals.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json)$).*)",
   ],
 };

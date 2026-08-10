@@ -82,7 +82,7 @@ export function bootstrapSession(): Promise<void> {
         if (useAuthStore.getState().accessToken !== accessToken) {
           useAuthStore.getState().setAccessToken(accessToken);
         }
-        setSessionHintCookie();
+        void setSessionHintCookie();
         useAuthStore.getState().setInitialized(true);
         void ensureCurrentUser();
         return;

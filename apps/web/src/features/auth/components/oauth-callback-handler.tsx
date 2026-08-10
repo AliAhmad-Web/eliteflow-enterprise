@@ -37,10 +37,16 @@ import { AuthCard } from "./auth-card";
 import { AuthPageShell } from "./auth-page-shell";
 
 // Capture redirect params as soon as this module evaluates in the browser —
-// before Supabase detectSessionInUrl clears the hash/query.
+// before anything else can clear the hash/query.
 if (typeof window !== "undefined") {
   captureOAuthRedirectParams();
 }
+
+type CallbackPhase =
+  | "session"
+  | "api"
+  | "redirect"
+  | "otp";
 
 function parseProvider(value: string | null | undefined): OAuthProviderType | null {
   if (!value) return null;
@@ -127,10 +133,6 @@ function resolveProvider(
   return null;
 }
 
-function resolveIntent(): OAuthFlowIntent {
-  return readStoredIntent();
-}
-
 function clearOAuthFlowStorage(): void {
   sessionStorage.removeItem(OAUTH_PROVIDER_STORAGE_KEY);
   sessionStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
@@ -160,22 +162,17 @@ function hasOAuthCallbackParams(params: URLSearchParams): boolean {
   );
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
 /**
  * Shared across Strict Mode remounts so the callback completes only once.
  */
 let supabaseSessionPromise: Promise<Session> | null = null;
 
-async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
+async function waitForSupabaseSession(): Promise<Session> {
   if (supabaseSessionPromise) {
     return supabaseSessionPromise;
   }
 
   supabaseSessionPromise = (async () => {
-    // Re-capture in case module evaluated before the redirect URL was ready.
     captureOAuthRedirectParams();
     const captured = readCapturedOAuthRedirect();
     const params = getOAuthParamsFromCapture(captured);
@@ -187,21 +184,11 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
 
     const supabase = getSupabaseBrowserClient();
 
-    // detectSessionInUrl may still be processing — poll briefly before failing.
-    const deadline = Date.now() + Math.min(timeoutMs, 8_000);
-    while (Date.now() < deadline) {
-      const current = await supabase.auth.getSession();
-      if (current.data.session?.access_token) {
-        stripOAuthParamsFromUrl();
-        return current.data.session;
-      }
-      if (!hasOAuthCallbackParams(params) && !hasOAuthCallbackParams(getOAuthParamsFromCapture())) {
-        // No credentials anywhere yet — keep waiting a bit for late capture.
-        await sleep(150);
-        captureOAuthRedirectParams();
-        continue;
-      }
-      break;
+    // Reuse an already-established browser session (e.g. remount).
+    const existing = await supabase.auth.getSession();
+    if (existing.data.session?.access_token) {
+      stripOAuthParamsFromUrl();
+      return existing.data.session;
     }
 
     const latestParams = getOAuthParamsFromCapture();
@@ -215,6 +202,7 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
         return data.session;
       }
 
+      // Code may have been consumed by a parallel tab/remount — check session.
       const afterExchange = await supabase.auth.getSession();
       if (afterExchange.data.session?.access_token) {
         stripOAuthParamsFromUrl();
@@ -243,48 +231,17 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
     }
 
     if (!hasOAuthCallbackParams(latestParams)) {
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const callbackUrl = `${origin}/auth/callback`;
       throw new Error(
-        "No OAuth credentials were returned. In Supabase → Authentication → URL Configuration, add Redirect URL http://localhost:3000/auth/callback (and set Site URL to http://localhost:3000). Then start Google sign-in again from this same browser tab.",
+        `No OAuth credentials were returned. In Supabase → Authentication → URL Configuration, add Redirect URL ${callbackUrl}. Then start Google/GitHub sign-in again from this same browser tab.`,
       );
     }
 
-    return await new Promise<Session>((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        subscription.unsubscribe();
-        reject(
-          new Error(
-            "Unable to retrieve OAuth session from Supabase. Please try signing in again.",
-          ),
-        );
-      }, timeoutMs);
-
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.access_token) {
-          window.clearTimeout(timeout);
-          subscription.unsubscribe();
-          stripOAuthParamsFromUrl();
-          resolve(session);
-        }
-      });
-
-      void supabase.auth.getSession().then(({ data, error }) => {
-        if (error) {
-          window.clearTimeout(timeout);
-          subscription.unsubscribe();
-          reject(error);
-          return;
-        }
-
-        if (data.session?.access_token) {
-          window.clearTimeout(timeout);
-          subscription.unsubscribe();
-          stripOAuthParamsFromUrl();
-          resolve(data.session);
-        }
-      });
-    });
+    throw new Error(
+      "Unable to retrieve OAuth session from Supabase. Please try signing in again.",
+    );
   })().catch((error) => {
     supabaseSessionPromise = null;
     throw error;
@@ -298,16 +255,33 @@ async function waitForSupabaseSession(timeoutMs = 20_000): Promise<Session> {
  */
 let oauthCompletionPromise: Promise<void> | null = null;
 
+function phaseLabel(phase: CallbackPhase): string {
+  switch (phase) {
+    case "session":
+      return "Confirming your identity…";
+    case "api":
+      return "Creating your EliteFlow session…";
+    case "otp":
+      return "Additional verification required…";
+    case "redirect":
+      return "Taking you to your workspace…";
+    default:
+      return "Signing you in…";
+  }
+}
+
 export function OAuthCallbackHandler() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<CallbackPhase>("session");
 
   useEffect(() => {
-    const intent = resolveIntent();
+    const intent = readStoredIntent();
 
     if (!oauthCompletionPromise) {
       oauthCompletionPromise = (async () => {
+        setPhase("session");
         const session = await waitForSupabaseSession();
 
         const provider = resolveProvider(searchParams, session);
@@ -317,25 +291,23 @@ export function OAuthCallbackHandler() {
           );
         }
 
-        const accessToken = session.access_token;
-        const refreshToken = session.refresh_token ?? undefined;
-
+        setPhase("api");
         const result = await authService.oauthCallback({
           provider,
           intent,
-          supabaseAccessToken: accessToken,
-          supabaseRefreshToken: refreshToken,
+          supabaseAccessToken: session.access_token,
+          supabaseRefreshToken: session.refresh_token ?? undefined,
         });
 
         clearOAuthFlowStorage();
 
-        // Clear the temporary Supabase browser session after we have copied the
-        // tokens into our API call. Do this only after the API responds so a
-        // Strict Mode remount cannot lose the session mid-flight.
+        // Clear the temporary Supabase browser session after API success so a
+        // Strict Mode remount cannot lose tokens mid-flight.
         const supabase = getSupabaseBrowserClient();
         await supabase.auth.signOut({ scope: "local" });
 
         if (result.requiresOtp && result.otpSessionId) {
+          setPhase("otp");
           sessionStorage.setItem(
             OAUTH_OTP_SESSION_STORAGE_KEY,
             result.otpSessionId,
@@ -354,7 +326,10 @@ export function OAuthCallbackHandler() {
           throw new Error("OAuth sign-in failed. Please try again.");
         }
 
-        setSessionHintCookie();
+        setPhase("redirect");
+        // Await cookie write — navigating before the hint lands causes
+        // middleware to bounce protected routes back to /login.
+        await setSessionHintCookie();
         const redirectTo = getPostLoginRedirect(result.user.role.code);
         window.location.assign(redirectTo);
       })().catch(async (err) => {
@@ -424,9 +399,9 @@ export function OAuthCallbackHandler() {
 
   return (
     <AuthPageShell>
-      <AuthCard title="Completing sign-in" description="Verifying your OAuth identity">
+      <AuthCard title="Signing you in" description={phaseLabel(phase)}>
         <LoadingState
-          label="Signing you in securely"
+          label={phaseLabel(phase)}
           className="min-h-50 border-0 bg-transparent"
         />
       </AuthCard>

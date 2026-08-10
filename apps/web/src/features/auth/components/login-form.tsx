@@ -207,7 +207,7 @@ export function LoginForm() {
         return;
       }
 
-      setSessionHintCookie();
+      await setSessionHintCookie();
       completeLogin(result.user.role.code);
     } catch (error) {
       setApiError(
