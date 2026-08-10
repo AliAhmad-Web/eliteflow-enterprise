@@ -1662,7 +1662,10 @@ export class AuthService {
       context,
     });
 
-    await logAuthAuditEvent({
+    // Do not await integrity-chained audit writes on the OAuth hot path —
+    // advisory-lock transactions were starving the Supabase pooler and
+    // returning opaque 500 "An unexpected error occurred" to the browser.
+    scheduleAuthAuditEvent({
       userId: user.id,
       action: AUTH_AUDIT_ACTIONS.OAUTH_LOGIN,
       resourceId: sessionResult.sessionId,
@@ -1670,7 +1673,7 @@ export class AuthService {
       context,
     });
 
-    await logAuthAuditEvent({
+    scheduleAuthAuditEvent({
       userId: user.id,
       action: AUTH_AUDIT_ACTIONS.LOGIN,
       resourceId: sessionResult.sessionId,

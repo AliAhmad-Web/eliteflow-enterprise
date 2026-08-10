@@ -1,7 +1,6 @@
 import type { RequestContext } from "./auth.types.js";
 import { AUTH_AUDIT_ACTIONS, AUTH_AUDIT_RESOURCE } from "./auth.constants.js";
 import {
-  writeAuditLog,
   writeAuditLogSafe,
 } from "../../shared/security/write-audit-log.js";
 import { maskEmail } from "@enterprise/shared";
@@ -28,7 +27,9 @@ function toAuditInput(input: AuditEventInput) {
 }
 
 export async function logAuthAuditEvent(input: AuditEventInput): Promise<void> {
-  await writeAuditLog(toAuditInput(input));
+  // Never fail auth because the integrity-chained audit writer is contended —
+  // that previously surfaced as opaque OAuth 500s under Supabase pooler load.
+  await writeAuditLogSafe(toAuditInput(input), "auth-audit");
 }
 
 /**

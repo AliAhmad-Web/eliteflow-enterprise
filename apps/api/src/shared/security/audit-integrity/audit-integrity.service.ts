@@ -229,10 +229,10 @@ class AuditIntegrityService {
 
     // Hard caps so advisory-lock waiters cannot hold pool connections indefinitely.
     const maxWaitMs = Number(
-      process.env.AUDIT_INTEGRITY_TX_MAX_WAIT_MS ?? 5_000,
+      process.env.AUDIT_INTEGRITY_TX_MAX_WAIT_MS ?? 2_000,
     );
     const timeoutMs = Number(
-      process.env.AUDIT_INTEGRITY_TX_TIMEOUT_MS ?? 10_000,
+      process.env.AUDIT_INTEGRITY_TX_TIMEOUT_MS ?? 5_000,
     );
 
     return prisma.$transaction(

@@ -126,7 +126,7 @@ export class SessionService {
       },
     });
 
-    await writeAuditLogSafe(
+    void writeAuditLogSafe(
       {
         userId: input.userId,
         action: SESSION_AUDIT_ACTIONS.CREATED,
