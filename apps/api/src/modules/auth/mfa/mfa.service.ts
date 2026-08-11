@@ -156,11 +156,23 @@ export class MfaService {
   }
 
   decryptSecret(encryptedSecret: string): string {
-    const decrypted = encryptionService.decryptIfNeeded(encryptedSecret);
-    if (!decrypted) {
-      throw new Error("MFA secret could not be decrypted");
+    try {
+      const decrypted = encryptionService.decryptIfNeeded(encryptedSecret);
+      if (!decrypted) {
+        throw new Error("MFA secret could not be decrypted");
+      }
+      return decrypted;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "MFA secret decrypt failed";
+      // Wrong ENTERPRISE_ENCRYPTION_KEY / BOM corruption surfaces as GCM auth failure.
+      throw new Error(
+        message.includes("authenticate data") ||
+          message.includes("Unsupported state")
+          ? "MFA secret could not be decrypted with the current encryption key"
+          : message,
+      );
     }
-    return decrypted;
   }
 
   parseRecoveryCodes(value: unknown): RecoveryCodeRecord[] {
@@ -291,10 +303,20 @@ export class MfaService {
     | { ok: true; method: "recovery"; updatedRecoveryCodes: RecoveryCodeRecord[] }
     | { ok: false }
   > {
-    const secret = this.decryptSecret(input.encryptedSecret);
-    const totp = this.verifyCode(secret, input.code, input.lastStep);
-    if (totp.valid && totp.step != null) {
-      return { ok: true, method: "totp", step: totp.step };
+    let secret: string | null = null;
+    try {
+      secret = this.decryptSecret(input.encryptedSecret);
+    } catch (error) {
+      console.error("[mfa] TOTP secret decrypt failed:", error);
+      // Still allow recovery-code login when ciphertext cannot be opened
+      // (e.g. encryption-key mismatch after host migration).
+    }
+
+    if (secret) {
+      const totp = this.verifyCode(secret, input.code, input.lastStep);
+      if (totp.valid && totp.step != null) {
+        return { ok: true, method: "totp", step: totp.step };
+      }
     }
 
     const recovery = await this.verifyRecoveryCode(

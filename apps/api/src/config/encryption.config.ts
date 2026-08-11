@@ -16,8 +16,13 @@ export interface ResolvedEncryptionKeys {
 let cached: ResolvedEncryptionKeys | null = null;
 let ephemeralDevKey: string | null = null;
 
+function cleanKeyMaterial(raw: string | undefined | null): string {
+  if (!raw) return "";
+  return raw.replace(/^\uFEFF/, "").trim();
+}
+
 function deriveKeyMaterial(raw: string): Buffer {
-  const trimmed = raw.trim();
+  const trimmed = cleanKeyMaterial(raw);
   try {
     const fromB64 = Buffer.from(trimmed, "base64");
     if (fromB64.length === 32) {
@@ -30,13 +35,13 @@ function deriveKeyMaterial(raw: string): Buffer {
 }
 
 function readConfiguredKey(): string | null {
-  const key = process.env.ENTERPRISE_ENCRYPTION_KEY?.trim();
-  return key && key.length > 0 ? key : null;
+  const key = cleanKeyMaterial(process.env.ENTERPRISE_ENCRYPTION_KEY);
+  return key.length > 0 ? key : null;
 }
 
 function readPreviousKey(): string | null {
-  const key = process.env.ENTERPRISE_ENCRYPTION_KEY_PREVIOUS?.trim();
-  return key && key.length > 0 ? key : null;
+  const key = cleanKeyMaterial(process.env.ENTERPRISE_ENCRYPTION_KEY_PREVIOUS);
+  return key.length > 0 ? key : null;
 }
 
 /**
