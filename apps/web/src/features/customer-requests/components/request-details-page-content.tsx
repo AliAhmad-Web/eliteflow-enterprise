@@ -261,6 +261,7 @@ export function RequestDetailsPageContent() {
           <CardContent className="p-6">
             <RequestForm
               mode="edit"
+              requestId={request.id}
               initialValues={request}
               projects={projectsQuery.data?.items ?? []}
               isSubmitting={updateMutation.isPending}

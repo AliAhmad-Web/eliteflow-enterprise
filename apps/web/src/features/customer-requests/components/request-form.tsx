@@ -4,13 +4,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   CUSTOMER_REQUEST_PRIORITIES,
   CUSTOMER_REQUEST_TYPES,
+  FILES_API_PREFIX,
+  PERMISSIONS,
   createCustomerRequestSchema,
   type CreateCustomerRequestInput,
+  type CustomerRequestAttachmentDto,
   type CustomerRequestDto,
   type CustomerRequestTypeValue,
   type Project,
 } from "@enterprise/shared";
-import { useEffect } from "react";
+import { Loader2, Paperclip, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -18,9 +22,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FormFieldError } from "@/features/auth/components/form-field-error";
+import { filesService } from "@/features/files/services/files.service";
+import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { FORM_SELECT_CLASS_MD } from "@/lib/form-styles";
 import { cn } from "@/lib/utils";
+import { getApiBaseUrl, getApiErrorMessage } from "@/services/api/api-error";
 
+import { useAddCustomerRequestAttachment } from "../hooks/use-customer-request-mutations";
 import {
   CUSTOMER_REQUEST_PRIORITY_LABELS,
   CUSTOMER_REQUEST_TYPE_LABELS,
@@ -28,10 +36,20 @@ import {
 
 const selectClassName = FORM_SELECT_CLASS_MD;
 
+type PendingAttachment = {
+  fileName: string;
+  fileUrl: string;
+  managedFileId: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
 export type RequestFormValues = CreateCustomerRequestInput;
 
 interface RequestFormProps {
   mode: "create" | "edit";
+  /** When editing an existing request, uploads attach immediately via API. */
+  requestId?: string;
   initialValues?: CustomerRequestDto | null;
   defaultType?: CustomerRequestTypeValue;
   projects: Project[];
@@ -75,6 +93,7 @@ function toFormValues(
 
 export function RequestForm({
   mode,
+  requestId,
   initialValues,
   defaultType,
   projects,
@@ -83,6 +102,19 @@ export function RequestForm({
   onCancel,
   className,
 }: RequestFormProps) {
+  const canUpload = useHasPermission(PERMISSIONS.FILES_UPLOAD);
+  const addAttachmentMutation = useAddCustomerRequestAttachment();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const [existingAttachments, setExistingAttachments] = useState<
+    CustomerRequestAttachmentDto[]
+  >(initialValues?.attachments ?? []);
+  const [uploading, setUploading] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -99,9 +131,61 @@ export function RequestForm({
 
   useEffect(() => {
     reset(toFormValues(initialValues, defaultType));
+    setExistingAttachments(initialValues?.attachments ?? []);
+    setPendingAttachments([]);
+    setAttachError(null);
   }, [initialValues, defaultType, reset]);
 
+  async function handleAttachFiles(fileList: FileList | null) {
+    if (!fileList?.length) return;
+    setAttachError(null);
+
+    if (!canUpload) {
+      setAttachError("File upload permission is required to attach files.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      for (const file of [...fileList]) {
+        const uploaded = await filesService.uploadFiles({ files: [file] });
+        const managed = uploaded[0];
+        if (!managed) {
+          throw new Error(`Upload failed for ${file.name}`);
+        }
+
+        const attachment: PendingAttachment = {
+          fileName: managed.originalName || managed.name || file.name,
+          fileUrl: `${getApiBaseUrl()}${FILES_API_PREFIX}/${managed.id}/download`,
+          managedFileId: managed.id,
+          mimeType: managed.mimeType ?? file.type,
+          sizeBytes: managed.sizeBytes ?? file.size,
+        };
+
+        if (mode === "edit" && requestId) {
+          const updated = await addAttachmentMutation.mutateAsync({
+            id: requestId,
+            input: attachment,
+          });
+          setExistingAttachments(updated.attachments);
+        } else {
+          setPendingAttachments((prev) => [...prev, attachment]);
+        }
+      }
+    } catch (error) {
+      setAttachError(getApiErrorMessage(error));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   const submitValues = async (values: RequestFormValues, submit: boolean) => {
+    if (uploading) {
+      setAttachError("Wait for uploads to finish before saving.");
+      return;
+    }
+
     const payload: RequestFormValues = {
       ...values,
       description: values.description || null,
@@ -111,10 +195,16 @@ export function RequestForm({
       additionalNotes: values.additionalNotes || null,
       targetProjectId:
         values.type === "NEW_TASK" ? values.targetProjectId || null : null,
+      attachments:
+        mode === "create" && pendingAttachments.length > 0
+          ? pendingAttachments
+          : undefined,
       submit,
     };
     await onSubmit(payload, { submit });
   };
+
+  const busy = isSubmitting || uploading || addAttachmentMutation.isPending;
 
   return (
     <form
@@ -264,21 +354,101 @@ export function RequestForm({
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Attachments: upload files in File Manager, then ask staff to link them
-        during review. Direct attachment upload is not available in this form
-        yet.
-      </p>
+      <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">Attachments</p>
+            <p className="text-xs text-muted-foreground">
+              Files upload through File Manager security and stay scoped to your
+              company account.
+            </p>
+          </div>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              onChange={(event) => void handleAttachFiles(event.target.files)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy || !canUpload}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? (
+                <Loader2 className="mr-2 size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Paperclip className="mr-2 size-3.5" aria-hidden />
+              )}
+              {uploading ? "Uploading…" : "Attach files"}
+            </Button>
+          </div>
+        </div>
+
+        {!canUpload ? (
+          <p className="text-xs text-muted-foreground">
+            File upload permission is required to attach documents.
+          </p>
+        ) : null}
+
+        {existingAttachments.length > 0 || pendingAttachments.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {existingAttachments.map((attachment) => (
+              <div
+                key={attachment.id}
+                className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-xs"
+              >
+                <Paperclip className="size-3 text-muted-foreground" />
+                <span className="max-w-40 truncate">{attachment.fileName}</span>
+              </div>
+            ))}
+            {pendingAttachments.map((attachment) => (
+              <div
+                key={attachment.managedFileId}
+                className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-xs"
+              >
+                <Paperclip className="size-3 text-muted-foreground" />
+                <span className="max-w-40 truncate">{attachment.fileName}</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${attachment.fileName}`}
+                  onClick={() =>
+                    setPendingAttachments((prev) =>
+                      prev.filter(
+                        (item) => item.managedFileId !== attachment.managedFileId,
+                      ),
+                    )
+                  }
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No attachments yet.</p>
+        )}
+
+        {attachError ? (
+          <p className="text-sm text-destructive" role="alert">
+            {attachError}
+          </p>
+        ) : null}
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {mode === "create" ? (
           <>
-            <Button type="submit" variant="secondary" disabled={isSubmitting}>
+            <Button type="submit" variant="secondary" disabled={busy}>
               Save draft
             </Button>
             <Button
               type="button"
-              disabled={isSubmitting}
+              disabled={busy}
               onClick={handleSubmit(async (values) => {
                 await submitValues(values, true);
               })}
@@ -287,14 +457,14 @@ export function RequestForm({
             </Button>
           </>
         ) : (
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={busy}>
             Save changes
           </Button>
         )}
         <Button
           type="button"
           variant="outline"
-          disabled={isSubmitting}
+          disabled={busy}
           onClick={onCancel}
         >
           Cancel

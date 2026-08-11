@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  AddCustomerRequestAttachmentInput,
   ApproveCustomerRequestInput,
   ClarifyCustomerRequestInput,
   ConvertCustomerRequestInput,
@@ -77,6 +78,23 @@ export function useWithdrawCustomerRequest() {
     mutationFn: (id: string) => customerRequestsService.withdraw(id),
     onSuccess: async (_data, id) => {
       await invalidateDetail(queryClient, id);
+    },
+  });
+}
+
+export function useAddCustomerRequestAttachment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: AddCustomerRequestAttachmentInput;
+    }) => customerRequestsService.addAttachment(id, input),
+    onSuccess: async (_data, variables) => {
+      await invalidateDetail(queryClient, variables.id);
     },
   });
 }
