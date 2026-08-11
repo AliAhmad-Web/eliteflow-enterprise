@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install --prefix ../.. --include=optional",
+  "buildCommand": "npm run build --prefix ../.. --workspace=@enterprise/database && npm run build --prefix ../.. --workspace=@enterprise/shared && npm run build --prefix ../.. --workspace=@enterprise/api",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "includeFiles": "{dist/**,../../packages/database/src/generated/**,../../packages/database/dist/**,../../packages/shared/dist/**}"
+    }
+  }
+}

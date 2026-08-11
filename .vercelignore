@@ -6,9 +6,9 @@ apps/mobile
 apps/api/dist
 apps/web/.next
 docs
-tools
+# Only ignore repo-root /tools (NOT apps/api/**/tools)
+/tools
 packages/database/src/generated
 packages/database/dist
 **/*.apk
 **/.tmp-apk
-D:

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "express",
+  "installCommand": "npm install --include=optional --include=dev",
+  "buildCommand": "npm run build --workspace=@enterprise/database && npm run build --workspace=@enterprise/shared && npm run build --workspace=@enterprise/api"
+}
