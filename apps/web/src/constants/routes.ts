@@ -16,6 +16,9 @@ export const ROUTES = {
   CLIENTS: "/clients",
   PROJECTS: "/projects",
   TASKS: "/tasks",
+  REQUESTS: "/requests",
+  REQUESTS_NEW: "/requests/new",
+  CUSTOMER_REQUESTS: "/customer-requests",
   INVOICES: "/invoices",
   REPORTS: "/reports",
   CALENDAR: "/calendar",
@@ -47,6 +50,14 @@ export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
 
 export function taskDetailPath(id: string): string {
   return `${ROUTES.TASKS}/${id}`;
+}
+
+export function requestDetailPath(id: string): string {
+  return `${ROUTES.REQUESTS}/${id}`;
+}
+
+export function customerRequestDetailPath(id: string): string {
+  return `${ROUTES.CUSTOMER_REQUESTS}/${id}`;
 }
 
 export function invoiceDetailPath(id: string): string {

@@ -8,6 +8,7 @@ import {
   ClipboardList,
   FileText,
   FolderKanban,
+  Inbox,
   Receipt,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -114,6 +115,48 @@ function taskTone(status: string, dueDate: string | null): string {
     return "border-warning/30 bg-warning/5";
   }
   return "border-border/40";
+}
+
+function ClientRequestIntakeCard() {
+  return (
+    <Card className="border-border/50 shadow-(--shadow-sm)">
+      <CardHeader className="pb-3">
+        <div className="flex items-start gap-3">
+          <div className="icon-box icon-box-md rounded-xl bg-primary/10 ring-1 ring-primary/15">
+            <Inbox strokeWidth={1.75} aria-hidden="true" />
+          </div>
+          <div>
+            <CardTitle className="text-base font-semibold tracking-tight">
+              Welcome to EliteFlow
+            </CardTitle>
+            <p className="mt-2 text-sm text-muted-foreground">
+              What would you like us to help you with?
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link href={`${ROUTES.REQUESTS_NEW}?type=NEW_PROJECT`}>
+              Start a New Project
+            </Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href={`${ROUTES.REQUESTS_NEW}?type=NEW_TASK`}>
+              Request a Task / Service
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={ROUTES.REQUESTS}>View My Requests</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={ROUTES.MESSAGES}>Contact EliteFlow</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function ClientUnlinkedOnboarding({ firstName }: { firstName: string }) {
@@ -404,149 +447,154 @@ function ClientLinkedDashboard({
 
       {!isLoading && !isError ? (
         <>
-          <KpiStatsGrid stats={kpiStats} />
+          <ClientRequestIntakeCard />
 
-          <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
-            <RecentProjectsCard
-              projects={recentProjects}
-              title="Your projects"
-              viewAllHref={ROUTES.PROJECTS}
-            />
-            <RecentInvoicesCard
-              invoices={recentInvoices}
-              title="Billing"
-              viewAllHref={ROUTES.INVOICES}
-            />
-          </div>
+          {hasAnyBusinessData ? <KpiStatsGrid stats={kpiStats} /> : null}
 
-          <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
-            <Card className="border-border/50 shadow-(--shadow-sm)">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                <CardTitle className="text-base font-semibold tracking-tight">
-                  Tasks & deadlines
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-xs text-primary"
-                  asChild
-                >
-                  <Link href={ROUTES.TASKS}>View all</Link>
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {tasks.length === 0 ? (
-                  <EmptyState
-                    title="No tasks yet"
-                    description="Tasks on your company projects will appear here with deadlines."
-                    actionLabel="Open tasks"
-                    actionHref={ROUTES.TASKS}
-                    className="min-h-40 border-0 bg-transparent"
-                  />
-                ) : (
-                  <ul className="space-y-2" aria-label="Company tasks">
-                    {tasks.map((task) => (
-                      <li
-                        key={task.id}
-                        className={cn(
-                          "rounded-xl border p-3 transition-colors hover:bg-accent/40",
-                          taskTone(task.status, task.dueDate),
-                        )}
+          {hasAnyBusinessData ? (
+            <>
+              <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+                <RecentProjectsCard
+                  projects={recentProjects}
+                  title="Your projects"
+                  viewAllHref={ROUTES.PROJECTS}
+                />
+                <RecentInvoicesCard
+                  invoices={recentInvoices}
+                  title="Billing"
+                  viewAllHref={ROUTES.INVOICES}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+                <Card className="border-border/50 shadow-(--shadow-sm)">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                    <CardTitle className="text-base font-semibold tracking-tight">
+                      Tasks & deadlines
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-xs text-primary"
+                      asChild
+                    >
+                      <Link href={ROUTES.TASKS}>View all</Link>
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {tasks.length === 0 ? (
+                      <EmptyState
+                        title="No tasks yet"
+                        description="Tasks on your company projects will appear here with deadlines."
+                        actionLabel="Open tasks"
+                        actionHref={ROUTES.TASKS}
+                        className="min-h-40 border-0 bg-transparent"
+                      />
+                    ) : (
+                      <ul className="space-y-2" aria-label="Company tasks">
+                        {tasks.map((task) => (
+                          <li
+                            key={task.id}
+                            className={cn(
+                              "rounded-xl border p-3 transition-colors hover:bg-accent/40",
+                              taskTone(task.status, task.dueDate),
+                            )}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground">
+                                  {task.title}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {task.projectName ?? "Project"} ·{" "}
+                                  {formatTaskDeadline(task.dueDate)}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="shrink-0">
+                                {task.status.replaceAll("_", " ")}
+                              </Badge>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-border/50 shadow-(--shadow-sm)">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                    <CardTitle className="text-base font-semibold tracking-tight">
+                      Recent updates
+                    </CardTitle>
+                    {canReadNotifications ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 text-xs text-primary"
+                        asChild
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground">
-                              {task.title}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {task.projectName ?? "Project"} ·{" "}
-                              {formatTaskDeadline(task.dueDate)}
-                            </p>
-                          </div>
-                          <Badge variant="outline" className="shrink-0">
-                            {task.status.replaceAll("_", " ")}
-                          </Badge>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/50 shadow-(--shadow-sm)">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                <CardTitle className="text-base font-semibold tracking-tight">
-                  Recent updates
-                </CardTitle>
-                {canReadNotifications ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 text-xs text-primary"
-                    asChild
-                  >
-                    <Link href={ROUTES.NOTIFICATIONS}>View all</Link>
-                  </Button>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                {!canReadNotifications ? (
-                  <EmptyState
-                    title="Updates unavailable"
-                    description="Your role does not include notification access."
-                    className="min-h-40 border-0 bg-transparent"
-                  />
-                ) : activityItems.length === 0 ? (
-                  <EmptyState
-                    title="No recent updates"
-                    description="Project and billing notifications for your account will show here."
-                    actionLabel="Open notifications"
-                    actionHref={ROUTES.NOTIFICATIONS}
-                    className="min-h-40 border-0 bg-transparent"
-                  />
-                ) : (
-                  <ul className="space-y-2" aria-label="Recent updates">
-                    {activityItems.map((item) => (
-                      <li
-                        key={item.id}
-                        className="rounded-xl border border-border/40 p-3 transition-colors hover:bg-accent/40"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground">
-                              {item.title}
-                            </p>
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                              {item.body}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {CATEGORY_LABELS[item.category] ?? item.category}{" "}
-                              · {formatRelativeTime(item.createdAt)}
-                            </p>
-                          </div>
-                          {!item.isRead ? (
-                            <Badge variant="info" className="shrink-0">
-                              New
-                            </Badge>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {!hasAnyBusinessData ? (
+                        <Link href={ROUTES.NOTIFICATIONS}>View all</Link>
+                      </Button>
+                    ) : null}
+                  </CardHeader>
+                  <CardContent>
+                    {!canReadNotifications ? (
+                      <EmptyState
+                        title="Updates unavailable"
+                        description="Your role does not include notification access."
+                        className="min-h-40 border-0 bg-transparent"
+                      />
+                    ) : activityItems.length === 0 ? (
+                      <EmptyState
+                        title="No recent updates"
+                        description="Project and billing notifications for your account will show here."
+                        actionLabel="Open notifications"
+                        actionHref={ROUTES.NOTIFICATIONS}
+                        className="min-h-40 border-0 bg-transparent"
+                      />
+                    ) : (
+                      <ul className="space-y-2" aria-label="Recent updates">
+                        {activityItems.map((item) => (
+                          <li
+                            key={item.id}
+                            className="rounded-xl border border-border/40 p-3 transition-colors hover:bg-accent/40"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground">
+                                  {item.title}
+                                </p>
+                                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                  {item.body}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {CATEGORY_LABELS[item.category] ??
+                                    item.category}{" "}
+                                  · {formatRelativeTime(item.createdAt)}
+                                </p>
+                              </div>
+                              {!item.isRead ? (
+                                <Badge variant="info" className="shrink-0">
+                                  New
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : (
             <EmptyState
               icon={ClipboardList}
               title="No company data yet"
-              description="When EliteFlow assigns projects, tasks, or invoices to your company, they will appear here."
+              description="When EliteFlow assigns projects, tasks, or invoices to your company, they will appear here. Meanwhile, start a request above."
               className="min-h-40"
             />
-          ) : null}
+          )}
         </>
       ) : null}
     </motion.div>

@@ -884,3 +884,36 @@ enum SecurityIncidentStatus {
 
   @@map("security_incident_status")
 }
+
+/// Customer self-service intake request type (Phase 2).
+enum CustomerRequestType {
+  NEW_PROJECT
+  NEW_TASK
+  GENERAL_SERVICE
+
+  @@map("customer_request_type")
+}
+
+/// Customer request workflow status (Phase 2).
+enum CustomerRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  CLARIFICATION_REQUESTED
+  APPROVED
+  REJECTED
+  CONVERTED
+  CANCELLED
+
+  @@map("customer_request_status")
+}
+
+/// Customer request priority (Phase 2).
+enum CustomerRequestPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("customer_request_priority")
+}

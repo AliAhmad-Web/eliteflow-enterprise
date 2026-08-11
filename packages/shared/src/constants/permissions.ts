@@ -58,6 +58,10 @@ export const PERMISSIONS = {
   ANNOUNCEMENT_MANAGE: "announcement:manage",
   MEETING_MANAGE: "meeting:manage",
   THREAD_MANAGE: "thread:manage",
+
+  CUSTOMER_REQUESTS_CREATE: "customer-requests:create",
+  CUSTOMER_REQUESTS_READ: "customer-requests:read",
+  CUSTOMER_REQUESTS_REVIEW: "customer-requests:review",
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -91,6 +95,7 @@ export const MODULE_PERMISSIONS = {
   whiteboards: PERMISSIONS.WHITEBOARDS_READ,
   portal: PERMISSIONS.PROJECTS_READ,
   dashboard: PERMISSIONS.PROJECTS_READ,
+  "customer-requests": PERMISSIONS.CUSTOMER_REQUESTS_READ,
 } as const;
 
 export type ModuleKey = keyof typeof MODULE_PERMISSIONS;
@@ -125,6 +130,8 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/voice-ai": PERMISSIONS.COMMUNICATION_READ,
   "/whatsapp": PERMISSIONS.COMMUNICATION_READ,
   "/email-automation": PERMISSIONS.COMMUNICATION_READ,
+  "/requests": PERMISSIONS.CUSTOMER_REQUESTS_READ,
+  "/customer-requests": PERMISSIONS.CUSTOMER_REQUESTS_REVIEW,
   // /integrations — all signed-in roles may open Integration Center;
   // visibility of individual integrations is enforced in the API service.
   // /security is available to every signed-in user (own sessions/password).

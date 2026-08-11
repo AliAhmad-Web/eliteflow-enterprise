@@ -14,6 +14,9 @@ export const ROLE_PERMISSION_MAP: Record<string, readonly string[]> = {
     "projects:read",
     "projects:write",
     "projects:delete",
+    "customer-requests:create",
+    "customer-requests:read",
+    "customer-requests:review",
     "tasks:read",
     "tasks:write",
     "tasks:delete",
@@ -87,5 +90,7 @@ export const ROLE_PERMISSION_MAP: Record<string, readonly string[]> = {
     "communication:write",
     "notifications:read",
     "calendar:read",
+    "customer-requests:create",
+    "customer-requests:read",
   ],
 };

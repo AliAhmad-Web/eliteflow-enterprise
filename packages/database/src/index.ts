@@ -82,6 +82,9 @@ export {
   RetentionEntityType,
   RetentionJobRunStatus,
   SecurityIncidentStatus,
+  CustomerRequestType,
+  CustomerRequestStatus,
+  CustomerRequestPriority,
 } from "./generated/client/index.js";
 
 export type {
@@ -189,4 +192,6 @@ export type {
   RetentionLifecycle,
   RetentionJobRun,
   SecurityIncident,
+  CustomerRequest,
+  CustomerRequestAttachment,
 } from "./generated/client/index.js";

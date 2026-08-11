@@ -33,6 +33,7 @@ model Client {
   whiteboards    Whiteboard[]
   activities  ClientActivity[]
   publicApiKeys PublicApiKey[] @relation("PublicApiKeyClient")
+  customerRequests CustomerRequest[]
 
   @@index([email])
   @@index([companyName])

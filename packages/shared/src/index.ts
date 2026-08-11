@@ -28,6 +28,7 @@ export {
   SEARCH_API_PREFIX,
   INTEGRATIONS_API_PREFIX,
   WHITEBOARDS_API_PREFIX,
+  CUSTOMER_REQUESTS_API_PREFIX,
   AUTH_COOKIES,
   AUTH_ERROR_CODES,
   AUTH_HEADERS,
@@ -1698,3 +1699,44 @@ export type {
   PublicApiKeyIdParamsInput,
   PublicApiListQueryInput,
 } from "./schemas/public-api.schema.js";
+
+// Schemas — Customer Requests (Phase 2)
+export {
+  CUSTOMER_REQUEST_PRIORITIES,
+  CUSTOMER_REQUEST_SORT_FIELDS,
+  CUSTOMER_REQUEST_STATUSES,
+  CUSTOMER_REQUEST_TYPES,
+  addCustomerRequestAttachmentSchema,
+  approveCustomerRequestSchema,
+  clarifyCustomerRequestSchema,
+  convertCustomerRequestSchema,
+  createCustomerRequestSchema,
+  customerRequestAttachmentSchema,
+  customerRequestIdParamsSchema,
+  customerRequestPrioritySchema,
+  customerRequestSchema,
+  customerRequestStatusSchema,
+  customerRequestTypeSchema,
+  listCustomerRequestsQuerySchema,
+  rejectCustomerRequestSchema,
+  startCustomerRequestReviewSchema,
+  updateCustomerRequestSchema,
+} from "./schemas/customer-requests.schema.js";
+
+export type {
+  AddCustomerRequestAttachmentInput,
+  ApproveCustomerRequestInput,
+  ClarifyCustomerRequestInput,
+  ConvertCustomerRequestInput,
+  CreateCustomerRequestInput,
+  CustomerRequestAttachmentDto,
+  CustomerRequestDto,
+  CustomerRequestIdParamsInput,
+  CustomerRequestPriorityValue,
+  CustomerRequestStatusValue,
+  CustomerRequestTypeValue,
+  ListCustomerRequestsQueryInput,
+  RejectCustomerRequestInput,
+  StartCustomerRequestReviewInput,
+  UpdateCustomerRequestInput,
+} from "./schemas/customer-requests.schema.js";

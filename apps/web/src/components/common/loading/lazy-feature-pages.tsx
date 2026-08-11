@@ -72,6 +72,46 @@ export const LazyTasksPage = dynamic(
   { loading: () => null },
 );
 
+export const LazyRequestsPage = dynamic(
+  () =>
+    import(
+      "@/features/customer-requests/components/requests-page-content"
+    ).then((m) => m.RequestsPageContent),
+  { loading: () => null },
+);
+
+export const LazyRequestNewPage = dynamic(
+  () =>
+    import(
+      "@/features/customer-requests/components/request-new-page-content"
+    ).then((m) => m.RequestNewPageContent),
+  { loading: () => null },
+);
+
+export const LazyRequestDetailsPage = dynamic(
+  () =>
+    import(
+      "@/features/customer-requests/components/request-details-page-content"
+    ).then((m) => m.RequestDetailsPageContent),
+  { loading: () => null },
+);
+
+export const LazyStaffRequestsPage = dynamic(
+  () =>
+    import(
+      "@/features/customer-requests/components/staff-requests-page-content"
+    ).then((m) => m.StaffRequestsPageContent),
+  { loading: () => null },
+);
+
+export const LazyStaffRequestDetailsPage = dynamic(
+  () =>
+    import(
+      "@/features/customer-requests/components/staff-request-details-page-content"
+    ).then((m) => m.StaffRequestDetailsPageContent),
+  { loading: () => null },
+);
+
 export const LazyInvoicesPage = dynamic(
   () =>
     import("@/features/invoices/components/invoices-page-content").then(

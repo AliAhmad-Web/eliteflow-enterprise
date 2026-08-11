@@ -21,6 +21,7 @@ import { whiteboardsRouter } from "../modules/whiteboards/index.js";
 import { searchRouter } from "../modules/search/index.js";
 import { billingRouter } from "../modules/billing/index.js";
 import { publicApiRouter } from "../modules/public-api/index.js";
+import { customerRequestsRouter } from "../modules/customer-requests/index.js";
 import { buildSaasReadinessReport } from "../shared/services/saas-health.helpers.js";
 
 const apiRouter = Router();
@@ -29,6 +30,7 @@ apiRouter.use("/auth", authRouter);
 apiRouter.use("/clients", clientsRouter);
 apiRouter.use("/projects", projectsRouter);
 apiRouter.use("/tasks", tasksRouter);
+apiRouter.use("/customer-requests", customerRequestsRouter);
 apiRouter.use("/invoices", invoicesRouter);
 apiRouter.use("/billing", billingRouter);
 apiRouter.use("/public", publicApiRouter);

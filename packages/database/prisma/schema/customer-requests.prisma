@@ -1,0 +1,71 @@
+// =============================================================================
+// Customer Requests — Phase 2 client intake / work request lifecycle
+// =============================================================================
+
+/// Customer-submitted work request (intake). Delivery remains Project/Task.
+model CustomerRequest {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  clientId             String                   @map("client_id") @db.Uuid
+  createdById          String                   @map("created_by_id") @db.Uuid
+  type                 CustomerRequestType
+  title                String                   @db.VarChar(200)
+  description          String?                  @db.Text
+  requirements         String?                  @db.Text
+  preferredDeadline    DateTime?                @map("preferred_deadline") @db.Date
+  expectedBudget       Decimal?                 @map("expected_budget") @db.Decimal(14, 2)
+  currency             String                   @default("USD") @db.VarChar(3)
+  priority             CustomerRequestPriority  @default(MEDIUM)
+  status               CustomerRequestStatus    @default(DRAFT)
+  additionalNotes      String?                  @map("additional_notes") @db.Text
+  staffNotes           String?                  @map("staff_notes") @db.Text
+  clarificationMessage String?                  @map("clarification_message") @db.Text
+  rejectionReason      String?                  @map("rejection_reason") @db.Text
+  /// Optional company-owned project the customer wants a NEW_TASK against.
+  targetProjectId      String?                  @map("target_project_id") @db.Uuid
+  convertedProjectId   String?                  @map("converted_project_id") @db.Uuid
+  convertedTaskId      String?                  @map("converted_task_id") @db.Uuid
+  reviewedById         String?                  @map("reviewed_by_id") @db.Uuid
+  reviewedAt           DateTime?                @map("reviewed_at")
+  submittedAt          DateTime?                @map("submitted_at")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  deletedAt            DateTime?                @map("deleted_at")
+
+  client           Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy        User                     @relation("CustomerRequestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy       User?                    @relation("CustomerRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  targetProject    Project?                 @relation("CustomerRequestTargetProject", fields: [targetProjectId], references: [id], onDelete: SetNull)
+  convertedProject Project?                 @relation("CustomerRequestConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  convertedTask    Task?                    @relation("CustomerRequestConvertedTask", fields: [convertedTaskId], references: [id], onDelete: SetNull)
+  attachments      CustomerRequestAttachment[]
+
+  @@index([clientId, status])
+  @@index([createdById])
+  @@index([convertedProjectId])
+  @@index([convertedTaskId])
+  @@index([status])
+  @@index([type])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("customer_requests")
+}
+
+model CustomerRequestAttachment {
+  id              String   @id @default(uuid()) @db.Uuid
+  requestId       String   @map("request_id") @db.Uuid
+  fileName        String   @map("file_name") @db.VarChar(255)
+  fileUrl         String   @map("file_url") @db.VarChar(2048)
+  mimeType        String?  @map("mime_type") @db.VarChar(120)
+  sizeBytes       Int?     @map("size_bytes")
+  managedFileId   String?  @map("managed_file_id") @db.Uuid
+  uploadedById    String?  @map("uploaded_by_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  request    CustomerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedBy User?           @relation("CustomerRequestAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([managedFileId])
+  @@index([uploadedById])
+  @@map("customer_request_attachments")
+}

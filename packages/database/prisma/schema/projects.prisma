@@ -29,6 +29,8 @@ model Project {
   managedFiles ManagedFile[]
   calendarEvents CalendarEvent[]
   whiteboards    Whiteboard[]
+  customerRequestTargets    CustomerRequest[] @relation("CustomerRequestTargetProject")
+  customerRequestsConverted CustomerRequest[] @relation("CustomerRequestConvertedProject")
 
   @@index([name])
   @@index([status])

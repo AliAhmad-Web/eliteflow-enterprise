@@ -59,6 +59,9 @@ model User {
   projectsCreated         Project[]         @relation("ProjectCreatedBy")
   projectMemberships      ProjectMember[]
   attachmentsUploaded     ProjectAttachment[] @relation("AttachmentUploadedBy")
+  customerRequestsCreated CustomerRequest[] @relation("CustomerRequestCreatedBy")
+  customerRequestsReviewed CustomerRequest[] @relation("CustomerRequestReviewedBy")
+  customerRequestAttachmentsUploaded CustomerRequestAttachment[] @relation("CustomerRequestAttachmentUploadedBy")
   tasksAssigned           Task[]            @relation("TaskAssignedTo")
   tasksCreated            Task[]            @relation("TaskCreatedBy")
   tasksUpdated            Task[]            @relation("TaskUpdatedBy")

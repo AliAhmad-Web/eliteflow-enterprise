@@ -14,6 +14,8 @@ const AVAILABLE_ROUTES = new Set<string>([
   ROUTES.CLIENTS,
   ROUTES.PROJECTS,
   ROUTES.TASKS,
+  ROUTES.REQUESTS,
+  ROUTES.CUSTOMER_REQUESTS,
   ROUTES.INVOICES,
   ROUTES.REPORTS,
   ROUTES.CALENDAR,
@@ -83,6 +85,7 @@ function isRedirectAllowedForRole(role: UserRoleType, path: string): boolean {
       return (
         matchesRoute(path, ROUTES.PORTAL) ||
         matchesRoute(path, ROUTES.PROJECTS) ||
+        matchesRoute(path, ROUTES.REQUESTS) ||
         matchesRoute(path, ROUTES.INVOICES) ||
         matchesRoute(path, ROUTES.FILE_MANAGER) ||
         matchesRoute(path, ROUTES.FILES) ||

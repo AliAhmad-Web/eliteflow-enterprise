@@ -30,6 +30,7 @@ model Task {
   activityLogs TaskActivityLog[]
   calendarEvents CalendarEvent[]
   whiteboards    Whiteboard[]
+  customerRequestsConverted CustomerRequest[] @relation("CustomerRequestConvertedTask")
 
   @@index([title])
   @@index([status])

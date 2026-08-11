@@ -108,6 +108,26 @@ export const PERMISSIONS: PermissionSeedDefinition[] = [
     description: "Delete or archive projects",
   },
 
+  // Customer Requests (Phase 2 intake)
+  {
+    key: "customer-requests:create",
+    resource: "customer-requests",
+    action: "create",
+    description: "Create and submit customer work requests",
+  },
+  {
+    key: "customer-requests:read",
+    resource: "customer-requests",
+    action: "read",
+    description: "View customer work requests",
+  },
+  {
+    key: "customer-requests:review",
+    resource: "customer-requests",
+    action: "review",
+    description: "Review, clarify, approve, reject, and convert customer requests",
+  },
+
   // Tasks
   {
     key: "tasks:read",

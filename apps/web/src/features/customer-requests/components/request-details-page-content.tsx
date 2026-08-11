@@ -1,0 +1,396 @@
+"use client";
+
+import type {
+  CreateCustomerRequestInput,
+  CustomerRequestDto,
+  UpdateCustomerRequestInput,
+} from "@enterprise/shared";
+import { PERMISSIONS } from "@enterprise/shared";
+import { ArrowLeft, Send, Undo2 } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useState } from "react";
+
+import { ErrorState } from "@/components/common/feedback/error-state";
+import { LoadingState } from "@/components/common/feedback/loading-state";
+import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ROUTES } from "@/constants/routes";
+import { useProjects } from "@/features/projects/hooks/use-projects";
+import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
+import { getApiErrorMessage } from "@/services/api/api-error";
+
+import {
+  useSubmitCustomerRequest,
+  useUpdateCustomerRequest,
+  useWithdrawCustomerRequest,
+} from "../hooks/use-customer-request-mutations";
+import { useCustomerRequest } from "../hooks/use-customer-requests";
+import {
+  CUSTOMER_REQUEST_PRIORITY_LABELS,
+  CUSTOMER_REQUEST_TYPE_LABELS,
+} from "../types/query-keys";
+import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
+import { RequestForm } from "./request-form";
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-medium text-foreground break-words">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function formatMoney(amount: number | null, currency: string) {
+  if (amount == null) return "—";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: currency || "USD",
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function canEditRequest(request: CustomerRequestDto) {
+  return (
+    request.status === "DRAFT" || request.status === "CLARIFICATION_REQUESTED"
+  );
+}
+
+function canSubmitRequest(request: CustomerRequestDto) {
+  return (
+    request.status === "DRAFT" || request.status === "CLARIFICATION_REQUESTED"
+  );
+}
+
+function canWithdrawRequest(request: CustomerRequestDto) {
+  return request.status === "SUBMITTED" || request.status === "UNDER_REVIEW";
+}
+
+export function RequestDetailsPageContent() {
+  const params = useParams<{ id: string }>();
+  const requestId = params.id;
+  const canCreate = useHasPermission(PERMISSIONS.CUSTOMER_REQUESTS_CREATE);
+
+  const requestQuery = useCustomerRequest(requestId);
+  const projectsQuery = useProjects({
+    search: "",
+    sortBy: "name",
+    sortOrder: "asc",
+    page: 1,
+    limit: 100,
+  });
+
+  const updateMutation = useUpdateCustomerRequest();
+  const submitMutation = useSubmitCustomerRequest();
+  const withdrawMutation = useWithdrawCustomerRequest();
+  const [editing, setEditing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const request = requestQuery.data;
+
+  const handleUpdate = async (values: CreateCustomerRequestInput) => {
+    if (!requestId) return;
+    setActionError(null);
+    const input: UpdateCustomerRequestInput = {
+      type: values.type,
+      title: values.title,
+      description: values.description,
+      requirements: values.requirements,
+      preferredDeadline: values.preferredDeadline,
+      expectedBudget: values.expectedBudget,
+      currency: values.currency,
+      priority: values.priority,
+      additionalNotes: values.additionalNotes,
+      targetProjectId: values.targetProjectId,
+    };
+    try {
+      await updateMutation.mutateAsync({ id: requestId, input });
+      setEditing(false);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!requestId) return;
+    setActionError(null);
+    try {
+      await submitMutation.mutateAsync(requestId);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!requestId) return;
+    setActionError(null);
+    try {
+      await withdrawMutation.mutateAsync(requestId);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
+
+  if (requestQuery.isLoading) {
+    return <LoadingState label="Loading request" />;
+  }
+
+  if (requestQuery.isError || !request) {
+    return (
+      <div className="space-y-4">
+        <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
+          <Link href={ROUTES.REQUESTS}>
+            <ArrowLeft className="mr-2 size-4" aria-hidden />
+            Back to requests
+          </Link>
+        </Button>
+        <ErrorState
+          title="Could not load request"
+          description={
+            requestQuery.error instanceof Error
+              ? requestQuery.error.message
+              : "This request may have been removed or you lack access."
+          }
+          onRetry={() => void requestQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  const editable = canCreate && canEditRequest(request);
+  const busy =
+    updateMutation.isPending ||
+    submitMutation.isPending ||
+    withdrawMutation.isPending;
+
+  return (
+    <div className="space-y-6">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit">
+        <Link href={ROUTES.REQUESTS}>
+          <ArrowLeft className="mr-2 size-4" aria-hidden />
+          Back to requests
+        </Link>
+      </Button>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <PageHeader
+          title={request.title}
+          description={CUSTOMER_REQUEST_TYPE_LABELS[request.type]}
+        />
+        <div className="flex flex-wrap gap-2">
+          {editable && !editing ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setEditing(true)}
+            >
+              Edit
+            </Button>
+          ) : null}
+          {canCreate && canSubmitRequest(request) && !editing ? (
+            <Button type="button" disabled={busy} onClick={() => void handleSubmit()}>
+              <Send className="mr-2 size-4" aria-hidden />
+              {request.status === "CLARIFICATION_REQUESTED"
+                ? "Resubmit"
+                : "Submit"}
+            </Button>
+          ) : null}
+          {canCreate && canWithdrawRequest(request) ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void handleWithdraw()}
+            >
+              <Undo2 className="mr-2 size-4" aria-hidden />
+              Withdraw
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <CustomerRequestStatusBadge status={request.status} />
+        <span className="text-xs text-muted-foreground">
+          Priority: {CUSTOMER_REQUEST_PRIORITY_LABELS[request.priority]}
+        </span>
+      </div>
+
+      {request.status === "CLARIFICATION_REQUESTED" &&
+      request.clarificationMessage ? (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Clarification requested</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-wrap text-sm text-foreground/90">
+              {request.clarificationMessage}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Update your request and resubmit when ready.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {request.rejectionReason ? (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Rejection reason</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="whitespace-pre-wrap text-sm">{request.rejectionReason}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {actionError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+
+      {editing ? (
+        <Card className="border-border/50 shadow-(--shadow-sm)">
+          <CardContent className="p-6">
+            <RequestForm
+              mode="edit"
+              initialValues={request}
+              projects={projectsQuery.data?.items ?? []}
+              isSubmitting={updateMutation.isPending}
+              onSubmit={async (values) => {
+                await handleUpdate(values);
+              }}
+              onCancel={() => {
+                setEditing(false);
+                setActionError(null);
+              }}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {request.description ? (
+                  <p className="whitespace-pre-wrap text-sm text-foreground/90">
+                    {request.description}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No description.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Requirements</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {request.requirements ? (
+                  <p className="whitespace-pre-wrap text-sm text-foreground/90">
+                    {request.requirements}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No requirements listed.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {request.additionalNotes ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Additional notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="whitespace-pre-wrap text-sm text-foreground/90">
+                    {request.additionalNotes}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Details</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <DetailItem
+                  label="Preferred deadline"
+                  value={
+                    request.preferredDeadline
+                      ? new Date(request.preferredDeadline).toLocaleDateString()
+                      : "—"
+                  }
+                />
+                <DetailItem
+                  label="Expected budget"
+                  value={formatMoney(request.expectedBudget, request.currency)}
+                />
+                <DetailItem
+                  label="Target project"
+                  value={request.targetProjectName ?? "—"}
+                />
+                <DetailItem
+                  label="Submitted"
+                  value={
+                    request.submittedAt
+                      ? new Date(request.submittedAt).toLocaleString()
+                      : "—"
+                  }
+                />
+                <DetailItem
+                  label="Updated"
+                  value={new Date(request.updatedAt).toLocaleString()}
+                />
+                {request.convertedProjectId || request.convertedTaskId ? (
+                  <>
+                    <DetailItem
+                      label="Converted project"
+                      value={request.convertedProjectId ?? "—"}
+                    />
+                    <DetailItem
+                      label="Converted task"
+                      value={request.convertedTaskId ?? "—"}
+                    />
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            {request.attachments.length > 0 ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Attachments</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm">
+                    {request.attachments.map((attachment) => (
+                      <li key={attachment.id} className="truncate">
+                        {attachment.fileName}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
