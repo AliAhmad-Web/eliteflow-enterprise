@@ -49,9 +49,12 @@ export const securityRepository = {
     });
   },
 
-  async countAuditEvents(since: Date): Promise<number> {
+  async countAuditEvents(since: Date, userId?: string): Promise<number> {
     return prisma.auditLog.count({
-      where: { createdAt: { gte: since } },
+      where: {
+        createdAt: { gte: since },
+        ...(userId ? { userId } : {}),
+      },
     });
   },
 

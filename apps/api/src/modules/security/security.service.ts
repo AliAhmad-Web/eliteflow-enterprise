@@ -138,6 +138,7 @@ import {
 } from "../../shared/security/password-policy/index.js";
 import {
   logSecurityAuditEvent,
+  logSecurityAuditEventSafe,
   SECURITY_AUDIT_ACTIONS,
 } from "./security.audit.js";
 import {
@@ -290,7 +291,7 @@ export class SecurityService {
               userId: actor.userId,
             })
             .then((result) => result.total),
-      securityRepository.countAuditEvents(since),
+      securityRepository.countAuditEvents(since, scopeUserId),
       this.getPasswordStatus(actor.userId),
       securityRepository.listRecentLogins({
         take: 8,
@@ -316,7 +317,8 @@ export class SecurityService {
 
     const securityScore = buildSecurityScore(passwordStatus);
 
-    await logSecurityAuditEvent({
+    // Read path: never fail Security Center because the audit hash chain is busy.
+    void logSecurityAuditEventSafe({
       userId: actor.userId,
       action: SECURITY_AUDIT_ACTIONS.DASHBOARD_VIEWED,
       context,
@@ -346,9 +348,21 @@ export class SecurityService {
       ? penetrationTestService.getDashboardMetrics()
       : undefined;
 
-    const deviceManagement = await deviceManagementService.getDashboardMetricsAsync(
-      orgWide ? undefined : actor.userId,
-    );
+    let deviceManagement;
+    try {
+      deviceManagement = await deviceManagementService.getDashboardMetricsAsync(
+        orgWide ? undefined : actor.userId,
+      );
+    } catch {
+      deviceManagement = {
+        registeredDevices: 0,
+        trustedDevices: 0,
+        blockedDevices: 0,
+        suspiciousDevices: 0,
+        unknownDevices: 0,
+        recentDevices: 0,
+      };
+    }
 
     const tenantIsolation = orgWide
       ? tenantIsolationService.getDashboardMetrics()

@@ -96,7 +96,7 @@ export function SecurityCenterPageContent() {
   const loginQuery = useLoginHistory(loginPage);
   const sessionsQuery = useSecuritySessions(sessionPage);
   const alertsQuery = useSecurityAlerts(alertPage);
-  const auditQuery = useAuditLogs(auditPage, deferredSearch);
+  const auditQuery = useAuditLogs(auditPage, deferredSearch, canReadAudit);
 
   const terminateMutation = useTerminateSecuritySession();
   const resolveMutation = useResolveSecurityAlert();
@@ -204,6 +204,31 @@ export function SecurityCenterPageContent() {
       );
     }
 
+    const trustBlocked =
+      apiError?.code === "TRUST_CRITICAL_BLOCK" ||
+      apiError?.code === "TRUST_DENIED" ||
+      apiError?.code === "TRUST_STEP_UP_REQUIRED";
+
+    if (trustBlocked) {
+      return (
+        <div className="space-y-8">
+          <PageHeader
+            title="Security Center"
+            description="Monitor sessions, logins, password health, and security alerts."
+          />
+          <ErrorState
+            title="Security check required"
+            description={
+              message ||
+              "Your session needs an additional security check before this page can load."
+            }
+            onRetry={() => void dashboardQuery.refetch()}
+          />
+          <MfaEnrollmentCard />
+        </div>
+      );
+    }
+
     if (denied) {
       return (
         <EmptyState
@@ -215,11 +240,18 @@ export function SecurityCenterPageContent() {
     }
 
     return (
-      <ErrorState
-        title="Unable to load security data"
-        description={message}
-        onRetry={() => void dashboardQuery.refetch()}
-      />
+      <div className="space-y-8">
+        <PageHeader
+          title="Security Center"
+          description="Monitor sessions, logins, password health, and security alerts."
+        />
+        <ErrorState
+          title="Unable to load security data"
+          description={message}
+          onRetry={() => void dashboardQuery.refetch()}
+        />
+        <MfaEnrollmentCard />
+      </div>
     );
   }
 

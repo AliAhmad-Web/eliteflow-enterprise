@@ -69,7 +69,7 @@ export function useSecurityAlerts(page = 1) {
   });
 }
 
-export function useAuditLogs(page = 1, search = "") {
+export function useAuditLogs(page = 1, search = "", enabled = true) {
   return useQuery({
     queryKey: securityKeys.auditLogs(page, search),
     queryFn: () =>
@@ -78,6 +78,7 @@ export function useAuditLogs(page = 1, search = "") {
         pageSize: 15,
         search: search || undefined,
       }),
+    enabled,
   });
 }
 
