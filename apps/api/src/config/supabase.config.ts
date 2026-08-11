@@ -1,15 +1,20 @@
+function cleanEnv(value: string | undefined): string {
+  if (!value) return "";
+  // Strip UTF-8 BOM / zero-width chars that PowerShell/UTF-8 uploads sometimes prepend.
+  return value.replace(/^\uFEFF/, "").trim();
+}
+
 export const supabaseConfig = {
-  url: process.env.SUPABASE_URL ?? "",
+  url: cleanEnv(process.env.SUPABASE_URL),
   /** Legacy service_role JWT or new `sb_secret_…` API key (server-only). */
-  serviceRoleKey:
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SECRET_KEY ||
-    "",
-  jwksUrl: process.env.SUPABASE_JWKS_URL ?? "",
+  serviceRoleKey: cleanEnv(
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+  ),
+  jwksUrl: cleanEnv(process.env.SUPABASE_JWKS_URL),
   /** Legacy HS256 JWT secret from Supabase project settings (optional fallback). */
-  jwtSecret: process.env.SUPABASE_JWT_SECRET ?? "",
+  jwtSecret: cleanEnv(process.env.SUPABASE_JWT_SECRET),
   /** File Manager storage bucket (default matches File Manager implementation). */
-  storageBucket: process.env.SUPABASE_STORAGE_BUCKET?.trim() || "files",
+  storageBucket: cleanEnv(process.env.SUPABASE_STORAGE_BUCKET) || "files",
 } as const;
 
 export type SupabaseServiceRoleStatus = "ok" | "missing" | "placeholder";
