@@ -654,6 +654,23 @@ export class PaymentsService {
       };
     }
 
+    if (
+      fields.pp_TxnCurrency &&
+      fields.pp_TxnCurrency.toUpperCase() !== "PKR"
+    ) {
+      await logPaymentAuditEvent({
+        action: PAYMENT_AUDIT_ACTIONS.CALLBACK_REJECTED,
+        resourceId: payment.id,
+        metadata: { reason: "currency_mismatch", received: fields.pp_TxnCurrency },
+      });
+      return {
+        accepted: false,
+        reason: "currency_mismatch",
+        paymentId: payment.id,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=invalid`,
+      };
+    }
+
     const expectedPaisa = toJazzCashAmountPaisa(Number(payment.amount));
     if (fields.pp_Amount !== expectedPaisa) {
       await logPaymentAuditEvent({
@@ -1207,6 +1224,7 @@ export class PaymentsService {
       paidAmount,
       paymentStatus,
       paymentStatus === "PAID",
+      invoice.status,
     );
   }
 

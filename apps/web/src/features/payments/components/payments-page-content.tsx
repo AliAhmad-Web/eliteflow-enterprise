@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { paymentDetailPath } from "@/constants/routes";
 import { useHasPermission, useRole } from "@/features/rbac/hooks/use-permissions";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -139,13 +140,35 @@ export function PaymentsPageContent() {
                         })
                       }
                     />
+                    <Textarea
+                      defaultValue={method.instructions ?? ""}
+                      placeholder="Payment instructions shown to customers"
+                      onBlur={(event) =>
+                        void updateMethod.mutateAsync({
+                          method: method.method,
+                          input: { instructions: event.target.value || null },
+                        })
+                      }
+                    />
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {method.providerReady
-                      ? "Merchant credentials are configured on the server."
-                      : "Hosted checkout needs merchant credentials in API environment variables. Customers can still submit a transaction ID for admin verification."}
-                  </p>
+                  <div className="space-y-2">
+                    <Input
+                      defaultValue={method.merchantPublicId ?? ""}
+                      placeholder="Public merchant / store ID"
+                      onBlur={(event) =>
+                        void updateMethod.mutateAsync({
+                          method: method.method,
+                          input: { merchantPublicId: event.target.value || null },
+                        })
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {method.providerReady
+                        ? "Merchant credentials are configured on the server. Secrets are never sent to the browser."
+                        : "Hosted checkout needs merchant credentials in API environment variables. Customers can still submit a transaction ID for admin verification."}
+                    </p>
+                  </div>
                 )}
               </div>
             ))}

@@ -298,6 +298,13 @@ async function main() {
 
   await expectError(
     () =>
+      paymentsService.initiateJazzCash({ invoiceId: usd.invoice.id }, clientA),
+    PAYMENTS_ERROR_CODES.CURRENCY_UNSUPPORTED,
+    "JazzCash hosted checkout rejects USD invoices",
+  );
+
+  await expectError(
+    () =>
       invoicesService.update(
         usd.invoice.id,
         { status: "PAID" as never },

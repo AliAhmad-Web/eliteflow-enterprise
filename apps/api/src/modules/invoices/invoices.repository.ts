@@ -294,10 +294,20 @@ export class InvoicesRepository {
     input: { note: string; actorId: string; status: string },
   ): Promise<InvoiceWithRelations> {
     await prisma.$transaction(async (tx) => {
-      await tx.invoice.update({
+      const current = await tx.invoice.findUnique({
         where: { id },
-        data: { paymentStatus: "PENDING" },
+        select: { paymentStatus: true },
       });
+      const canMarkPending =
+        current?.paymentStatus === "UNPAID" ||
+        current?.paymentStatus === "FAILED" ||
+        current?.paymentStatus === "EXPIRED";
+      if (canMarkPending) {
+        await tx.invoice.update({
+          where: { id },
+          data: { paymentStatus: "PENDING" },
+        });
+      }
       await tx.invoicePaymentHistory.create({
         data: {
           invoiceId: id,

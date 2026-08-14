@@ -225,7 +225,10 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
               </div>
             ) : null}
 
-            {selected && selected.method !== "BANK_TRANSFER" && selected.providerReady ? (
+            {selected &&
+            selected.method !== "BANK_TRANSFER" &&
+            selected.providerReady &&
+            invoice.currency.toUpperCase() === "PKR" ? (
               <Button
                 type="button"
                 disabled={pending}
@@ -233,6 +236,14 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
               >
                 Continue to {PAYMENT_METHOD_LABELS[selected.method]}
               </Button>
+            ) : null}
+            {selected &&
+            selected.method !== "BANK_TRANSFER" &&
+            invoice.currency.toUpperCase() !== "PKR" ? (
+              <p className="text-xs text-muted-foreground">
+                JazzCash and EasyPaisa hosted checkout require a PKR invoice.
+                You can still submit a transaction ID for admin verification.
+              </p>
             ) : null}
 
             {selected ? (

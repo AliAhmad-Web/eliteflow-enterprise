@@ -202,13 +202,18 @@ export class PaymentsRepository {
     paidAmount: number,
     paymentStatus: "UNPAID" | "PENDING" | "PARTIALLY_PAID" | "PAID",
     markCommercialPaid: boolean,
+    currentCommercialStatus: string,
   ) {
     return prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         paidAmount,
         paymentStatus,
-        ...(markCommercialPaid ? { status: "PAID" } : {}),
+        ...(markCommercialPaid
+          ? { status: "PAID" as const }
+          : currentCommercialStatus === "PAID"
+            ? { status: "SENT" as const }
+            : {}),
       },
     });
   }
