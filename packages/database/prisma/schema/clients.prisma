@@ -27,6 +27,7 @@ model Client {
   projects    Project[]
   invoices    Invoice[]
   quotes      Quote[]
+  payments    Payment[]
   folders     Folder[]
   managedFiles ManagedFile[]
   fileShares  FileShare[]

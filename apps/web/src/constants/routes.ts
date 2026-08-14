@@ -21,6 +21,7 @@ export const ROUTES = {
   CUSTOMER_REQUESTS: "/customer-requests",
   QUOTES: "/quotes",
   QUOTES_NEW: "/quotes/new",
+  PAYMENTS: "/payments",
   INVOICES: "/invoices",
   REPORTS: "/reports",
   CALENDAR: "/calendar",
@@ -87,4 +88,8 @@ export function quoteNewFromProjectPath(projectId: string): string {
 
 export function invoiceDetailPath(id: string): string {
   return `${ROUTES.INVOICES}/${id}`;
+}
+
+export function paymentDetailPath(id: string): string {
+  return `${ROUTES.PAYMENTS}/${id}`;
 }

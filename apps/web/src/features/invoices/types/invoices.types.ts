@@ -22,6 +22,7 @@ export const INVOICE_STATUS_LABELS = {
 export const INVOICE_PAYMENT_STATUS_LABELS = {
   UNPAID: "Unpaid",
   PENDING: "Pending verification",
+  PARTIALLY_PAID: "Partially paid",
   PAID: "Paid",
   FAILED: "Failed",
   EXPIRED: "Expired",

@@ -186,6 +186,7 @@ export const INTEGRATIONS_API_PREFIX = `${API_PREFIX}/integrations` as const;
 export const WHITEBOARDS_API_PREFIX = `${API_PREFIX}/whiteboards` as const;
 export const CUSTOMER_REQUESTS_API_PREFIX = `${API_PREFIX}/customer-requests` as const;
 export const QUOTES_API_PREFIX = `${API_PREFIX}/quotes` as const;
+export const PAYMENTS_API_PREFIX = `${API_PREFIX}/payments` as const;
 
 // =============================================================================
 // Auth Error Codes (Authentication Architecture §10.7)

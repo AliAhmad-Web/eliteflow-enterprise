@@ -17,9 +17,10 @@ import {
   useHasPermission,
   useRole,
 } from "@/features/rbac/hooks/use-permissions";
+import { InvoicePayPanel } from "@/features/payments/components/invoice-pay-panel";
 import { ApiClientError } from "@/services/api/api-error";
 
-import { useDownloadInvoicePdf, useIssueInvoice, useReportInvoicePaymentNotice } from "../hooks/use-invoice-mutations";
+import { useDownloadInvoicePdf, useIssueInvoice } from "../hooks/use-invoice-mutations";
 import { useInvoice } from "../hooks/use-invoices";
 import {
   INVOICE_KIND_LABELS,
@@ -73,10 +74,8 @@ export function InvoiceDetailsPageContent() {
   const invoiceQuery = useInvoice(invoiceId);
   const pdfMutation = useDownloadInvoicePdf();
   const issueMutation = useIssueInvoice();
-  const paymentNoticeMutation = useReportInvoicePaymentNotice();
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
-  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
 
   const invoice = invoiceQuery.data;
 
@@ -313,63 +312,26 @@ export function InvoiceDetailsPageContent() {
               ) : null}
               <DetailItem label="Issue date" value={invoice.issueDate} />
               <DetailItem label="Due date" value={invoice.dueDate} />
-              <DetailItem label="Currency" value={invoice.currency} />
+              <DetailItem
+                label="Paid"
+                value={formatMoney(invoice.paidAmount ?? 0, invoice.currency)}
+              />
+              <DetailItem
+                label="Remaining"
+                value={formatMoney(
+                  invoice.remainingAmount ??
+                    Math.max(0, invoice.total - (invoice.paidAmount ?? 0)),
+                  invoice.currency,
+                )}
+              />
               <DetailItem label="Tax rate" value={`${invoice.taxRate}%`} />
             </CardContent>
           </Card>
 
           {isClient &&
           invoice.status !== "PAID" &&
-          invoice.status !== "CANCELLED" &&
-          invoice.paymentStatus !== "PAID" ? (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader>
-                <CardTitle className="text-base">Pay offline</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  Online card payment is not enabled. Please pay using your
-                  agreed bank transfer / check / offline method, then notify
-                  EliteFlow so finance can confirm and mark this invoice paid.
-                </p>
-                <p>
-                  Contact your EliteFlow administrator if you need payment
-                  instructions for{" "}
-                  <span className="font-medium text-foreground">
-                    {invoice.invoiceNumber}
-                  </span>
-                  .
-                </p>
-                {paymentNotice ? (
-                  <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400" role="status">
-                    {paymentNotice}
-                  </p>
-                ) : null}
-                {paymentNoticeMutation.error instanceof ApiClientError ? (
-                  <p className="text-sm text-destructive" role="alert">
-                    {paymentNoticeMutation.error.message}
-                  </p>
-                ) : null}
-                <Button
-                  type="button"
-                  disabled={paymentNoticeMutation.isPending}
-                  onClick={() => {
-                    void paymentNoticeMutation
-                      .mutateAsync({ id: invoice.id })
-                      .then(() => {
-                        setPaymentNotice(
-                          "Payment notice sent. EliteFlow will verify your offline payment.",
-                        );
-                      })
-                      .catch(() => undefined);
-                  }}
-                >
-                  {paymentNoticeMutation.isPending
-                    ? "Sending…"
-                    : "I've paid — notify EliteFlow"}
-                </Button>
-              </CardContent>
-            </Card>
+          invoice.status !== "CANCELLED" ? (
+            <InvoicePayPanel invoice={invoice} />
           ) : null}
         </div>
       </div>

@@ -30,6 +30,7 @@ export {
   WHITEBOARDS_API_PREFIX,
   CUSTOMER_REQUESTS_API_PREFIX,
   QUOTES_API_PREFIX,
+  PAYMENTS_API_PREFIX,
   AUTH_COOKIES,
   AUTH_ERROR_CODES,
   AUTH_HEADERS,
@@ -221,6 +222,12 @@ export type {
   Quote,
   QuoteListResponse,
 } from "./types/quotes.types.js";
+
+// Types — Payments (Phase 4 Pakistan execution)
+export type {
+  Payment,
+  PaymentListResponse,
+} from "./types/payments.types.js";
 
 // Types — AI
 export type {
@@ -1813,3 +1820,54 @@ export {
 } from "./utils/payment-schedule.js";
 
 export type { CalculatedScheduleItem } from "./utils/payment-schedule.js";
+
+// Schemas — Payments (Phase 4 Pakistan execution)
+export {
+  IN_FLIGHT_PAYMENT_STATUSES,
+  PAKISTAN_PAYMENT_METHODS,
+  PAYMENT_EXECUTION_STATUSES,
+  PAYMENT_REFUND_STATUSES,
+  PAYMENT_SETTLED_STATUSES,
+  PAYMENT_SORT_FIELDS,
+  PAYMENT_TRANSITIONS,
+  bankTransferSubmitSchema,
+  canTransitionPaymentStatus,
+  createPaymentRefundSchema,
+  decidePaymentRefundSchema,
+  hostedCheckoutSchema,
+  initiateProviderPaymentSchema,
+  invoicePaymentStatusFromTotals,
+  listPaymentsQuerySchema,
+  pakistanPaymentMethodSchema,
+  paymentExecutionStatusSchema,
+  paymentIdParamsSchema,
+  paymentMethodConfigSchema,
+  paymentMethodParamsSchema,
+  paymentRefundSchema,
+  paymentRefundStatusSchema,
+  paymentSchema,
+  rejectPaymentSchema,
+  roundMoney,
+  updatePaymentMethodConfigSchema,
+  verifyPaymentSchema,
+  walletPaymentNoticeSchema,
+} from "./schemas/payments.schema.js";
+
+export type {
+  BankTransferSubmitInput,
+  CreatePaymentRefundInput,
+  DecidePaymentRefundInput,
+  HostedCheckoutDto,
+  InitiateProviderPaymentInput,
+  ListPaymentsQueryInput,
+  PakistanPaymentMethodValue,
+  PaymentDto,
+  PaymentExecutionStatusValue,
+  PaymentMethodConfigDto,
+  PaymentRefundDto,
+  PaymentRefundStatusValue,
+  RejectPaymentInput,
+  UpdatePaymentMethodConfigInput,
+  VerifyPaymentInput,
+  WalletPaymentNoticeInput,
+} from "./schemas/payments.schema.js";

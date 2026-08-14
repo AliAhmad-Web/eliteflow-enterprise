@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Banknote,
   BarChart3,
   Bell,
   Bot,
@@ -103,6 +104,13 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         permission: PERMISSIONS.QUOTES_READ,
         roles: [UserRole.CLIENT],
       },
+      {
+        title: "Payments",
+        href: ROUTES.PAYMENTS,
+        icon: Banknote,
+        permission: PERMISSIONS.PAYMENTS_READ,
+        roles: [UserRole.CLIENT],
+      },
     ],
   },
   {
@@ -146,6 +154,13 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.QUOTES,
         icon: ScrollText,
         permission: PERMISSIONS.QUOTES_READ,
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN],
+      },
+      {
+        title: "Payments",
+        href: ROUTES.PAYMENTS,
+        icon: Banknote,
+        permission: PERMISSIONS.PAYMENTS_READ,
         roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN],
       },
       {

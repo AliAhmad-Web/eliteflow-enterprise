@@ -46,6 +46,7 @@ model Quote {
   items           QuoteItem[]
   paymentSchedule PaymentScheduleItem[]
   invoices        Invoice[]
+  payments        Payment[]
 
   @@index([clientId, status])
   @@index([projectId])
@@ -88,8 +89,9 @@ model PaymentScheduleItem {
   createdAt DateTime            @default(now()) @map("created_at")
   updatedAt DateTime            @updatedAt @map("updated_at")
 
-  quote   Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  invoice Invoice?
+  quote    Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  invoice  Invoice?
+  payments Payment[]
 
   @@index([quoteId, sortOrder])
   @@map("payment_schedule_items")

@@ -144,6 +144,22 @@ export const LazyQuoteFormPage = dynamic(
   { loading: () => null },
 );
 
+export const LazyPaymentsPage = dynamic(
+  () =>
+    import("@/features/payments/components/payments-page-content").then(
+      (m) => m.PaymentsPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyPaymentDetailsPage = dynamic(
+  () =>
+    import("@/features/payments/components/payment-details-page-content").then(
+      (m) => m.PaymentDetailsPageContent,
+    ),
+  { loading: () => null },
+);
+
 export const LazyTeamPage = dynamic(
   () =>
     import("@/features/team/components/team-page-content").then(

@@ -61,6 +61,7 @@ model ManagedFile {
   versions  FileVersion[]
   shares    FileShare[]
   activities FileActivity[]
+  paymentProofs Payment[] @relation("PaymentProof")
 
   @@index([folderId, deletedAt])
   @@index([projectId])

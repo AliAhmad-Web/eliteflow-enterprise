@@ -146,12 +146,47 @@ enum InvoiceStatus {
 enum InvoicePaymentStatus {
   UNPAID
   PENDING
+  PARTIALLY_PAID
   PAID
   FAILED
   EXPIRED
   REFUNDED
 
   @@map("invoice_payment_status")
+}
+
+/// Pakistan launch payment methods (Phase 4). No international gateways.
+enum PakistanPaymentMethod {
+  BANK_TRANSFER
+  JAZZCASH
+  EASYPAISA
+
+  @@map("pakistan_payment_method")
+}
+
+/// Payment attempt lifecycle. Customer cannot set VERIFIED or PAID.
+enum PaymentExecutionStatus {
+  INITIATED
+  PENDING
+  PENDING_VERIFICATION
+  VERIFIED
+  PAID
+  FAILED
+  EXPIRED
+  REJECTED
+  REFUNDED
+
+  @@map("payment_execution_status")
+}
+
+enum PaymentRefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  FAILED
+
+  @@map("payment_refund_status")
 }
 
 /// Invoice commercial kind. STANDARD preserves pre-Phase-3 invoices.

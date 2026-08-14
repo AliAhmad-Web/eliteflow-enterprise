@@ -48,6 +48,12 @@ export function toInvoiceDto(invoice: InvoiceWithRelations): InvoiceDto {
     subtotal: toMoney(invoice.subtotal),
     taxAmount: toMoney(invoice.taxAmount),
     total: toMoney(invoice.total),
+    paidAmount: toMoney(invoice.paidAmount),
+    remainingAmount: Math.max(
+      0,
+      Math.round((toMoney(invoice.total) - toMoney(invoice.paidAmount)) * 100) /
+        100,
+    ),
     notes: invoice.notes,
     createdById: invoice.createdById,
     updatedById: invoice.updatedById,

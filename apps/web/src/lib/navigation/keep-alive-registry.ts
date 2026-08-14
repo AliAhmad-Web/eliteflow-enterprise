@@ -47,6 +47,10 @@ export const KEEP_ALIVE_LOADERS: Record<string, KeepAliveLoader> = {
     import("@/features/quotes/components/quotes-page-content").then((m) => ({
       default: m.QuotesPageContent,
     })),
+  [ROUTES.PAYMENTS]: () =>
+    import("@/features/payments/components/payments-page-content").then(
+      (m) => ({ default: m.PaymentsPageContent }),
+    ),
   [ROUTES.REPORTS]: () =>
     import("@/features/reports/components/reports-page-content").then((m) => ({
       default: m.ReportsPageContent,

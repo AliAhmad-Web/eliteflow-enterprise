@@ -61,6 +61,20 @@ async function cleanup() {
   const quoteIds = quotes.map((q) => q.id);
 
   if (quoteIds.length) {
+    const quotePayments = await prisma.payment.findMany({
+      where: { quoteId: { in: quoteIds } },
+      select: { id: true },
+    });
+    const paymentIds = quotePayments.map((item) => item.id);
+    if (paymentIds.length) {
+      await prisma.paymentWebhookEvent.deleteMany({
+        where: { paymentId: { in: paymentIds } },
+      });
+      await prisma.paymentRefund.deleteMany({
+        where: { paymentId: { in: paymentIds } },
+      });
+      await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
+    }
     await prisma.invoice.deleteMany({ where: { quoteId: { in: quoteIds } } });
     await prisma.paymentScheduleItem.deleteMany({
       where: { quoteId: { in: quoteIds } },

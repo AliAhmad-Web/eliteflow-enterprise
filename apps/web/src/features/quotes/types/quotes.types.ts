@@ -25,6 +25,7 @@ export const QUOTE_STATUS_LABELS: Record<QuoteStatusValue, string> = {
 export const PAYMENT_STATUS_LABELS = {
   UNPAID: "Unpaid",
   PENDING: "Pending",
+  PARTIALLY_PAID: "Partially paid",
   PAID: "Paid",
   FAILED: "Failed",
   EXPIRED: "Expired",

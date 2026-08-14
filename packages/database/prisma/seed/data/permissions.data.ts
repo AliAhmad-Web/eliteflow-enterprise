@@ -200,6 +200,38 @@ export const PERMISSIONS: PermissionSeedDefinition[] = [
     description: "Approve or reject quotes assigned to the customer",
   },
 
+  // Payments (Phase 4 Pakistan execution)
+  {
+    key: "payments:read",
+    resource: "payments",
+    action: "read",
+    description: "View payments, schedules, and verification status",
+  },
+  {
+    key: "payments:pay",
+    resource: "payments",
+    action: "pay",
+    description: "Initiate or submit a customer payment",
+  },
+  {
+    key: "payments:verify",
+    resource: "payments",
+    action: "verify",
+    description: "Verify or reject customer payments",
+  },
+  {
+    key: "payments:configure",
+    resource: "payments",
+    action: "configure",
+    description: "Enable payment methods and bank details",
+  },
+  {
+    key: "payments:refund",
+    resource: "payments",
+    action: "refund",
+    description: "Record and authorize payment refunds",
+  },
+
   // Reports
   {
     key: "reports:read",

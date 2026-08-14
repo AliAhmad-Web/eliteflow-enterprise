@@ -23,6 +23,7 @@ export const INVOICE_COMMERCIAL_MUTATION_STATUSES = [
 export const INVOICE_PAYMENT_STATUSES = [
   "UNPAID",
   "PENDING",
+  "PARTIALLY_PAID",
   "PAID",
   "FAILED",
   "EXPIRED",
@@ -280,6 +281,8 @@ export const invoiceSchema = z.object({
   subtotal: z.number(),
   taxAmount: z.number(),
   total: z.number(),
+  paidAmount: z.number().optional(),
+  remainingAmount: z.number().optional(),
   notes: z.string().nullable(),
   createdById: uuidSchema.nullable(),
   updatedById: uuidSchema.nullable(),

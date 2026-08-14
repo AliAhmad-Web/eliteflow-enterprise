@@ -26,6 +26,7 @@ model Project {
   tasks       Task[]
   invoices    Invoice[]
   quotes      Quote[]
+  payments    Payment[]
   folders     Folder[]
   managedFiles ManagedFile[]
   calendarEvents CalendarEvent[]

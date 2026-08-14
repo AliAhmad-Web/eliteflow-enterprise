@@ -23,6 +23,7 @@ import { billingRouter } from "../modules/billing/index.js";
 import { publicApiRouter } from "../modules/public-api/index.js";
 import { customerRequestsRouter } from "../modules/customer-requests/index.js";
 import { quotesRouter } from "../modules/quotes/index.js";
+import { paymentsRouter } from "../modules/payments/index.js";
 import { buildSaasReadinessReport } from "../shared/services/saas-health.helpers.js";
 
 const apiRouter = Router();
@@ -33,6 +34,7 @@ apiRouter.use("/projects", projectsRouter);
 apiRouter.use("/tasks", tasksRouter);
 apiRouter.use("/customer-requests", customerRequestsRouter);
 apiRouter.use("/quotes", quotesRouter);
+apiRouter.use("/payments", paymentsRouter);
 apiRouter.use("/invoices", invoicesRouter);
 apiRouter.use("/billing", billingRouter);
 apiRouter.use("/public", publicApiRouter);

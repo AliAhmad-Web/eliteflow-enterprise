@@ -1,0 +1,118 @@
+// =============================================================================
+// Payments — Pakistan launch execution (Bank Transfer, JazzCash, EasyPaisa)
+// =============================================================================
+
+/// Admin-configurable Pakistan payment method. Secrets stay in environment.
+model PaymentMethodConfig {
+  method            PakistanPaymentMethod @id
+  enabled           Boolean               @default(true)
+  displayName       String                @map("display_name") @db.VarChar(80)
+  instructions      String?               @db.Text
+  bankName          String?               @map("bank_name") @db.VarChar(120)
+  accountTitle      String?               @map("account_title") @db.VarChar(200)
+  accountNumber     String?               @map("account_number") @db.VarChar(64)
+  iban              String?               @db.VarChar(64)
+  /// Public merchant/store identifier only — never a secret.
+  merchantPublicId  String?               @map("merchant_public_id") @db.VarChar(80)
+  updatedById       String?               @map("updated_by_id") @db.Uuid
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  updatedBy User? @relation("PaymentMethodConfigUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("payment_method_configs")
+}
+
+/// Customer payment against an invoice. PAID/VERIFIED is server-derived only.
+model Payment {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  paymentNumber         String                 @unique @map("payment_number") @db.VarChar(40)
+  invoiceId             String                 @map("invoice_id") @db.Uuid
+  clientId              String                 @map("client_id") @db.Uuid
+  projectId             String?                @map("project_id") @db.Uuid
+  quoteId               String?                @map("quote_id") @db.Uuid
+  paymentScheduleItemId String?                @map("payment_schedule_item_id") @db.Uuid
+  method                PakistanPaymentMethod
+  amount                Decimal                @db.Decimal(14, 2)
+  currency              String                 @db.VarChar(3)
+  status                PaymentExecutionStatus @default(INITIATED)
+  providerTxnId         String?                @map("provider_txn_id") @db.VarChar(120)
+  customerReference     String?                @map("customer_reference") @db.VarChar(120)
+  proofFileId           String?                @map("proof_file_id") @db.Uuid
+  paidAtCustomer        DateTime?              @map("paid_at_customer") @db.Date
+  notes                 String?                @db.Text
+  failureReason         String?                @map("failure_reason") @db.VarChar(500)
+  rejectionReason       String?                @map("rejection_reason") @db.VarChar(500)
+  verificationNotes     String?                @map("verification_notes") @db.Text
+  /// Sanitized provider fields (no secrets).
+  providerMetadata      Json?                  @map("provider_metadata")
+  submittedById         String?                @map("submitted_by_id") @db.Uuid
+  verifiedById          String?                @map("verified_by_id") @db.Uuid
+  submittedAt           DateTime?              @map("submitted_at")
+  verifiedAt            DateTime?              @map("verified_at")
+  paidAt                DateTime?              @map("paid_at")
+  expiresAt             DateTime?              @map("expires_at")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+
+  invoice             Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  client              Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  project             Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  quote               Quote?               @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  paymentScheduleItem PaymentScheduleItem? @relation(fields: [paymentScheduleItemId], references: [id], onDelete: SetNull)
+  proofFile           ManagedFile?         @relation("PaymentProof", fields: [proofFileId], references: [id], onDelete: SetNull)
+  submittedBy         User?                @relation("PaymentSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  verifiedBy          User?                @relation("PaymentVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  refunds             PaymentRefund[]
+
+  @@unique([providerTxnId])
+  @@index([invoiceId, status])
+  @@index([clientId, status])
+  @@index([projectId])
+  @@index([quoteId])
+  @@index([method, status])
+  @@index([status, createdAt])
+  @@index([submittedById])
+  @@index([verifiedById])
+  @@map("payments")
+}
+
+model PaymentRefund {
+  id              String              @id @default(uuid()) @db.Uuid
+  refundNumber    String              @unique @map("refund_number") @db.VarChar(40)
+  paymentId       String              @map("payment_id") @db.Uuid
+  amount          Decimal             @db.Decimal(14, 2)
+  reason          String              @db.VarChar(500)
+  status          PaymentRefundStatus @default(PENDING)
+  notes           String?             @db.Text
+  requestedById   String?             @map("requested_by_id") @db.Uuid
+  authorizedById  String?             @map("authorized_by_id") @db.Uuid
+  authorizedAt    DateTime?           @map("authorized_at")
+  completedAt     DateTime?           @map("completed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  payment      Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  requestedBy  User?   @relation("PaymentRefundRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  authorizedBy User?   @relation("PaymentRefundAuthorizedBy", fields: [authorizedById], references: [id], onDelete: SetNull)
+
+  @@index([paymentId, status])
+  @@index([status, createdAt])
+  @@map("payment_refunds")
+}
+
+/// Idempotency ledger for JazzCash / EasyPaisa callbacks.
+model PaymentWebhookEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  provider    PakistanPaymentMethod
+  eventKey    String   @unique @map("event_key") @db.VarChar(255)
+  paymentId   String?  @map("payment_id") @db.Uuid
+  accepted    Boolean  @default(false)
+  reason      String?  @db.VarChar(200)
+  payloadHash String?  @map("payload_hash") @db.VarChar(128)
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@index([provider, processedAt])
+  @@index([paymentId])
+  @@map("payment_webhook_events")
+}
