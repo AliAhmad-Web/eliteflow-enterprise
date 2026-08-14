@@ -39,6 +39,7 @@ import {
 } from "./customer-requests.repository.js";
 import {
   toCustomerRequestDto,
+  type ClarificationHistoryEntry,
   type CustomerRequestWithRelations,
 } from "./customer-requests.types.js";
 
@@ -62,6 +63,54 @@ export type CustomerRequestListResponse = {
     timestamp: string;
   };
 };
+
+function parseHistory(
+  value: CustomerRequestWithRelations["clarificationHistory"],
+): ClarificationHistoryEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const entries: ClarificationHistoryEntry[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const record = row as Record<string, unknown>;
+    const from =
+      record.from === "admin" || record.from === "customer"
+        ? record.from
+        : null;
+    const message =
+      typeof record.message === "string" ? record.message.trim() : "";
+    const at = typeof record.at === "string" ? record.at : "";
+    if (!from || !message || !at) continue;
+    entries.push({ at, from, message });
+  }
+  return entries;
+}
+
+function appendHistory(
+  existing: CustomerRequestWithRelations["clarificationHistory"],
+  entry: ClarificationHistoryEntry,
+): ClarificationHistoryEntry[] {
+  return [...parseHistory(existing), entry];
+}
+
+function upsertCustomerReply(
+  existing: CustomerRequestWithRelations["clarificationHistory"],
+  message: string,
+): ClarificationHistoryEntry[] {
+  const history = parseHistory(existing);
+  const entry: ClarificationHistoryEntry = {
+    at: new Date().toISOString(),
+    from: "customer",
+    message,
+  };
+  const last = history[history.length - 1];
+  if (last?.from === "customer") {
+    return [...history.slice(0, -1), entry];
+  }
+  return [...history, entry];
+}
 
 const EDITABLE_STATUSES = new Set<CustomerRequestStatusValue>([
   "DRAFT",
@@ -260,6 +309,16 @@ export class CustomerRequestsService {
       );
     }
 
+    if (input.clarificationResponse !== undefined) {
+      if (existing.status !== "CLARIFICATION_REQUESTED") {
+        throw new CustomerRequestsError(
+          "A response to admin can only be saved when clarification is requested",
+          400,
+          CUSTOMER_REQUESTS_ERROR_CODES.INVALID_TRANSITION,
+        );
+      }
+    }
+
     if (input.targetProjectId) {
       if (!clientId) {
         throw new CustomerRequestsError(
@@ -277,13 +336,27 @@ export class CustomerRequestsService {
       await this.assertTargetProject(input.targetProjectId, clientId);
     }
 
-    const updated = await customerRequestsRepository.update(id, input);
+    const reply =
+      typeof input.clarificationResponse === "string"
+        ? input.clarificationResponse.trim()
+        : "";
+    const clarificationHistory =
+      existing.status === "CLARIFICATION_REQUESTED" && reply
+        ? upsertCustomerReply(existing.clarificationHistory, reply)
+        : undefined;
+
+    const updated = await customerRequestsRepository.update(id, input, {
+      clarificationHistory,
+    });
 
     await logCustomerRequestAuditEvent({
       userId: actor.userId,
       action: CUSTOMER_REQUEST_AUDIT_ACTIONS.UPDATE,
       resourceId: id,
-      metadata: { fields: Object.keys(input) },
+      metadata: {
+        fields: Object.keys(input),
+        clarificationReply: Boolean(reply),
+      },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
@@ -315,6 +388,7 @@ export class CustomerRequestsService {
       metadata: {
         fromStatus: existing.status,
         onboardingUnlinked: !existing.clientId && !actor.companyId,
+        hasClarificationResponse: Boolean(existing.clarificationResponse),
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
@@ -444,9 +518,17 @@ export class CustomerRequestsService {
       "UNDER_REVIEW",
     ]);
 
+    const clarificationHistory = appendHistory(existing.clarificationHistory, {
+      at: new Date().toISOString(),
+      from: "admin",
+      message: input.message.trim(),
+    });
+
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "CLARIFICATION_REQUESTED",
       clarificationMessage: input.message,
+      clarificationResponse: null,
+      clarificationHistory,
       staffNotes: input.staffNotes,
       reviewedById: actor.userId,
       reviewedAt: new Date(),

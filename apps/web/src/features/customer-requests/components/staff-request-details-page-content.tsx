@@ -39,6 +39,7 @@ import {
   CUSTOMER_REQUEST_PRIORITY_LABELS,
   CUSTOMER_REQUEST_TYPE_LABELS,
 } from "../types/query-keys";
+import { ClarificationHistoryList } from "./clarification-history";
 import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
 
 const selectClassName = FORM_SELECT_CLASS_MD;
@@ -265,6 +266,35 @@ export function StaffRequestDetailsPageContent() {
             </Card>
           ) : null}
 
+          {request.clarificationResponse ? (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="text-base">Customer response</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="whitespace-pre-wrap text-sm">
+                  {request.clarificationResponse}
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {request.clarificationHistory &&
+          request.clarificationHistory.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Clarification history
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ClarificationHistoryList
+                  history={request.clarificationHistory}
+                />
+              </CardContent>
+            </Card>
+          ) : null}
+
           {request.rejectionReason ? (
             <Card className="border-destructive/30 bg-destructive/5">
               <CardHeader>
@@ -299,8 +329,7 @@ export function StaffRequestDetailsPageContent() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {(request.status === "SUBMITTED" ||
-                    request.status === "CLARIFICATION_REQUESTED") && (
+                  {request.status === "SUBMITTED" && (
                     <Button
                       type="button"
                       variant="secondary"

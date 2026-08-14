@@ -161,6 +161,13 @@ export const updateCustomerRequestSchema = z
     additionalNotes: optionalText("Additional notes", 5000)
       .optional()
       .nullable(),
+    /**
+     * Customer reply to the current admin clarification.
+     * Only persisted when the request is CLARIFICATION_REQUESTED.
+     */
+    clarificationResponse: optionalText("Response to Admin", 5000)
+      .optional()
+      .nullable(),
     targetProjectId: z
       .string()
       .trim()
@@ -282,6 +289,16 @@ export const customerRequestSchema = z.object({
   additionalNotes: z.string().nullable(),
   staffNotes: z.string().nullable(),
   clarificationMessage: z.string().nullable(),
+  clarificationResponse: z.string().nullable(),
+  clarificationHistory: z
+    .array(
+      z.object({
+        at: z.string(),
+        from: z.enum(["admin", "customer"]),
+        message: z.string(),
+      }),
+    )
+    .nullable(),
   rejectionReason: z.string().nullable(),
   targetProjectId: uuidSchema.nullable(),
   targetProjectName: z.string().nullable(),

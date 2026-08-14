@@ -224,6 +224,9 @@ export class CustomerRequestsRepository {
   async update(
     id: string,
     input: UpdateCustomerRequestInput,
+    extras?: {
+      clarificationHistory?: Prisma.InputJsonValue;
+    },
   ): Promise<CustomerRequestWithRelations> {
     const data: Record<string, unknown> = {};
 
@@ -249,6 +252,13 @@ export class CustomerRequestsRepository {
     if (input.targetProjectId !== undefined) {
       data.targetProjectId = emptyToNull(input.targetProjectId) ?? null;
     }
+    if (input.clarificationResponse !== undefined) {
+      data.clarificationResponse =
+        emptyToNull(input.clarificationResponse) ?? null;
+    }
+    if (extras?.clarificationHistory !== undefined) {
+      data.clarificationHistory = extras.clarificationHistory;
+    }
 
     const updated = await prisma.customerRequest.update({
       where: { id },
@@ -266,6 +276,8 @@ export class CustomerRequestsRepository {
       submittedAt?: Date | null;
       staffNotes?: string | null;
       clarificationMessage?: string | null;
+      clarificationResponse?: string | null;
+      clarificationHistory?: Prisma.InputJsonValue;
       rejectionReason?: string | null;
       reviewedById?: string | null;
       reviewedAt?: Date | null;
@@ -288,6 +300,15 @@ export class CustomerRequestsRepository {
               clarificationMessage:
                 emptyToNull(data.clarificationMessage) ?? null,
             }
+          : {}),
+        ...(data.clarificationResponse !== undefined
+          ? {
+              clarificationResponse:
+                emptyToNull(data.clarificationResponse) ?? null,
+            }
+          : {}),
+        ...(data.clarificationHistory !== undefined
+          ? { clarificationHistory: data.clarificationHistory }
           : {}),
         ...(data.rejectionReason !== undefined
           ? { rejectionReason: emptyToNull(data.rejectionReason) ?? null }

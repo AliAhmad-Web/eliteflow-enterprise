@@ -18,6 +18,12 @@ export type CustomerRequestAttachmentRecord = {
   createdAt: Date;
 };
 
+export type ClarificationHistoryEntry = {
+  at: string;
+  from: "admin" | "customer";
+  message: string;
+};
+
 export type CustomerRequestWithRelations = {
   id: string;
   clientId: string | null;
@@ -34,6 +40,8 @@ export type CustomerRequestWithRelations = {
   additionalNotes: string | null;
   staffNotes: string | null;
   clarificationMessage: string | null;
+  clarificationResponse: string | null;
+  clarificationHistory: Prisma.JsonValue | null;
   rejectionReason: string | null;
   targetProjectId: string | null;
   convertedProjectId: string | null;
@@ -105,6 +113,30 @@ function toAttachmentDto(
   };
 }
 
+function parseClarificationHistory(
+  value: Prisma.JsonValue | null | undefined,
+): ClarificationHistoryEntry[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const entries: ClarificationHistoryEntry[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const record = row as Record<string, unknown>;
+    const from = record.from === "admin" || record.from === "customer"
+      ? record.from
+      : null;
+    const message =
+      typeof record.message === "string" ? record.message.trim() : "";
+    const at = typeof record.at === "string" ? record.at : "";
+    if (!from || !message || !at) continue;
+    entries.push({ at, from, message });
+  }
+
+  return entries.length > 0 ? entries : [];
+}
+
 export function toCustomerRequestDto(
   request: CustomerRequestWithRelations,
 ): CustomerRequestDto {
@@ -127,6 +159,8 @@ export function toCustomerRequestDto(
     additionalNotes: request.additionalNotes,
     staffNotes: request.staffNotes,
     clarificationMessage: request.clarificationMessage,
+    clarificationResponse: request.clarificationResponse,
+    clarificationHistory: parseClarificationHistory(request.clarificationHistory),
     rejectionReason: request.rejectionReason,
     targetProjectId: request.targetProjectId,
     targetProjectName: request.targetProject?.name ?? null,

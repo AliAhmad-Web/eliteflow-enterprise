@@ -9,13 +9,15 @@ import { PERMISSIONS } from "@enterprise/shared";
 import { ArrowLeft, Send, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ROUTES } from "@/constants/routes";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
@@ -31,6 +33,7 @@ import {
   CUSTOMER_REQUEST_PRIORITY_LABELS,
   CUSTOMER_REQUEST_TYPE_LABELS,
 } from "../types/query-keys";
+import { ClarificationHistoryList } from "./clarification-history";
 import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
 import { RequestForm } from "./request-form";
 
@@ -91,8 +94,13 @@ export function RequestDetailsPageContent() {
   const withdrawMutation = useWithdrawCustomerRequest();
   const [editing, setEditing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState("");
 
   const request = requestQuery.data;
+
+  useEffect(() => {
+    setResponseText(request?.clarificationResponse ?? "");
+  }, [request?.id, request?.clarificationResponse]);
 
   const handleUpdate = async (values: CreateCustomerRequestInput) => {
     if (!requestId) return;
@@ -121,6 +129,43 @@ export function RequestDetailsPageContent() {
     if (!requestId) return;
     setActionError(null);
     try {
+      await submitMutation.mutateAsync(requestId);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
+
+  const saveClarificationResponse = async () => {
+    if (!requestId) return false;
+    const reply = responseText.trim();
+    if (!reply) {
+      setActionError("Write your response...");
+      return false;
+    }
+    await updateMutation.mutateAsync({
+      id: requestId,
+      input: { clarificationResponse: reply },
+    });
+    return true;
+  };
+
+  const handleSaveResponse = async () => {
+    if (!requestId) return;
+    setActionError(null);
+    try {
+      const saved = await saveClarificationResponse();
+      if (!saved) return;
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    }
+  };
+
+  const handleResubmitWithResponse = async () => {
+    if (!requestId) return;
+    setActionError(null);
+    try {
+      const saved = await saveClarificationResponse();
+      if (!saved) return;
       await submitMutation.mutateAsync(requestId);
     } catch (error) {
       setActionError(getApiErrorMessage(error));
@@ -193,12 +238,13 @@ export function RequestDetailsPageContent() {
               Edit
             </Button>
           ) : null}
-          {canCreate && canSubmitRequest(request) && !editing ? (
+          {canCreate &&
+          canSubmitRequest(request) &&
+          request.status !== "CLARIFICATION_REQUESTED" &&
+          !editing ? (
             <Button type="button" disabled={busy} onClick={() => void handleSubmit()}>
               <Send className="mr-2 size-4" aria-hidden />
-              {request.status === "CLARIFICATION_REQUESTED"
-                ? "Resubmit"
-                : "Submit"}
+              Submit
             </Button>
           ) : null}
           {canCreate && canWithdrawRequest(request) ? (
@@ -233,8 +279,71 @@ export function RequestDetailsPageContent() {
               {request.clarificationMessage}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Update your request and resubmit when ready.
+              Reply below, update your request if needed, then resubmit.
             </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {request.clarificationHistory &&
+      request.clarificationHistory.length > 0 &&
+      request.status !== "CLARIFICATION_REQUESTED" ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Clarification history</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ClarificationHistoryList history={request.clarificationHistory} />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {canCreate && request.status === "CLARIFICATION_REQUESTED" ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Response to Admin</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="clarification-response">Write your response</Label>
+              <Textarea
+                id="clarification-response"
+                rows={5}
+                value={responseText}
+                onChange={(event) => setResponseText(event.target.value)}
+                placeholder="Write your response..."
+                disabled={busy || editing}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || editing}
+                onClick={() => void handleSaveResponse()}
+              >
+                Update Request
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || editing}
+                onClick={() => void handleResubmitWithResponse()}
+              >
+                <Send className="mr-2 size-4" aria-hidden />
+                Resubmit Request
+              </Button>
+            </div>
+            {request.clarificationHistory &&
+            request.clarificationHistory.length > 0 ? (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Previous clarification
+                </p>
+                <ClarificationHistoryList
+                  history={request.clarificationHistory}
+                />
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

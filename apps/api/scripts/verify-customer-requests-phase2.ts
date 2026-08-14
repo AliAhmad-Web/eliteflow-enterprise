@@ -194,6 +194,17 @@ async function main() {
   assert.equal(draft.status, "DRAFT");
   assert.equal(draft.clientId, clientA.companyId);
 
+  await expectError(
+    () =>
+      customerRequestsService.update(
+        draft.id,
+        { clarificationResponse: "Too early" },
+        clientA,
+      ),
+    CUSTOMER_REQUESTS_ERROR_CODES.INVALID_TRANSITION,
+    "draft clarification reply",
+  );
+
   const submitted = await customerRequestsService.submit(draft.id, clientA);
   assert.equal(submitted.status, "SUBMITTED");
   console.log("[phase2] create/submit OK");
@@ -267,16 +278,81 @@ async function main() {
     admin,
   );
   assert.equal(clarified.status, "CLARIFICATION_REQUESTED");
+  assert.equal(clarified.clarificationMessage, "Need hosting preference");
+  assert.equal(clarified.clarificationResponse, null);
+  assert.ok(
+    (clarified.clarificationHistory ?? []).some(
+      (entry) =>
+        entry.from === "admin" && entry.message.includes("hosting preference"),
+    ),
+    "admin clarification should be stored in history",
+  );
+
+  await expectError(
+    () =>
+      customerRequestsService.update(
+        draft.id,
+        { clarificationResponse: "Hacked reply" },
+        clientB,
+      ),
+    CUSTOMER_REQUESTS_ERROR_CODES.NOT_FOUND,
+    "IDOR clarification reply",
+  );
 
   const updated = await customerRequestsService.update(
     draft.id,
-    { additionalNotes: "Prefer Vercel hosting" },
+    {
+      additionalNotes: "Prefer Vercel hosting",
+      clarificationResponse:
+        "Yes, we can increase the budget to $800. Please proceed.",
+    },
     clientA,
   );
   assert.equal(updated.additionalNotes, "Prefer Vercel hosting");
+  assert.equal(
+    updated.clarificationResponse,
+    "Yes, we can increase the budget to $800. Please proceed.",
+  );
+  assert.equal(updated.clarificationMessage, "Need hosting preference");
+  assert.ok(
+    (updated.clarificationHistory ?? []).some(
+      (entry) =>
+        entry.from === "admin" && entry.message.includes("hosting preference"),
+    ),
+    "previous admin clarification must remain in history",
+  );
+  assert.ok(
+    (updated.clarificationHistory ?? []).some(
+      (entry) =>
+        entry.from === "customer" && entry.message.includes("Please proceed"),
+    ),
+    "customer reply should be stored in history",
+  );
 
   const resubmitted = await customerRequestsService.submit(draft.id, clientA);
   assert.equal(resubmitted.status, "SUBMITTED");
+  assert.equal(
+    resubmitted.clarificationResponse,
+    "Yes, we can increase the budget to $800. Please proceed.",
+  );
+
+  const adminView = await customerRequestsService.getById(draft.id, admin);
+  assert.equal(
+    adminView.clarificationResponse,
+    "Yes, we can increase the budget to $800. Please proceed.",
+  );
+  assert.equal(adminView.clarificationMessage, "Need hosting preference");
+  assert.ok(
+    (adminView.clarificationHistory ?? []).some(
+      (entry) => entry.from === "admin",
+    ),
+  );
+  assert.ok(
+    (adminView.clarificationHistory ?? []).some(
+      (entry) => entry.from === "customer",
+    ),
+  );
+  console.log("[phase2] customer clarification reply OK");
 
   await customerRequestsService.startReview(draft.id, {}, admin);
   const approved = await customerRequestsService.approve(

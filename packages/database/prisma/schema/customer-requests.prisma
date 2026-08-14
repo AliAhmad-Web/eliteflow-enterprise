@@ -21,6 +21,10 @@ model CustomerRequest {
   additionalNotes      String?                  @map("additional_notes") @db.Text
   staffNotes           String?                  @map("staff_notes") @db.Text
   clarificationMessage String?                  @map("clarification_message") @db.Text
+  /// Customer reply to the latest admin clarification (does not replace clarificationMessage).
+  clarificationResponse String?                 @map("clarification_response") @db.Text
+  /// Append-only JSON history of clarification rounds: { at, from, message }.
+  clarificationHistory Json?                    @map("clarification_history")
   rejectionReason      String?                  @map("rejection_reason") @db.Text
   /// Optional company-owned project the customer wants a NEW_TASK against.
   targetProjectId      String?                  @map("target_project_id") @db.Uuid
