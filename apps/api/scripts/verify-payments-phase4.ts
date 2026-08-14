@@ -453,6 +453,22 @@ async function main() {
   const replay = await paymentsService.handleJazzCashCallback(successFields);
   assert.equal(replay.reason, "replay");
 
+  const declinedAfterPaid = {
+    ...hosted,
+    pp_ResponseCode: "101",
+    pp_ResponseMessage: "Declined after success",
+  };
+  declinedAfterPaid.pp_SecureHash = buildJazzCashSecureHash(
+    declinedAfterPaid,
+    credentials.integritySalt,
+  );
+  const ignoredDecline = await paymentsService.handleJazzCashCallback(
+    declinedAfterPaid,
+  );
+  assert.equal(ignoredDecline.reason, "already_settled");
+  const stillPaid = await invoicesService.getById(pkr.invoice.id, admin);
+  assert.equal(stillPaid.paymentStatus, "PAID");
+
   const badHash = { ...successFields, pp_SecureHash: "DEADBEEF" };
   const invalid = await paymentsService.handleJazzCashCallback(badHash);
   assert.equal(invalid.reason, "invalid_hash");
@@ -518,6 +534,131 @@ async function main() {
   const stillUnpaid = await invoicesService.getById(pkr3.invoice.id, admin);
   assert.notEqual(stillUnpaid.paymentStatus, "PAID");
   console.log("[phase4] wallet notice + rejection OK");
+
+  await expectError(
+    () =>
+      paymentsService.createRefund(
+        rest.id,
+        { amount: 10, reason: "Customer cannot refund" },
+        clientA,
+      ),
+    PAYMENTS_ERROR_CODES.FORBIDDEN,
+    "customer cannot refund",
+  );
+
+  const remainingRefund = await paymentsService.createRefund(
+    partial.id,
+    { amount: 100, reason: "Close remaining" },
+    admin,
+  );
+  await paymentsService.decideRefund(
+    partial.id,
+    remainingRefund.id,
+    { decision: "APPROVE" },
+    admin,
+  );
+  const fullyRefunded = await invoicesService.getById(usd.invoice.id, admin);
+  assert.equal(fullyRefunded.paymentStatus, "REFUNDED");
+  assert.equal(fullyRefunded.paidAmount, 0);
+  console.log("[phase4] full refund marks invoice REFUNDED OK");
+
+  const pkrCancel = await issueAdvanceInvoice(clientA, admin, "PKR");
+  const jazzCancel = await paymentsService.initiateJazzCash(
+    { invoiceId: pkrCancel.invoice.id },
+    clientA,
+  );
+  await expectError(
+    () => paymentsService.verify(jazzCancel.payment.id, {}, admin),
+    PAYMENTS_ERROR_CODES.INVALID_TRANSITION,
+    "admin cannot verify unsubmitted hosted INITIATED payment",
+  );
+  const cancelFields = {
+    ...buildJazzCashHostedFields({
+      credentials: credentials!,
+      txnRefNo: jazzCancel.payment.providerTxnId!,
+      amount: jazzCancel.payment.amount,
+      billReference:
+        jazzCancel.payment.invoiceNumber || jazzCancel.payment.paymentNumber,
+      description:
+        jazzCancel.payment.invoiceNumber || jazzCancel.payment.paymentNumber,
+      returnUrl: `${process.env.APP_URL}/api/v1/payments/callbacks/jazzcash`,
+    }),
+    pp_ResponseCode: "157",
+    pp_ResponseMessage: "Cancelled by user",
+  };
+  cancelFields.pp_SecureHash = buildJazzCashSecureHash(
+    cancelFields,
+    credentials!.integritySalt,
+  );
+  const cancelled = await paymentsService.handleJazzCashCallback(cancelFields);
+  assert.equal(cancelled.reason, "cancelled");
+  const cancelledInvoice = await invoicesService.getById(
+    pkrCancel.invoice.id,
+    admin,
+  );
+  assert.equal(cancelledInvoice.paymentStatus, "FAILED");
+  console.log("[phase4] JazzCash cancelled callback OK");
+
+  const pkrExpire = await issueAdvanceInvoice(clientA, admin, "PKR");
+  const jazzExpire = await paymentsService.initiateJazzCash(
+    { invoiceId: pkrExpire.invoice.id },
+    clientA,
+  );
+  await prisma.payment.update({
+    where: { id: jazzExpire.payment.id },
+    data: { expiresAt: new Date(Date.now() - 60_000) },
+  });
+  await paymentsService.list(
+    {
+      search: "",
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      page: 1,
+      limit: 10,
+    },
+    admin,
+  );
+  const expired = await paymentsService.getById(jazzExpire.payment.id, admin);
+  assert.equal(expired.status, "EXPIRED");
+  const expiredInvoice = await invoicesService.getById(
+    pkrExpire.invoice.id,
+    admin,
+  );
+  assert.equal(expiredInvoice.paymentStatus, "EXPIRED");
+  console.log("[phase4] hosted checkout expiry OK");
+
+  const easyCancelInvoice = await issueAdvanceInvoice(clientA, admin, "PKR");
+  const easyCancelPay = await paymentsService.initiateEasyPaisa(
+    { invoiceId: easyCancelInvoice.invoice.id },
+    clientA,
+  );
+  const easyCancelHashFields = {
+    amount: "300.00",
+    autoRedirect: "1",
+    emailAddr: "",
+    mobileNum: "",
+    orderRefNum: easyCancelPay.payment.paymentNumber,
+    paymentMethod: "",
+    postBackURL: `${process.env.APP_URL}/api/v1/payments/callbacks/easypaisa`,
+    storeId: process.env.EASYPAISA_STORE_ID!,
+  };
+  const easyCancelCb = await paymentsService.handleEasyPaisaCallback({
+    ...easyCancelHashFields,
+    status: "CANCELLED",
+    merchantHashedReq: buildEasyPaisaMerchantHash(easyCancelHashFields, {
+      storeId: process.env.EASYPAISA_STORE_ID!,
+      hashKey: process.env.EASYPAISA_HASH_KEY!,
+      sandbox: true,
+      algorithm: "hmac-sha256",
+    }),
+  });
+  assert.equal(easyCancelCb.reason, "cancelled");
+  const easyCancelInv = await invoicesService.getById(
+    easyCancelInvoice.invoice.id,
+    admin,
+  );
+  assert.equal(easyCancelInv.paymentStatus, "FAILED");
+  console.log("[phase4] EasyPaisa cancelled callback OK");
 
   await cleanup();
   console.log("[phase4] PASS");

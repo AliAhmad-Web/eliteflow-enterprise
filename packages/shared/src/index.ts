@@ -1857,6 +1857,7 @@ export type {
   BankTransferSubmitInput,
   CreatePaymentRefundInput,
   DecidePaymentRefundInput,
+  DerivedInvoicePaymentStatus,
   HostedCheckoutDto,
   InitiateProviderPaymentInput,
   ListPaymentsQueryInput,

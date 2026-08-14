@@ -44,6 +44,9 @@ import {
   easyPaisaHostedUrl,
   formatEasyPaisaAmount,
   getEasyPaisaCredentials,
+  isEasyPaisaCancelledStatus,
+  isEasyPaisaExpiredStatus,
+  isEasyPaisaPendingStatus,
   isEasyPaisaSuccessStatus,
   sanitizeEasyPaisaFields,
   verifyEasyPaisaHash,
@@ -52,6 +55,9 @@ import {
   buildJazzCashHostedFields,
   buildJazzCashTxnRef,
   getJazzCashCredentials,
+  isJazzCashCancelledCode,
+  isJazzCashExpiredCode,
+  isJazzCashPendingCode,
   isJazzCashSuccessCode,
   jazzCashHostedUrl,
   sanitizeJazzCashFields,
@@ -121,6 +127,7 @@ export class PaymentsService {
     query: ListPaymentsQueryInput,
     actor: PaymentActor,
   ): Promise<PaymentListResponse> {
+    await this.expireOverdueHosted();
     const scope = await this.resolveScope(actor);
     const { items, total } = await paymentsRepository.findMany(query, scope);
     return {
@@ -136,6 +143,7 @@ export class PaymentsService {
   }
 
   async getById(id: string, actor: PaymentActor): Promise<PaymentDto> {
+    await this.expireOverdueHosted();
     const scope = await this.resolveScope(actor);
     const payment = await paymentsRepository.findById(id, scope);
     if (!payment) {
@@ -386,6 +394,16 @@ export class PaymentsService {
         PAYMENTS_ERROR_CODES.NOT_FOUND,
       );
     }
+    if (
+      payment.status !== "PENDING_VERIFICATION" &&
+      payment.status !== "PENDING"
+    ) {
+      throw new PaymentsError(
+        "Only submitted or pending payments can be verified by an administrator",
+        409,
+        PAYMENTS_ERROR_CODES.INVALID_TRANSITION,
+      );
+    }
     this.assertTransition(payment.status, "VERIFIED");
     const updated = await paymentsRepository.update(id, {
       status: "VERIFIED",
@@ -634,23 +652,63 @@ export class PaymentsService {
       metadata: sanitizeJazzCashFields(fields),
     });
 
-    if (!isJazzCashSuccessCode(fields.pp_ResponseCode)) {
+    if (this.isTerminalSettled(payment.status)) {
+      return {
+        accepted: true,
+        reason: "already_settled",
+        paymentId: payment.id,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=paid`,
+      };
+    }
+
+    if (isJazzCashPendingCode(fields.pp_ResponseCode)) {
       await paymentsRepository.update(payment.id, {
-        status: "FAILED",
-        failureReason: fields.pp_ResponseMessage?.slice(0, 500) || "JazzCash declined",
+        status: "PENDING",
+        providerMetadata: sanitizeJazzCashFields(fields),
+      });
+      await this.recalculateInvoice(payment.invoiceId);
+      return {
+        accepted: false,
+        reason: "pending",
+        paymentId: payment.id,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=pending`,
+      };
+    }
+
+    if (!isJazzCashSuccessCode(fields.pp_ResponseCode)) {
+      const outcome = isJazzCashExpiredCode(fields.pp_ResponseCode)
+        ? "EXPIRED"
+        : "FAILED";
+      const reason = isJazzCashCancelledCode(fields.pp_ResponseCode)
+        ? "cancelled"
+        : isJazzCashExpiredCode(fields.pp_ResponseCode)
+          ? "expired"
+          : "declined";
+      await paymentsRepository.update(payment.id, {
+        status: outcome,
+        failureReason:
+          fields.pp_ResponseMessage?.slice(0, 500) ||
+          (reason === "cancelled"
+            ? "JazzCash checkout cancelled"
+            : reason === "expired"
+              ? "JazzCash transaction expired"
+              : "JazzCash declined"),
         providerMetadata: sanitizeJazzCashFields(fields),
       });
       await this.recalculateInvoice(payment.invoiceId);
       await logPaymentAuditEvent({
-        action: PAYMENT_AUDIT_ACTIONS.FAILED,
+        action:
+          outcome === "EXPIRED"
+            ? PAYMENT_AUDIT_ACTIONS.EXPIRED
+            : PAYMENT_AUDIT_ACTIONS.FAILED,
         resourceId: payment.id,
-        metadata: { code: fields.pp_ResponseCode },
+        metadata: { code: fields.pp_ResponseCode, reason },
       });
       return {
         accepted: false,
-        reason: "declined",
+        reason,
         paymentId: payment.id,
-        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=failed`,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=${reason}`,
       };
     }
 
@@ -846,8 +904,80 @@ export class PaymentsService {
       metadata: sanitizeEasyPaisaFields(fields),
     });
 
+    if (this.isTerminalSettled(payment.status)) {
+      return {
+        accepted: true,
+        reason: "already_settled",
+        paymentId: payment.id,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=paid`,
+      };
+    }
+
     const status = fields.status || fields.transactionStatus || fields.desc;
+    if (isEasyPaisaPendingStatus(status)) {
+      await paymentsRepository.update(payment.id, {
+        status: "PENDING",
+        providerMetadata: sanitizeEasyPaisaFields(fields),
+      });
+      await this.recalculateInvoice(payment.invoiceId);
+      return {
+        accepted: false,
+        reason: "pending",
+        paymentId: payment.id,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=pending`,
+      };
+    }
+    if (isEasyPaisaCancelledStatus(status) || isEasyPaisaExpiredStatus(status)) {
+      if (!hashOk) {
+        await paymentsRepository.update(payment.id, {
+          status: "PENDING_VERIFICATION",
+          providerMetadata: sanitizeEasyPaisaFields(fields),
+        });
+        await this.recalculateInvoice(payment.invoiceId);
+        return {
+          accepted: false,
+          reason: "unverified_callback",
+          paymentId: payment.id,
+          redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=pending`,
+        };
+      }
+      const outcome = isEasyPaisaExpiredStatus(status) ? "EXPIRED" : "FAILED";
+      const reason = isEasyPaisaExpiredStatus(status) ? "expired" : "cancelled";
+      await paymentsRepository.update(payment.id, {
+        status: outcome,
+        failureReason: (status || reason).slice(0, 500),
+        providerMetadata: sanitizeEasyPaisaFields(fields),
+      });
+      await this.recalculateInvoice(payment.invoiceId);
+      await logPaymentAuditEvent({
+        action:
+          outcome === "EXPIRED"
+            ? PAYMENT_AUDIT_ACTIONS.EXPIRED
+            : PAYMENT_AUDIT_ACTIONS.FAILED,
+        resourceId: payment.id,
+        metadata: { status, reason },
+      });
+      return {
+        accepted: false,
+        reason,
+        paymentId: payment.id,
+        redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=${reason}`,
+      };
+    }
     if (!isEasyPaisaSuccessStatus(status) && !fields.auth_token) {
+      if (!hashOk) {
+        await paymentsRepository.update(payment.id, {
+          status: "PENDING_VERIFICATION",
+          providerMetadata: sanitizeEasyPaisaFields(fields),
+        });
+        await this.recalculateInvoice(payment.invoiceId);
+        return {
+          accepted: false,
+          reason: "unverified_callback",
+          paymentId: payment.id,
+          redirectUrl: `${frontendBase()}/payments/${payment.id}?callback=pending`,
+        };
+      }
       await paymentsRepository.update(payment.id, {
         status: "FAILED",
         failureReason: (status || "EasyPaisa declined").slice(0, 500),
@@ -1165,6 +1295,7 @@ export class PaymentsService {
   }
 
   private async assertNoInFlight(invoiceId: string): Promise<void> {
+    await this.expireOverdueHosted();
     const existing = await paymentsRepository.findInFlight(invoiceId);
     if (existing) {
       throw new PaymentsError(
@@ -1218,6 +1349,11 @@ export class PaymentsService {
       Number(invoice.total),
       paidAmount,
       totals.hasInFlight,
+      {
+        hasRefunded: totals.hasRefunded,
+        hasFailed: totals.hasFailed,
+        hasExpired: totals.hasExpired,
+      },
     );
     return paymentsRepository.applyInvoiceTotals(
       invoiceId,
@@ -1226,6 +1362,30 @@ export class PaymentsService {
       paymentStatus === "PAID",
       invoice.status,
     );
+  }
+
+  private isTerminalSettled(status: PaymentExecutionStatusValue | string): boolean {
+    return status === "VERIFIED" || status === "PAID" || status === "REFUNDED";
+  }
+
+  private async expireOverdueHosted(): Promise<void> {
+    const overdue = await paymentsRepository.findOverdueHosted();
+    const invoiceIds = new Set<string>();
+    for (const row of overdue) {
+      if (!canTransitionPaymentStatus(row.status, "EXPIRED")) continue;
+      await paymentsRepository.update(row.id, {
+        status: "EXPIRED",
+        failureReason: "Hosted checkout expired",
+      });
+      invoiceIds.add(row.invoiceId);
+      await logPaymentAuditEvent({
+        action: PAYMENT_AUDIT_ACTIONS.EXPIRED,
+        resourceId: row.id,
+      });
+    }
+    for (const invoiceId of invoiceIds) {
+      await this.recalculateInvoice(invoiceId);
+    }
   }
 
   private assertTransition(

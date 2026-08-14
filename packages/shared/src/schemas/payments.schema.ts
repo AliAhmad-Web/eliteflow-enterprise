@@ -72,7 +72,7 @@ export const PAYMENT_TRANSITIONS: Record<
   VERIFIED: ["PAID", "REFUNDED"],
   PAID: ["REFUNDED"],
   FAILED: [],
-  EXPIRED: [],
+  EXPIRED: ["VERIFIED", "PAID"],
   REJECTED: [],
   REFUNDED: [],
 };
@@ -89,16 +89,33 @@ export function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export type DerivedInvoicePaymentStatus =
+  | "UNPAID"
+  | "PENDING"
+  | "PARTIALLY_PAID"
+  | "PAID"
+  | "FAILED"
+  | "EXPIRED"
+  | "REFUNDED";
+
 export function invoicePaymentStatusFromTotals(
   total: number,
   paidAmount: number,
   hasInFlight: boolean,
-): "UNPAID" | "PENDING" | "PARTIALLY_PAID" | "PAID" {
+  extras: {
+    hasRefunded?: boolean;
+    hasFailed?: boolean;
+    hasExpired?: boolean;
+  } = {},
+): DerivedInvoicePaymentStatus {
   const paid = roundMoney(Math.max(0, paidAmount));
   const due = roundMoney(Math.max(0, total));
   if (paid >= due && due > 0) return "PAID";
   if (paid > 0 && paid < due) return "PARTIALLY_PAID";
   if (hasInFlight) return "PENDING";
+  if (paid === 0 && extras.hasRefunded) return "REFUNDED";
+  if (extras.hasFailed) return "FAILED";
+  if (extras.hasExpired) return "EXPIRED";
   return "UNPAID";
 }
 

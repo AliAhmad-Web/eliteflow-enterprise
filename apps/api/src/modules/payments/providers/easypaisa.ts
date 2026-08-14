@@ -134,6 +134,31 @@ export function isEasyPaisaSuccessStatus(status: string | undefined): boolean {
   );
 }
 
+export function isEasyPaisaPendingStatus(status: string | undefined): boolean {
+  const normalized = (status ?? "").trim().toUpperCase();
+  return (
+    normalized === "PENDING" ||
+    normalized === "INPROCESS" ||
+    normalized === "IN_PROCESS" ||
+    normalized === "INITIATED"
+  );
+}
+
+export function isEasyPaisaCancelledStatus(status: string | undefined): boolean {
+  const normalized = (status ?? "").trim().toUpperCase();
+  return (
+    normalized === "CANCELLED" ||
+    normalized === "CANCELED" ||
+    normalized === "ABORTED" ||
+    normalized === "USER_CANCELLED"
+  );
+}
+
+export function isEasyPaisaExpiredStatus(status: string | undefined): boolean {
+  const normalized = (status ?? "").trim().toUpperCase();
+  return normalized === "EXPIRED" || normalized === "TIMEOUT";
+}
+
 export function sanitizeEasyPaisaFields(
   fields: Record<string, string>,
 ): Record<string, string> {

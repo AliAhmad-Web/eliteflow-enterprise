@@ -33,6 +33,7 @@ export const PAYMENT_AUDIT_ACTIONS = {
   VERIFIED: "payment.verified",
   REJECTED: "payment.rejected",
   FAILED: "payment.failed",
+  EXPIRED: "payment.expired",
   REFUNDED: "payment.refunded",
   INVOICE_PAID: "payment.invoice_marked_paid",
   CALLBACK_RECEIVED: "payment.provider_callback_received",

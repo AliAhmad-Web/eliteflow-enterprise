@@ -79,6 +79,16 @@ export class PaymentsRepository {
     return payment as PaymentWithRelations | null;
   }
 
+  async findOverdueHosted() {
+    return prisma.payment.findMany({
+      where: {
+        status: { in: ["INITIATED", "PENDING"] },
+        expiresAt: { lte: new Date() },
+      },
+      select: { id: true, invoiceId: true, status: true },
+    });
+  }
+
   async findInFlight(invoiceId: string) {
     return prisma.payment.findFirst({
       where: {
@@ -164,8 +174,12 @@ export class PaymentsRepository {
     settled: number;
     refunded: number;
     hasInFlight: boolean;
+    hasFailed: boolean;
+    hasExpired: boolean;
+    hasRefunded: boolean;
   }> {
-    const [settledAgg, refundAgg, inFlight] = await Promise.all([
+    const [settledAgg, refundAgg, inFlight, failed, expired, refundedPayments, completedRefunds] =
+      await Promise.all([
       prisma.payment.aggregate({
         where: {
           invoiceId,
@@ -189,18 +203,40 @@ export class PaymentsRepository {
           status: { in: [...IN_FLIGHT_PAYMENT_STATUSES] },
         },
       }),
+      prisma.payment.count({
+        where: { invoiceId, status: "FAILED" },
+      }),
+      prisma.payment.count({
+        where: { invoiceId, status: "EXPIRED" },
+      }),
+      prisma.payment.count({
+        where: { invoiceId, status: "REFUNDED" },
+      }),
+      prisma.paymentRefund.count({
+        where: { status: "COMPLETED", payment: { invoiceId } },
+      }),
     ]);
     return {
       settled: Number(settledAgg._sum.amount ?? 0),
       refunded: Number(refundAgg._sum.amount ?? 0),
       hasInFlight: inFlight > 0,
+      hasFailed: failed > 0,
+      hasExpired: expired > 0,
+      hasRefunded: refundedPayments > 0 || completedRefunds > 0,
     };
   }
 
   async applyInvoiceTotals(
     invoiceId: string,
     paidAmount: number,
-    paymentStatus: "UNPAID" | "PENDING" | "PARTIALLY_PAID" | "PAID",
+    paymentStatus:
+      | "UNPAID"
+      | "PENDING"
+      | "PARTIALLY_PAID"
+      | "PAID"
+      | "FAILED"
+      | "EXPIRED"
+      | "REFUNDED",
     markCommercialPaid: boolean,
     currentCommercialStatus: string,
   ) {

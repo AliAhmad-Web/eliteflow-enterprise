@@ -305,8 +305,11 @@ export class InvoicesService {
     return toInvoiceDto(updated);
   }
 
-  private assertPaidNotFromClient(status: string | undefined): void {
-    if (status === "PAID") {
+  private assertPaidNotFromClient(
+    status: string | undefined,
+    paymentStatus?: string,
+  ): void {
+    if (status === "PAID" || paymentStatus === "PAID") {
       throw new InvoicesError(
         "Invoice payment status cannot be set to PAID from the client",
         403,

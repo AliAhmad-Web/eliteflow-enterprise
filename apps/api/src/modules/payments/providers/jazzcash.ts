@@ -124,6 +124,21 @@ export function isJazzCashSuccessCode(code: string | undefined): boolean {
   return code === "000";
 }
 
+/** JazzCash 001 is an in-progress / unknown-pending response, not a decline. */
+export function isJazzCashPendingCode(code: string | undefined): boolean {
+  return code === "001";
+}
+
+/** User-cancelled / aborted checkout. */
+export function isJazzCashCancelledCode(code: string | undefined): boolean {
+  return code === "157" || code === "199";
+}
+
+/** Timeout / expired transaction. */
+export function isJazzCashExpiredCode(code: string | undefined): boolean {
+  return code === "124" || code === "210";
+}
+
 export function sanitizeJazzCashFields(
   fields: Record<string, string>,
 ): Record<string, string> {
