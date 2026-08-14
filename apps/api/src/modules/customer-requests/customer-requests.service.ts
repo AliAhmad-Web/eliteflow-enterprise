@@ -515,6 +515,7 @@ export class CustomerRequestsService {
     const existing = await this.requireRequest(id);
 
     this.assertTransition(existing.status, "CLARIFICATION_REQUESTED", [
+      "SUBMITTED",
       "UNDER_REVIEW",
     ]);
 

@@ -370,6 +370,8 @@ export function StaffRequestDetailsPageContent() {
                   )}
                 </div>
 
+                {(request.status === "SUBMITTED" ||
+                  request.status === "UNDER_REVIEW") && (
                 <div className="space-y-3 rounded-xl border border-border/50 p-4">
                   <Label htmlFor="clarify-message">Request clarification</Label>
                   <Textarea
@@ -403,6 +405,7 @@ export function StaffRequestDetailsPageContent() {
                     Request Clarification
                   </Button>
                 </div>
+                )}
 
                 <div className="space-y-3 rounded-xl border border-destructive/20 p-4">
                   <Label htmlFor="reject-reason">Reject request</Label>

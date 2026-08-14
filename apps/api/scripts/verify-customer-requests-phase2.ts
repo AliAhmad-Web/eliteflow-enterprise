@@ -209,6 +209,27 @@ async function main() {
   assert.equal(submitted.status, "SUBMITTED");
   console.log("[phase2] create/submit OK");
 
+  const clarifyFromSubmitted = await customerRequestsService.create(
+    {
+      type: "GENERAL_SERVICE",
+      title: `Clarify from submitted ${RUN_ID}`,
+      description: "Needs more budget detail",
+      submit: true,
+    },
+    clientA,
+  );
+  const directClarify = await customerRequestsService.requestClarification(
+    clarifyFromSubmitted.id,
+    { message: "Please consider increasing the budget to $800." },
+    admin,
+  );
+  assert.equal(directClarify.status, "CLARIFICATION_REQUESTED");
+  assert.equal(
+    directClarify.clarificationMessage,
+    "Please consider increasing the budget to $800.",
+  );
+  console.log("[phase2] clarification from SUBMITTED OK");
+
   // Spoof clientId ignored — create always uses actor company
   const reqB = await customerRequestsService.create(
     {
