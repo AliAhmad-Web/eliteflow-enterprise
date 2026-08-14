@@ -85,34 +85,34 @@ export async function ensurePortalCompanyLink(
   const displayName =
     `${user.firstName} ${user.lastName}`.trim() || email.split("@")[0] || "Client";
 
-  const result = await prisma.$transaction(async (tx) => {
-    const existingClient = await tx.client.findFirst({
-      where: {
-        email,
-        deletedAt: null,
-      },
-      orderBy: { createdAt: "asc" },
+  // Sequential writes (no interactive $transaction): pooler/serverless cannot
+  // reliably hold long interactive transactions, and OAuth signup was timing out.
+  const existingClient = await prisma.client.findFirst({
+    where: {
+      email,
+      deletedAt: null,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  let result: PortalCompanyLinkResult | null;
+
+  if (existingClient) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { companyId: existingClient.id },
     });
-
-    if (existingClient) {
-      await tx.user.update({
-        where: { id: user.id },
-        data: { companyId: existingClient.id },
-      });
-      return {
-        companyId: existingClient.id,
-        companyName: existingClient.companyName,
-        alreadyLinked: false,
-        createdClient: false,
-        linkedByEmail: true,
-      } satisfies PortalCompanyLinkResult;
-    }
-
-    if (!createIfMissing) {
-      return null;
-    }
-
-    const created = await tx.client.create({
+    result = {
+      companyId: existingClient.id,
+      companyName: existingClient.companyName,
+      alreadyLinked: false,
+      createdClient: false,
+      linkedByEmail: true,
+    };
+  } else if (!createIfMissing) {
+    result = null;
+  } else {
+    const created = await prisma.client.create({
       data: {
         companyName: displayName,
         contactName: displayName,
@@ -122,25 +122,25 @@ export async function ensurePortalCompanyLink(
       },
     });
 
-    await tx.user.update({
+    await prisma.user.update({
       where: { id: user.id },
       data: { companyId: created.id },
     });
 
-    return {
+    result = {
       companyId: created.id,
       companyName: created.companyName,
       alreadyLinked: false,
       createdClient: true,
       linkedByEmail: false,
-    } satisfies PortalCompanyLinkResult;
-  });
+    };
+  }
 
   if (!result) {
     return null;
   }
 
-  await logClientsAuditEvent({
+  void logClientsAuditEvent({
     userId: audit.userId ?? user.id,
     action: result.createdClient
       ? CLIENTS_AUDIT_ACTIONS.PORTAL_COMPANY_AUTO_CREATE

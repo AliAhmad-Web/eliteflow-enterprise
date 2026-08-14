@@ -79,8 +79,16 @@ function parseOptionalBudget(
 export interface CustomerRequestAccessScope {
   /** Unrestricted for staff */
   all: boolean;
-  /** Client portal: only requests for their linked company */
+  /**
+   * Client portal company scope — requests for their linked Client row.
+   * Combined with createdById via OR when both are present.
+   */
   clientCompanyId?: string | null;
+  /**
+   * Always set for CLIENT actors so unlinked onboarding requests
+   * (null clientId) remain visible/editable only to the requester.
+   */
+  createdById?: string | null;
 }
 
 export type SecuredAttachmentInput = {
@@ -95,7 +103,8 @@ export type CreateCustomerRequestData = Omit<
   CreateCustomerRequestInput,
   "attachments" | "submit" | "expectedBudget" | "preferredDeadline" | "targetProjectId"
 > & {
-  clientId: string;
+  /** Null while requester is still unlinked / onboarding. */
+  clientId: string | null;
   createdById: string;
   status: CustomerRequestStatus;
   submittedAt?: Date | null;
@@ -180,6 +189,36 @@ export class CustomerRequestsRepository {
     });
 
     return created as unknown as CustomerRequestWithRelations;
+  }
+
+  async associateClient(
+    id: string,
+    clientId: string,
+  ): Promise<CustomerRequestWithRelations> {
+    const updated = await prisma.customerRequest.update({
+      where: { id },
+      data: { clientId },
+      include: requestInclude,
+    });
+
+    return updated as unknown as CustomerRequestWithRelations;
+  }
+
+  /** Backfill onboarding requests when a portal user is linked to a company. */
+  async associateUnlinkedRequestsForCreator(
+    createdById: string,
+    clientId: string,
+  ): Promise<number> {
+    const result = await prisma.customerRequest.updateMany({
+      where: {
+        createdById,
+        clientId: null,
+        deletedAt: null,
+      },
+      data: { clientId },
+    });
+
+    return result.count;
   }
 
   async update(
@@ -448,12 +487,24 @@ export class CustomerRequestsRepository {
       return {};
     }
 
+    const clauses: Record<string, unknown>[] = [];
+    if (scope.createdById) {
+      clauses.push({ createdById: scope.createdById });
+    }
     if (scope.clientCompanyId) {
-      return { clientId: scope.clientCompanyId };
+      clauses.push({ clientId: scope.clientCompanyId });
     }
 
-    // Unlinked client — no rows
-    return { clientId: "__none__" };
+    if (clauses.length === 0) {
+      // Defensive: no CLIENT identity → match nothing
+      return { id: "00000000-0000-0000-0000-000000000000" };
+    }
+
+    if (clauses.length === 1) {
+      return clauses[0]!;
+    }
+
+    return { OR: clauses };
   }
 }
 

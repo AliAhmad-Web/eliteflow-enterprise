@@ -3,9 +3,11 @@
 // =============================================================================
 
 /// Customer-submitted work request (intake). Delivery remains Project/Task.
+/// `clientId` is optional during onboarding — unlinked requesters may submit
+/// before an admin associates a Client/Company account.
 model CustomerRequest {
   id                   String                   @id @default(uuid()) @db.Uuid
-  clientId             String                   @map("client_id") @db.Uuid
+  clientId             String?                  @map("client_id") @db.Uuid
   createdById          String                   @map("created_by_id") @db.Uuid
   type                 CustomerRequestType
   title                String                   @db.VarChar(200)
@@ -31,7 +33,7 @@ model CustomerRequest {
   updatedAt            DateTime                 @updatedAt @map("updated_at")
   deletedAt            DateTime?                @map("deleted_at")
 
-  client           Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  client           Client?                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdBy        User                     @relation("CustomerRequestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   reviewedBy       User?                    @relation("CustomerRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   targetProject    Project?                 @relation("CustomerRequestTargetProject", fields: [targetProjectId], references: [id], onDelete: SetNull)

@@ -19,6 +19,7 @@ import {
   ROUTES,
   taskDetailPath,
 } from "@/constants/routes";
+import { useClients } from "@/features/clients/hooks/use-clients";
 import {
   useProjectAssignees,
   useProjects,
@@ -79,7 +80,14 @@ export function StaffRequestDetailsPageContent() {
     sortOrder: "asc",
     page: 1,
     limit: 100,
-    clientId: request?.clientId,
+    clientId: request?.clientId ?? undefined,
+  });
+  const clientsQuery = useClients({
+    search: "",
+    sortBy: "createdAt",
+    sortOrder: "desc",
+    page: 1,
+    limit: 100,
   });
   const assigneesQuery = useProjectAssignees(canReview);
 
@@ -90,6 +98,7 @@ export function StaffRequestDetailsPageContent() {
   const convertMutation = useConvertCustomerRequest();
 
   const [staffNotes, setStaffNotes] = useState("");
+  const [approveClientId, setApproveClientId] = useState("");
   const [clarificationMessage, setClarificationMessage] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [createProject, setCreateProject] = useState(true);
@@ -294,6 +303,34 @@ export function StaffRequestDetailsPageContent() {
                   />
                 </div>
 
+                {!request.clientId ? (
+                  <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                    <Label htmlFor="approve-client">
+                      Associate Client/Company (required for onboarding)
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      This request was submitted before a company link existed.
+                      Choose the Client account to associate, then approve.
+                      The requester will be linked if they are still unlinked.
+                    </p>
+                    <select
+                      id="approve-client"
+                      className={selectClassName}
+                      value={approveClientId}
+                      onChange={(event) =>
+                        setApproveClientId(event.target.value)
+                      }
+                    >
+                      <option value="">Select client company…</option>
+                      {(clientsQuery.data?.items ?? []).map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.companyName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
                   {(request.status === "SUBMITTED" ||
                     request.status === "CLARIFICATION_REQUESTED") && (
@@ -316,18 +353,26 @@ export function StaffRequestDetailsPageContent() {
                     </Button>
                   )}
 
-                  {(request.status === "SUBMITTED" ||
-                    request.status === "UNDER_REVIEW" ||
-                    request.status === "CLARIFICATION_REQUESTED") && (
+                  {request.status === "UNDER_REVIEW" && (
                     <Button
                       type="button"
-                      disabled={busy}
+                      disabled={
+                        busy || (!request.clientId && !approveClientId.trim())
+                      }
                       onClick={() =>
                         void runAction(
                           () =>
                             approveMutation.mutateAsync({
                               id: request.id,
-                              input: { staffNotes: staffNotes || null },
+                              input: {
+                                staffNotes: staffNotes || null,
+                                ...(request.clientId
+                                  ? {}
+                                  : {
+                                      clientId: approveClientId,
+                                      linkRequesterCompany: true,
+                                    }),
+                              },
                             }),
                           "Request approved.",
                         )

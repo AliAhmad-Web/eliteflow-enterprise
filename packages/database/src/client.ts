@@ -37,7 +37,8 @@ function withDatabaseTimeouts(rawUrl: string | undefined): string | undefined {
     }
 
     const desiredPoolTimeout = Number(
-      process.env.PRISMA_POOL_TIMEOUT_SECONDS ?? "10",
+      process.env.PRISMA_POOL_TIMEOUT_SECONDS ??
+        (process.env.VERCEL ? "8" : "10"),
     );
     const existingPoolTimeout = Number(
       url.searchParams.get("pool_timeout") ?? "NaN",
@@ -58,7 +59,11 @@ function withDatabaseTimeouts(rawUrl: string | undefined): string | undefined {
 
     if (pooler) {
       const configured = process.env.PRISMA_CONNECTION_LIMIT?.trim();
-      const desiredLimit = Number(configured ?? "5");
+      // Keep small on serverless so many isolates do not exhaust Supavisor.
+      // Auth still needs >1 for a main query + one fire-and-forget side write.
+      const desiredLimit = Number(
+        configured ?? (process.env.VERCEL ? "2" : "5"),
+      );
       const existingLimit = Number(
         url.searchParams.get("connection_limit") ?? "NaN",
       );
@@ -97,7 +102,10 @@ export const prisma =
         : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") {
+// Reuse one PrismaClient per isolate (required for Vercel/serverless).
+// Without this, warm recycles still share the module singleton via `export const`,
+// but HMR/dev and some runtimes re-evaluate modules — globalThis is the safe cache.
+if (process.env.NODE_ENV !== "production" || process.env.VERCEL) {
   globalForPrisma.prisma = prisma;
 }
 

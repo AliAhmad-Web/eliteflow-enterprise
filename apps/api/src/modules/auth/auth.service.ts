@@ -1538,7 +1538,8 @@ export class AuthService {
         );
       }
 
-      await logAuthAuditEvent({
+      // Fire-and-forget: integrity audit must not block new-email OAuth signup.
+      scheduleAuthAuditEvent({
         userId: created.id,
         action: AUTH_AUDIT_ACTIONS.OAUTH_SIGNUP,
         resourceId: created.id,
@@ -1617,7 +1618,7 @@ export class AuthService {
     });
 
     if (!alreadyLinked) {
-      await logAuthAuditEvent({
+      scheduleAuthAuditEvent({
         userId: existingUser.id,
         action: AUTH_AUDIT_ACTIONS.OAUTH_LINKED,
         resourceId: existingUser.id,

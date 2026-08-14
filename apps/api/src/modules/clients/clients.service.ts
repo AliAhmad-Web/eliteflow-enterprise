@@ -554,6 +554,16 @@ export class ClientsService {
       clientId,
     );
 
+    // Backfill onboarding requests that were created before the company link.
+    const { customerRequestsRepository } = await import(
+      "../customer-requests/customer-requests.repository.js"
+    );
+    const backfilled =
+      await customerRequestsRepository.associateUnlinkedRequestsForCreator(
+        user.id,
+        clientId,
+      );
+
     await logClientsAuditEvent({
       userId: actor.userId,
       action: CLIENTS_AUDIT_ACTIONS.PORTAL_USER_LINK,
@@ -563,6 +573,7 @@ export class ClientsService {
         portalUserEmail: user.email,
         previousCompanyId,
         companyId: clientId,
+        backfilledRequestCount: backfilled,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,

@@ -169,9 +169,22 @@ export class CustomerRequestsService {
     actor: CustomerRequestActor,
   ): Promise<CustomerRequestDto> {
     this.assertIsClient(actor);
-    const clientId = this.requireLinkedCompany(actor);
+    const clientId = actor.companyId ?? null;
 
     if (input.targetProjectId) {
+      if (!clientId) {
+        throw new CustomerRequestsError(
+          "Link your company account before attaching an existing project",
+          403,
+          CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED,
+          [
+            {
+              field: "targetProjectId",
+              message: "Company link required for target projects",
+            },
+          ],
+        );
+      }
       await this.assertTargetProject(input.targetProjectId, clientId);
     }
 
@@ -209,6 +222,7 @@ export class CustomerRequestsService {
         type: created.type,
         status: created.status,
         submitted: submitNow,
+        onboardingUnlinked: !clientId,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
@@ -219,7 +233,7 @@ export class CustomerRequestsService {
         userId: actor.userId,
         action: CUSTOMER_REQUEST_AUDIT_ACTIONS.SUBMIT,
         resourceId: created.id,
-        metadata: { type: created.type },
+        metadata: { type: created.type, onboardingUnlinked: !clientId },
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
       });
@@ -235,8 +249,8 @@ export class CustomerRequestsService {
     actor: CustomerRequestActor,
   ): Promise<CustomerRequestDto> {
     this.assertIsClient(actor);
-    const clientId = this.requireLinkedCompany(actor);
-    const existing = await this.requireOwnedRequest(id, clientId);
+    const existing = await this.requireOwnedRequest(id, actor);
+    const clientId = actor.companyId ?? existing.clientId ?? null;
 
     if (!EDITABLE_STATUSES.has(existing.status)) {
       throw new CustomerRequestsError(
@@ -247,6 +261,19 @@ export class CustomerRequestsService {
     }
 
     if (input.targetProjectId) {
+      if (!clientId) {
+        throw new CustomerRequestsError(
+          "Link your company account before attaching an existing project",
+          403,
+          CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED,
+          [
+            {
+              field: "targetProjectId",
+              message: "Company link required for target projects",
+            },
+          ],
+        );
+      }
       await this.assertTargetProject(input.targetProjectId, clientId);
     }
 
@@ -269,8 +296,7 @@ export class CustomerRequestsService {
     actor: CustomerRequestActor,
   ): Promise<CustomerRequestDto> {
     this.assertIsClient(actor);
-    const clientId = this.requireLinkedCompany(actor);
-    const existing = await this.requireOwnedRequest(id, clientId);
+    const existing = await this.requireOwnedRequest(id, actor);
 
     this.assertTransition(existing.status, "SUBMITTED", [
       "DRAFT",
@@ -286,7 +312,10 @@ export class CustomerRequestsService {
       userId: actor.userId,
       action: CUSTOMER_REQUEST_AUDIT_ACTIONS.SUBMIT,
       resourceId: id,
-      metadata: { fromStatus: existing.status },
+      metadata: {
+        fromStatus: existing.status,
+        onboardingUnlinked: !existing.clientId && !actor.companyId,
+      },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
@@ -301,8 +330,7 @@ export class CustomerRequestsService {
     actor: CustomerRequestActor,
   ): Promise<CustomerRequestDto> {
     this.assertIsClient(actor);
-    const clientId = this.requireLinkedCompany(actor);
-    const existing = await this.requireOwnedRequest(id, clientId);
+    const existing = await this.requireOwnedRequest(id, actor);
 
     this.assertTransition(existing.status, "CANCELLED", [
       "SUBMITTED",
@@ -331,8 +359,7 @@ export class CustomerRequestsService {
     actor: CustomerRequestActor,
   ): Promise<CustomerRequestDto> {
     this.assertIsClient(actor);
-    const clientId = this.requireLinkedCompany(actor);
-    const existing = await this.requireOwnedRequest(id, clientId);
+    const existing = await this.requireOwnedRequest(id, actor);
 
     if (!CLIENT_ATTACH_STATUSES.has(existing.status)) {
       throw new CustomerRequestsError(
@@ -452,6 +479,69 @@ export class CustomerRequestsService {
 
     this.assertTransition(existing.status, "APPROVED", ["UNDER_REVIEW"]);
 
+    let associatedClientId = existing.clientId;
+    if (!associatedClientId) {
+      const providedClientId = input.clientId?.trim() || null;
+      if (!providedClientId) {
+        throw new CustomerRequestsError(
+          "Associate a Client/Company account before approving an onboarding request",
+          400,
+          CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+          [
+            {
+              field: "clientId",
+              message: "Client company is required for unlinked requests",
+            },
+          ],
+        );
+      }
+
+      const client = await prisma.client.findFirst({
+        where: { id: providedClientId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!client) {
+        throw new CustomerRequestsError(
+          "Client company not found",
+          400,
+          CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+          [{ field: "clientId", message: "Invalid Client company" }],
+        );
+      }
+
+      await customerRequestsRepository.associateClient(id, providedClientId);
+      associatedClientId = providedClientId;
+
+      const shouldLinkRequester = input.linkRequesterCompany !== false;
+      if (shouldLinkRequester) {
+        const requester = await prisma.user.findFirst({
+          where: { id: existing.createdById, deletedAt: null },
+          select: { id: true, companyId: true, role: { select: { code: true } } },
+        });
+        if (
+          requester &&
+          requester.role.code === UserRole.CLIENT &&
+          !requester.companyId
+        ) {
+          await prisma.user.update({
+            where: { id: requester.id },
+            data: { companyId: providedClientId },
+          });
+          await customerRequestsRepository.associateUnlinkedRequestsForCreator(
+            requester.id,
+            providedClientId,
+          );
+        }
+      }
+    } else if (input.clientId && input.clientId !== associatedClientId) {
+      throw new CustomerRequestsError(
+        "Request is already associated with a different Client company",
+        409,
+        CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+        [{ field: "clientId", message: "Client company mismatch" }],
+      );
+    }
+
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "APPROVED",
       staffNotes: input.staffNotes,
@@ -463,7 +553,12 @@ export class CustomerRequestsService {
       userId: actor.userId,
       action: CUSTOMER_REQUEST_AUDIT_ACTIONS.APPROVE,
       resourceId: id,
-      metadata: { fromStatus: existing.status },
+      metadata: {
+        fromStatus: existing.status,
+        clientId: associatedClientId,
+        linkedRequester:
+          !existing.clientId && input.linkRequesterCompany !== false,
+      },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
@@ -527,6 +622,20 @@ export class CustomerRequestsService {
       );
     }
 
+    if (!existing.clientId) {
+      throw new CustomerRequestsError(
+        "Associate a Client/Company account before converting this request",
+        400,
+        CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+        [
+          {
+            field: "clientId",
+            message: "Client company is required before conversion",
+          },
+        ],
+      );
+    }
+
     const { createProject, createTask, projectId } =
       this.resolveConvertFlags(existing, input);
 
@@ -581,7 +690,7 @@ export class CustomerRequestsService {
         const projectInput: CreateProjectInput = {
           name: existing.title,
           description,
-          clientId: existing.clientId,
+          clientId: existing.clientId!,
           status: "NOT_STARTED",
           priority: mapProjectPriority(existing.priority),
           startDate: "",
@@ -694,7 +803,7 @@ export class CustomerRequestsService {
 
   private async resolveScope(
     actor: CustomerRequestActor,
-    options: { requireLinked?: boolean } = {},
+    _options: { requireLinked?: boolean } = {},
   ): Promise<CustomerRequestAccessScope> {
     if (isClient(actor)) {
       const companyId =
@@ -702,23 +811,13 @@ export class CustomerRequestsService {
           ? actor.companyId
           : await this.loadCompanyId(actor.userId);
 
-      if (!companyId) {
-        if (options.requireLinked === false) {
-          // Empty sentinel — no access to any real request ids
-          return {
-            all: false,
-            clientCompanyId: "00000000-0000-0000-0000-000000000000",
-          };
-        }
-
-        throw new CustomerRequestsError(
-          "Link your company account before submitting work requests",
-          403,
-          CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED,
-        );
-      }
-
-      return { all: false, clientCompanyId: companyId };
+      // Always scope to the authenticated requester. When linked, also include
+      // company-owned requests. Never trust a client-supplied company id.
+      return {
+        all: false,
+        createdById: actor.userId,
+        clientCompanyId: companyId ?? null,
+      };
     }
 
     return { all: true };
@@ -731,18 +830,6 @@ export class CustomerRequestsService {
     });
 
     return user?.companyId ?? null;
-  }
-
-  private requireLinkedCompany(actor: CustomerRequestActor): string {
-    if (!actor.companyId) {
-      throw new CustomerRequestsError(
-        "Link your company account before submitting work requests",
-        403,
-        CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED,
-      );
-    }
-
-    return actor.companyId;
   }
 
   private assertIsClient(actor: CustomerRequestActor): void {
@@ -799,12 +886,10 @@ export class CustomerRequestsService {
 
   private async requireOwnedRequest(
     id: string,
-    clientId: string,
+    actor: CustomerRequestActor,
   ): Promise<CustomerRequestWithRelations> {
-    const request = await customerRequestsRepository.findById(id, {
-      all: false,
-      clientCompanyId: clientId,
-    });
+    const scope = await this.resolveScope(actor);
+    const request = await customerRequestsRepository.findById(id, scope);
 
     if (!request) {
       throw new CustomerRequestsError(

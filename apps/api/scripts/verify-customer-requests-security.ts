@@ -273,7 +273,7 @@ async function main() {
     console.log("[p2-sec] dangerous attachment URL rejected OK");
   }
 
-  // Unlinked CLIENT cannot mutate
+  // Unlinked CLIENT can create + submit (onboarding)
   const unlinkedRole = await authRepository.getDefaultClientRole();
   const unlinkedUser = await authRepository.createUser({
     email: email("unlinked"),
@@ -284,27 +284,77 @@ async function main() {
     status: UserStatus.ACTIVE,
     emailVerified: true,
   });
+  const unlinkedActor = {
+    userId: unlinkedUser.id,
+    email: unlinkedUser.email,
+    companyId: null as string | null,
+    role: UserRole.CLIENT,
+  };
+  const unlinkedCreated = await customerRequestsService.create(
+    {
+      type: "NEW_PROJECT",
+      title: `Unlinked onboarding ${RUN_ID}`,
+      description: "Created without company link",
+      submit: true,
+    },
+    unlinkedActor,
+  );
+  assert.equal(unlinkedCreated.clientId, null);
+  assert.equal(unlinkedCreated.status, "SUBMITTED");
+  assert.equal(unlinkedCreated.createdById, unlinkedUser.id);
+
+  const unlinkedList = await customerRequestsService.list(
+    {
+      page: 1,
+      limit: 20,
+      search: "",
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    },
+    unlinkedActor,
+  );
+  assert.ok(
+    unlinkedList.items.every((item) => item.createdById === unlinkedUser.id),
+  );
+  assert.ok(unlinkedList.items.some((item) => item.id === unlinkedCreated.id));
+  console.log("[p2-sec] unlinked CLIENT create/submit + own-only list OK");
+
+  // Unlinked cannot spoof targetProjectId without company
   try {
     await customerRequestsService.create(
       {
-        type: "NEW_PROJECT",
-        title: "Should fail",
+        type: "NEW_TASK",
+        title: "Spoof project",
         description: "x",
-        submit: true,
+        targetProjectId: "00000000-0000-4000-8000-000000000099",
+        submit: false,
       },
-      {
-        userId: unlinkedUser.id,
-        email: unlinkedUser.email,
-        companyId: null,
-        role: UserRole.CLIENT,
-      },
+      unlinkedActor,
     );
-    assert.fail("unlinked create should fail");
+    assert.fail("unlinked targetProjectId should fail");
   } catch (error) {
     assert.ok(error instanceof CustomerRequestsError);
     assert.equal(error.code, CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED);
   }
-  console.log("[p2-sec] unlinked CLIENT blocked OK");
+  console.log("[p2-sec] unlinked targetProject blocked OK");
+
+  // Admin can review + approve unlinked with company association
+  await customerRequestsService.startReview(unlinkedCreated.id, {}, admin);
+  const approvedUnlinked = await customerRequestsService.approve(
+    unlinkedCreated.id,
+    {
+      clientId: client.companyId!,
+      linkRequesterCompany: true,
+    },
+    admin,
+  );
+  assert.equal(approvedUnlinked.clientId, client.companyId);
+  const linkedUser = await prisma.user.findUnique({
+    where: { id: unlinkedUser.id },
+    select: { companyId: true },
+  });
+  assert.equal(linkedUser?.companyId, client.companyId);
+  console.log("[p2-sec] admin approve+link onboarding request OK");
 
   // Staff convert creates project visible to client company
   await customerRequestsService.startReview(created.id, {}, admin);
@@ -321,6 +371,44 @@ async function main() {
   );
   assert.equal(project.clientId, client.companyId);
   console.log("[p2-sec] converted project visible to owning CLIENT OK");
+
+  // Unlinked (before link) cannot create projects — use a fresh unlinked user
+  const stillUnlinked = await authRepository.createUser({
+    email: email("still-unlinked"),
+    passwordHash: null,
+    firstName: "Still",
+    lastName: "Unlinked",
+    roleId: unlinkedRole.id,
+    status: UserStatus.ACTIVE,
+    emailVerified: true,
+  });
+  try {
+    await projectsService.create(
+      {
+        name: "Should fail",
+        description: "x",
+        clientId: client.companyId!,
+        status: "NOT_STARTED",
+        priority: "MEDIUM",
+        startDate: "",
+        dueDate: "",
+        progress: 0,
+        budget: "",
+        memberIds: [],
+        milestones: [],
+        attachments: [],
+      },
+      {
+        userId: stillUnlinked.id,
+        email: stillUnlinked.email,
+        role: UserRole.CLIENT,
+        companyId: null,
+      },
+    );
+    assert.fail("unlinked CLIENT must not create projects");
+  } catch {
+    console.log("[p2-sec] unlinked CLIENT cannot create Project OK");
+  }
 
   // Audit events exist for this request
   const audits = await prisma.auditLog.findMany({

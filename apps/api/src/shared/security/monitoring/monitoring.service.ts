@@ -51,18 +51,30 @@ class SecurityMonitoringService {
    * Never throws into the request pipeline.
    */
   async report(input: ReportThreatInput): Promise<ThreatReportResult> {
+    const empty: ThreatReportResult = {
+      eventId: null,
+      incidentId: null,
+      incidentCreated: false,
+      incidentUpdated: false,
+      countInWindow: 0,
+      severity: "INFO",
+    };
+
+    // Cap wait so hung poolers cannot steal connections from OAuth/login.
+    const budgetMs = Number(
+      process.env.SECURITY_MONITORING_REPORT_BUDGET_MS ?? 2_500,
+    );
+
     try {
-      return await this.reportInternal(input);
+      return await Promise.race([
+        this.reportInternal(input),
+        new Promise<ThreatReportResult>((resolve) => {
+          setTimeout(() => resolve(empty), Number.isFinite(budgetMs) ? budgetMs : 2_500);
+        }),
+      ]);
     } catch (error) {
       logger.error("[security-monitoring] Failed to report threat:", error);
-      return {
-        eventId: null,
-        incidentId: null,
-        incidentCreated: false,
-        incidentUpdated: false,
-        countInWindow: 0,
-        severity: "INFO",
-      };
+      return empty;
     }
   }
 

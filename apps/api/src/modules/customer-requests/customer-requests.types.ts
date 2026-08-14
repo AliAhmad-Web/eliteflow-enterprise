@@ -20,7 +20,7 @@ export type CustomerRequestAttachmentRecord = {
 
 export type CustomerRequestWithRelations = {
   id: string;
-  clientId: string;
+  clientId: string | null;
   createdById: string;
   type: CustomerRequestTypeValue;
   title: string;

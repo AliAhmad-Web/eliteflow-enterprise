@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  Building2,
   CheckSquare,
   CircleDollarSign,
   ClipboardList,
@@ -170,41 +169,50 @@ function ClientUnlinkedOnboarding({ firstName }: { firstName: string }) {
       <RoleDashboardHeader
         badge="Client Portal"
         title={`Welcome, ${firstName}`}
-        subtitle="Your personal account is ready. Business data unlocks after your company is connected."
+        subtitle="Submit a project request to get started. Company-scoped ERP access unlocks after onboarding review."
       />
 
       <Card className="border-border/50">
         <CardHeader className="pb-3">
           <div className="flex items-start gap-3">
             <div className="icon-box icon-box-md rounded-xl bg-primary/10 ring-1 ring-primary/15">
-              <Building2 strokeWidth={1.75} aria-hidden="true" />
+              <ClipboardList strokeWidth={1.75} aria-hidden="true" />
             </div>
             <div>
               <CardTitle className="text-base font-semibold tracking-tight">
-                Connect your business account
+                Start with a project request
               </CardTitle>
               <p className="mt-2 text-sm text-muted-foreground">
-                EliteFlow has not linked this login to a Client company yet.
-                Projects, invoices, tasks, and updates stay hidden until an
-                administrator connects your account — we never show sample or
-                placeholder business data.
+                Submit your project request. Our team will review your request
+                and connect it to your business account during onboarding.
+                Projects, invoices, tasks, and files stay locked until that
+                link is complete.
               </p>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>Contact your EliteFlow administrator to request linking.</li>
             <li>
-              Use the same email as your company contact when possible so
-              linking is faster and safer.
+              You can create and track your own requests immediately — no
+              existing company account is required.
             </li>
             <li>
-              After linking, this portal loads real company-scoped projects,
-              invoices, tasks, and updates automatically.
+              After approval, an administrator associates your login with the
+              correct Client/Company record.
+            </li>
+            <li>
+              Until then, you only see your onboarding requests — never another
+              company&apos;s business data.
             </li>
           </ul>
           <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href={ROUTES.REQUESTS_NEW}>New request</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={ROUTES.REQUESTS}>My requests</Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href={ROUTES.SETTINGS}>Open profile settings</Link>
             </Button>

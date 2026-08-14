@@ -64,11 +64,16 @@ export function RequestNewPageContent() {
 
       <PageHeader
         title="New request"
-        description="Tell EliteFlow what you need. Save a draft or submit for review."
+        description="Submit your project request. Our team will review it and connect it to your business account during onboarding."
       />
 
       <Card className="border-border/50 shadow-(--shadow-sm)">
-        <CardContent className="p-6">
+        <CardContent className="space-y-4 p-6">
+          <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            No existing company link is required to submit. You will only see
+            your own requests until an administrator associates your account
+            with a Client/Company during review.
+          </p>
           <RequestForm
             mode="create"
             defaultType={defaultType}
