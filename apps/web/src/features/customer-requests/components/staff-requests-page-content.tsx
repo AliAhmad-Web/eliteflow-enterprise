@@ -197,7 +197,7 @@ export function StaffRequestsPageContent() {
                     <thead className="border-b border-border/60 bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3 font-medium">Title</th>
-                        <th className="px-4 py-3 font-medium">Client</th>
+                        <th className="px-4 py-3 font-medium">Customer</th>
                         <th className="px-4 py-3 font-medium">Type</th>
                         <th className="px-4 py-3 font-medium">Priority</th>
                         <th className="px-4 py-3 font-medium">Status</th>
@@ -219,7 +219,7 @@ export function StaffRequestsPageContent() {
                             </Link>
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
-                            {item.clientName ?? "—"}
+                            {item.createdByName ?? item.clientName ?? "—"}
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
                             {CUSTOMER_REQUEST_TYPE_LABELS[item.type]}

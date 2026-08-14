@@ -243,18 +243,27 @@ async function main() {
   await customerRequestsService.startReview(submitted.id, {}, admin);
   const approved = await customerRequestsService.approve(
     submitted.id,
-    { clientId: company.id, linkRequesterCompany: true },
+    {},
     admin,
   );
-  assert.equal(approved.clientId, company.id);
+  assert.equal(approved.clientId, null);
   assert.equal(approved.status, "APPROVED");
+  assert.equal(approved.createdById, unlinkedUser.id);
+  assert.equal(approved.createdByEmail, unlinkedUser.email);
 
-  const relinked = await prisma.user.findUnique({
+  const stillUnlinkedUser = await prisma.user.findUnique({
     where: { id: unlinkedUser.id },
     select: { companyId: true },
   });
-  assert.equal(relinked?.companyId, company.id);
-  console.log("[p2-onboard] admin clarify/resubmit/approve+link OK");
+  assert.equal(stillUnlinkedUser?.companyId, null);
+
+  const seenByCustomer = await customerRequestsService.getById(
+    submitted.id,
+    unlinked,
+  );
+  assert.equal(seenByCustomer.status, "APPROVED");
+  assert.equal(seenByCustomer.createdById, unlinkedUser.id);
+  console.log("[p2-onboard] admin clarify/resubmit/approve without company OK");
 
   // 6) Linked workflow still works
   const linkedDraft = await customerRequestsService.create(

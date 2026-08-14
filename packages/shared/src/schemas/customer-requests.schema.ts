@@ -223,16 +223,6 @@ export type ClarifyCustomerRequestInput = z.infer<
 
 export const approveCustomerRequestSchema = z.object({
   staffNotes: optionalText("Staff notes", 5000).optional().nullable(),
-  /**
-   * Admin-selected Client company for onboarding.
-   * Required when the request has no clientId yet. Never accepted from CLIENT create.
-   */
-  clientId: uuidSchema.optional().nullable(),
-  /**
-   * When associating a company, also link the requester's User.companyId if unset.
-   * Defaults to true when clientId is provided.
-   */
-  linkRequesterCompany: z.boolean().optional(),
 });
 
 export type ApproveCustomerRequestInput = z.infer<
@@ -279,6 +269,7 @@ export const customerRequestSchema = z.object({
   clientName: z.string().nullable(),
   createdById: uuidSchema,
   createdByName: z.string().nullable(),
+  createdByEmail: z.string().nullable(),
   type: customerRequestTypeSchema,
   title: z.string(),
   description: z.string().nullable(),

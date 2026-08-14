@@ -338,23 +338,21 @@ async function main() {
   }
   console.log("[p2-sec] unlinked targetProject blocked OK");
 
-  // Admin can review + approve unlinked with company association
+  // Admin can review + approve unlinked without company selection
   await customerRequestsService.startReview(unlinkedCreated.id, {}, admin);
   const approvedUnlinked = await customerRequestsService.approve(
     unlinkedCreated.id,
-    {
-      clientId: client.companyId!,
-      linkRequesterCompany: true,
-    },
+    {},
     admin,
   );
-  assert.equal(approvedUnlinked.clientId, client.companyId);
-  const linkedUser = await prisma.user.findUnique({
+  assert.equal(approvedUnlinked.clientId, null);
+  assert.equal(approvedUnlinked.createdById, unlinkedUser.id);
+  const stillUnlinked = await prisma.user.findUnique({
     where: { id: unlinkedUser.id },
     select: { companyId: true },
   });
-  assert.equal(linkedUser?.companyId, client.companyId);
-  console.log("[p2-sec] admin approve+link onboarding request OK");
+  assert.equal(stillUnlinked?.companyId, null);
+  console.log("[p2-sec] admin approve unlinked without company OK");
 
   // Staff convert creates project visible to client company
   await customerRequestsService.startReview(created.id, {}, admin);
@@ -373,7 +371,7 @@ async function main() {
   console.log("[p2-sec] converted project visible to owning CLIENT OK");
 
   // Unlinked (before link) cannot create projects — use a fresh unlinked user
-  const stillUnlinked = await authRepository.createUser({
+  const stillUnlinkedUser = await authRepository.createUser({
     email: email("still-unlinked"),
     passwordHash: null,
     firstName: "Still",
@@ -399,8 +397,8 @@ async function main() {
         attachments: [],
       },
       {
-        userId: stillUnlinked.id,
-        email: stillUnlinked.email,
+        userId: stillUnlinkedUser.id,
+        email: stillUnlinkedUser.email,
         role: UserRole.CLIENT,
         companyId: null,
       },

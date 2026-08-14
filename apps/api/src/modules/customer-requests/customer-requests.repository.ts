@@ -16,7 +16,7 @@ import type { CustomerRequestWithRelations } from "./customer-requests.types.js"
 const requestInclude = {
   client: { select: { id: true, companyName: true } },
   createdBy: {
-    select: { id: true, firstName: true, lastName: true },
+    select: { id: true, firstName: true, lastName: true, email: true },
   },
   reviewedBy: {
     select: { id: true, firstName: true, lastName: true },

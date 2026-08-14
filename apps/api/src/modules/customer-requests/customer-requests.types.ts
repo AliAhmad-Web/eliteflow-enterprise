@@ -45,7 +45,12 @@ export type CustomerRequestWithRelations = {
   updatedAt: Date;
   deletedAt: Date | null;
   client?: { id: string; companyName: string } | null;
-  createdBy?: { id: string; firstName: string; lastName: string } | null;
+  createdBy?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
   reviewedBy?: { id: string; firstName: string; lastName: string } | null;
   targetProject?: { id: string; name: string } | null;
   attachments?: CustomerRequestAttachmentRecord[];
@@ -109,6 +114,7 @@ export function toCustomerRequestDto(
     clientName: request.client?.companyName ?? null,
     createdById: request.createdById,
     createdByName: displayName(request.createdBy),
+    createdByEmail: request.createdBy?.email ?? null,
     type: request.type,
     title: request.title,
     description: request.description,

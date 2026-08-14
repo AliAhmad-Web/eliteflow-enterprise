@@ -479,69 +479,6 @@ export class CustomerRequestsService {
 
     this.assertTransition(existing.status, "APPROVED", ["UNDER_REVIEW"]);
 
-    let associatedClientId = existing.clientId;
-    if (!associatedClientId) {
-      const providedClientId = input.clientId?.trim() || null;
-      if (!providedClientId) {
-        throw new CustomerRequestsError(
-          "Associate a Client/Company account before approving an onboarding request",
-          400,
-          CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
-          [
-            {
-              field: "clientId",
-              message: "Client company is required for unlinked requests",
-            },
-          ],
-        );
-      }
-
-      const client = await prisma.client.findFirst({
-        where: { id: providedClientId, deletedAt: null },
-        select: { id: true },
-      });
-      if (!client) {
-        throw new CustomerRequestsError(
-          "Client company not found",
-          400,
-          CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
-          [{ field: "clientId", message: "Invalid Client company" }],
-        );
-      }
-
-      await customerRequestsRepository.associateClient(id, providedClientId);
-      associatedClientId = providedClientId;
-
-      const shouldLinkRequester = input.linkRequesterCompany !== false;
-      if (shouldLinkRequester) {
-        const requester = await prisma.user.findFirst({
-          where: { id: existing.createdById, deletedAt: null },
-          select: { id: true, companyId: true, role: { select: { code: true } } },
-        });
-        if (
-          requester &&
-          requester.role.code === UserRole.CLIENT &&
-          !requester.companyId
-        ) {
-          await prisma.user.update({
-            where: { id: requester.id },
-            data: { companyId: providedClientId },
-          });
-          await customerRequestsRepository.associateUnlinkedRequestsForCreator(
-            requester.id,
-            providedClientId,
-          );
-        }
-      }
-    } else if (input.clientId && input.clientId !== associatedClientId) {
-      throw new CustomerRequestsError(
-        "Request is already associated with a different Client company",
-        409,
-        CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
-        [{ field: "clientId", message: "Client company mismatch" }],
-      );
-    }
-
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "APPROVED",
       staffNotes: input.staffNotes,
@@ -555,9 +492,8 @@ export class CustomerRequestsService {
       resourceId: id,
       metadata: {
         fromStatus: existing.status,
-        clientId: associatedClientId,
-        linkedRequester:
-          !existing.clientId && input.linkRequesterCompany !== false,
+        createdById: existing.createdById,
+        clientId: existing.clientId,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,

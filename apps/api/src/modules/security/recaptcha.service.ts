@@ -64,14 +64,16 @@ export class RecaptchaService {
       return;
     }
 
-    const secret = process.env.RECAPTCHA_SECRET_KEY!.trim();
+    const secret = process.env.RECAPTCHA_SECRET_KEY!.trim().replace(
+      /^\uFEFF/,
+      "",
+    );
     const body = new URLSearchParams({
       secret,
       response: input.token,
     });
-    if (input.remoteIp) {
-      body.set("remoteip", input.remoteIp);
-    }
+    // Do not send remoteip: Vercel/proxy IPs do not match the browser that
+    // minted the token and Google then returns browser-error / rejects.
 
     let result: RecaptchaVerifyResult;
     try {
@@ -99,6 +101,15 @@ export class RecaptchaService {
       !result.action || result.action === input.expectedAction;
 
     if (!result.success || !scoreOk || !actionOk) {
+      console.warn("[recaptcha] verification failed", {
+        success: result.success,
+        score: result.score,
+        action: result.action,
+        expectedAction: input.expectedAction,
+        hostname: result.hostname,
+        errorCodes: result["error-codes"] ?? [],
+        minScore,
+      });
       throw new AuthError(
         SECURITY_MESSAGES.CAPTCHA_FAILED,
         400,

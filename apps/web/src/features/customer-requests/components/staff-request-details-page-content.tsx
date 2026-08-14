@@ -19,7 +19,6 @@ import {
   ROUTES,
   taskDetailPath,
 } from "@/constants/routes";
-import { useClients } from "@/features/clients/hooks/use-clients";
 import {
   useProjectAssignees,
   useProjects,
@@ -82,13 +81,6 @@ export function StaffRequestDetailsPageContent() {
     limit: 100,
     clientId: request?.clientId ?? undefined,
   });
-  const clientsQuery = useClients({
-    search: "",
-    sortBy: "createdAt",
-    sortOrder: "desc",
-    page: 1,
-    limit: 100,
-  });
   const assigneesQuery = useProjectAssignees(canReview);
 
   const reviewMutation = useStartCustomerRequestReview();
@@ -98,7 +90,6 @@ export function StaffRequestDetailsPageContent() {
   const convertMutation = useConvertCustomerRequest();
 
   const [staffNotes, setStaffNotes] = useState("");
-  const [approveClientId, setApproveClientId] = useState("");
   const [clarificationMessage, setClarificationMessage] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [createProject, setCreateProject] = useState(true);
@@ -196,7 +187,7 @@ export function StaffRequestDetailsPageContent() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title={request.title}
-          description={`${request.clientName ?? "Client"} · ${CUSTOMER_REQUEST_TYPE_LABELS[request.type]}`}
+          description={`${request.createdByName ?? "Customer"} · ${CUSTOMER_REQUEST_TYPE_LABELS[request.type]}`}
         />
         <CustomerRequestStatusBadge status={request.status} />
       </div>
@@ -290,7 +281,11 @@ export function StaffRequestDetailsPageContent() {
           {canReview ? (
             <Card className="border-border/50">
               <CardHeader>
-                <CardTitle className="text-base">Review actions</CardTitle>
+                <CardTitle className="text-base">Review</CardTitle>
+                <p className="text-sm font-normal text-muted-foreground">
+                  Customer → Request → Review → Clarification (if needed) →
+                  Approve or Reject
+                </p>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="space-y-2">
@@ -302,34 +297,6 @@ export function StaffRequestDetailsPageContent() {
                     onChange={(event) => setStaffNotes(event.target.value)}
                   />
                 </div>
-
-                {!request.clientId ? (
-                  <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                    <Label htmlFor="approve-client">
-                      Associate Client/Company (required for onboarding)
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      This request was submitted before a company link existed.
-                      Choose the Client account to associate, then approve.
-                      The requester will be linked if they are still unlinked.
-                    </p>
-                    <select
-                      id="approve-client"
-                      className={selectClassName}
-                      value={approveClientId}
-                      onChange={(event) =>
-                        setApproveClientId(event.target.value)
-                      }
-                    >
-                      <option value="">Select client company…</option>
-                      {(clientsQuery.data?.items ?? []).map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.companyName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
 
                 <div className="flex flex-wrap gap-2">
                   {(request.status === "SUBMITTED" ||
@@ -349,37 +316,27 @@ export function StaffRequestDetailsPageContent() {
                         )
                       }
                     >
-                      Start review
+                      Start Review
                     </Button>
                   )}
 
                   {request.status === "UNDER_REVIEW" && (
                     <Button
                       type="button"
-                      disabled={
-                        busy || (!request.clientId && !approveClientId.trim())
-                      }
+                      disabled={busy}
                       onClick={() =>
                         void runAction(
                           () =>
                             approveMutation.mutateAsync({
                               id: request.id,
-                              input: {
-                                staffNotes: staffNotes || null,
-                                ...(request.clientId
-                                  ? {}
-                                  : {
-                                      clientId: approveClientId,
-                                      linkRequesterCompany: true,
-                                    }),
-                              },
+                              input: { staffNotes: staffNotes || null },
                             }),
                           "Request approved.",
                         )
                       }
                     >
                       <Check className="mr-2 size-4" aria-hidden />
-                      Approve
+                      Approve Request
                     </Button>
                   )}
                 </div>
@@ -393,7 +350,7 @@ export function StaffRequestDetailsPageContent() {
                     onChange={(event) =>
                       setClarificationMessage(event.target.value)
                     }
-                    placeholder="What does the client need to clarify?"
+                    placeholder="Please provide the expected delivery timeline and preferred technology stack."
                   />
                   <Button
                     type="button"
@@ -414,7 +371,7 @@ export function StaffRequestDetailsPageContent() {
                     }
                   >
                     <MessageSquareWarning className="mr-2 size-4" aria-hidden />
-                    Send clarification
+                    Request Clarification
                   </Button>
                 </div>
 
@@ -446,7 +403,7 @@ export function StaffRequestDetailsPageContent() {
                     }
                   >
                     <X className="mr-2 size-4" aria-hidden />
-                    Reject
+                    Reject Request
                   </Button>
                 </div>
 
@@ -564,8 +521,12 @@ export function StaffRequestDetailsPageContent() {
                 value={CUSTOMER_REQUEST_PRIORITY_LABELS[request.priority]}
               />
               <DetailItem
-                label="Created by"
+                label="Customer"
                 value={request.createdByName ?? "—"}
+              />
+              <DetailItem
+                label="Customer email"
+                value={request.createdByEmail ?? "—"}
               />
               <DetailItem
                 label="Preferred deadline"
