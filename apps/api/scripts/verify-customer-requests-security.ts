@@ -319,7 +319,7 @@ async function main() {
   assert.ok(unlinkedList.items.some((item) => item.id === unlinkedCreated.id));
   console.log("[p2-sec] unlinked CLIENT create/submit + own-only list OK");
 
-  // Unlinked cannot spoof targetProjectId without company
+  // Unlinked cannot spoof targetProjectId (ownership, not a company picker)
   try {
     await customerRequestsService.create(
       {
@@ -334,14 +334,14 @@ async function main() {
     assert.fail("unlinked targetProjectId should fail");
   } catch (error) {
     assert.ok(error instanceof CustomerRequestsError);
-    assert.equal(error.code, CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED);
+    assert.equal(error.code, CUSTOMER_REQUESTS_ERROR_CODES.PROJECT_NOT_FOUND);
   }
   console.log("[p2-sec] unlinked targetProject blocked OK");
 
   // Admin can review + approve unlinked without company selection
   const approvedUnlinked = await customerRequestsService.approve(
     unlinkedCreated.id,
-    {},
+    { agreedAmount: "1000" },
     admin,
   );
   assert.ok(approvedUnlinked.clientId);
@@ -362,7 +362,11 @@ async function main() {
 
   // Staff approve creates project visible to client company
   await customerRequestsService.startReview(created.id, {}, admin);
-  const converted = await customerRequestsService.approve(created.id, {}, admin);
+  const converted = await customerRequestsService.approve(
+    created.id,
+    { agreedAmount: "1000" },
+    admin,
+  );
   assert.ok(converted.convertedProjectId);
   const project = await projectsService.getById(
     converted.convertedProjectId!,

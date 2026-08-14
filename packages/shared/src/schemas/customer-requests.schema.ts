@@ -3,21 +3,43 @@ import { z } from "zod";
 import { isAttachmentUrlSchemeAllowed } from "../utils/attachment-url.js";
 import { uuidSchema } from "./common.schema.js";
 
-export const CUSTOMER_REQUEST_TYPES = [
+export const CUSTOMER_REQUEST_INTAKE_TYPES = [
   "NEW_PROJECT",
   "NEW_TASK",
   "GENERAL_SERVICE",
 ] as const;
+
+export const CUSTOMER_REQUEST_CONTINUATION_TYPES = [
+  "REVISION",
+  "ADDITIONAL_SCOPE",
+  "REOPEN_PROJECT",
+  "NEXT_PHASE",
+  "MAINTENANCE",
+] as const;
+
+export const CUSTOMER_REQUEST_TYPES = [
+  ...CUSTOMER_REQUEST_INTAKE_TYPES,
+  ...CUSTOMER_REQUEST_CONTINUATION_TYPES,
+] as const;
+
+export const CUSTOMER_REQUEST_KINDS = ["intake", "continuation"] as const;
 
 export const CUSTOMER_REQUEST_STATUSES = [
   "DRAFT",
   "SUBMITTED",
   "UNDER_REVIEW",
   "CLARIFICATION_REQUESTED",
+  "CUSTOMER_RESPONDED",
   "APPROVED",
   "REJECTED",
   "CONVERTED",
   "CANCELLED",
+] as const;
+
+export const REOPEN_ELIGIBLE_PROJECT_STATUSES = [
+  "COMPLETED",
+  "CANCELLED",
+  "ON_HOLD",
 ] as const;
 
 export const CUSTOMER_REQUEST_PRIORITIES = [
@@ -37,16 +59,44 @@ export const CUSTOMER_REQUEST_SORT_FIELDS = [
 ] as const;
 
 export const customerRequestTypeSchema = z.enum(CUSTOMER_REQUEST_TYPES);
+export const customerRequestIntakeTypeSchema = z.enum(
+  CUSTOMER_REQUEST_INTAKE_TYPES,
+);
+export const customerRequestContinuationTypeSchema = z.enum(
+  CUSTOMER_REQUEST_CONTINUATION_TYPES,
+);
+export const customerRequestKindSchema = z.enum(CUSTOMER_REQUEST_KINDS);
 export const customerRequestStatusSchema = z.enum(CUSTOMER_REQUEST_STATUSES);
 export const customerRequestPrioritySchema = z.enum(CUSTOMER_REQUEST_PRIORITIES);
 
 export type CustomerRequestTypeValue = z.infer<typeof customerRequestTypeSchema>;
+export type CustomerRequestIntakeTypeValue = z.infer<
+  typeof customerRequestIntakeTypeSchema
+>;
+export type CustomerRequestContinuationTypeValue = z.infer<
+  typeof customerRequestContinuationTypeSchema
+>;
+export type CustomerRequestKindValue = z.infer<typeof customerRequestKindSchema>;
 export type CustomerRequestStatusValue = z.infer<
   typeof customerRequestStatusSchema
 >;
 export type CustomerRequestPriorityValue = z.infer<
   typeof customerRequestPrioritySchema
 >;
+
+export function isCustomerRequestContinuationType(
+  type: string,
+): type is CustomerRequestContinuationTypeValue {
+  return (CUSTOMER_REQUEST_CONTINUATION_TYPES as readonly string[]).includes(
+    type,
+  );
+}
+
+export function isCustomerRequestIntakeType(
+  type: string,
+): type is CustomerRequestIntakeTypeValue {
+  return (CUSTOMER_REQUEST_INTAKE_TYPES as readonly string[]).includes(type);
+}
 
 const optionalText = (label: string, max: number) =>
   z
@@ -136,6 +186,17 @@ export const createCustomerRequestSchema = z.object({
   attachments: z.array(attachmentInputSchema).max(20).optional(),
   /** When true, create as SUBMITTED instead of DRAFT. */
   submit: z.boolean().optional(),
+}).superRefine((data, ctx) => {
+  if (
+    isCustomerRequestContinuationType(data.type) &&
+    !data.targetProjectId
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["targetProjectId"],
+      message: "A project is required for this request type",
+    });
+  }
 });
 
 export type CreateCustomerRequestInput = z.infer<
@@ -199,6 +260,13 @@ export const listCustomerRequestsQuerySchema = z.object({
   status: customerRequestStatusSchema.optional(),
   type: customerRequestTypeSchema.optional(),
   priority: customerRequestPrioritySchema.optional(),
+  /** Intake (Phase 1) vs continuation / change requests (Phase 2). */
+  kind: customerRequestKindSchema.optional(),
+  /**
+   * Requests for a project: target (continuation / NEW_TASK) or converted
+   * (original intake). Ownership is still enforced by access scope.
+   */
+  relatedProjectId: uuidSchema.optional(),
   sortBy: z.enum(CUSTOMER_REQUEST_SORT_FIELDS).default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
@@ -229,6 +297,25 @@ export type ClarifyCustomerRequestInput = z.infer<
 >;
 
 export const approveCustomerRequestSchema = z.object({
+  /**
+   * Authoritative final deal amount after negotiation.
+   * Required for Phase 1 intake approval. Optional for Phase 2 continuation —
+   * work approval is not financial approval.
+   * Does not overwrite expectedBudget (original customer submission).
+   */
+  agreedAmount: z
+    .string()
+    .trim()
+    .refine(
+      (value) =>
+        value === "" ||
+        (!Number.isNaN(Number(value)) &&
+          Number(value) > 0 &&
+          Number(value) <= 999999999),
+      "Final agreed amount must be a positive number",
+    )
+    .optional()
+    .nullable(),
   staffNotes: optionalText("Staff notes", 5000).optional().nullable(),
 });
 
@@ -278,11 +365,19 @@ export const customerRequestSchema = z.object({
   createdByName: z.string().nullable(),
   createdByEmail: z.string().nullable(),
   type: customerRequestTypeSchema,
+  isContinuation: z.boolean(),
   title: z.string(),
   description: z.string().nullable(),
   requirements: z.string().nullable(),
   preferredDeadline: z.string().nullable(),
   expectedBudget: z.number().nullable(),
+  /** Authoritative negotiated deal amount. Null until admin approval. */
+  agreedAmount: z.number().nullable(),
+  /**
+   * Server-derived commercial amount for project/billing.
+   * After approval this is agreedAmount (legacy fallback: expectedBudget).
+   */
+  commercialAmount: z.number().nullable(),
   currency: z.string(),
   priority: customerRequestPrioritySchema,
   status: customerRequestStatusSchema,
@@ -302,6 +397,8 @@ export const customerRequestSchema = z.object({
   rejectionReason: z.string().nullable(),
   targetProjectId: uuidSchema.nullable(),
   targetProjectName: z.string().nullable(),
+  parentRequestId: uuidSchema.nullable(),
+  parentRequestTitle: z.string().nullable(),
   convertedProjectId: uuidSchema.nullable(),
   convertedTaskId: uuidSchema.nullable(),
   reviewedById: uuidSchema.nullable(),

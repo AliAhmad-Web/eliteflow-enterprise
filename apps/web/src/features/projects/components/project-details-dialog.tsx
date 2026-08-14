@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
 import { EntityCommentsPanel } from "@/features/communication/components/entity-comments-panel";
+import { ProjectChangeRequestsPanel } from "@/features/customer-requests/components/project-change-requests-panel";
 
 import { useProject } from "../hooks/use-projects";
 import {
@@ -61,7 +62,7 @@ export function ProjectDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Project details</DialogTitle>
           <DialogDescription>
@@ -246,9 +247,11 @@ export function ProjectDetailsDialog({
               )}
             </section>
 
+            <ProjectChangeRequestsPanel project={project} />
+
             <section className="space-y-3 rounded-xl border border-border/50 p-4">
               <h4 className="text-sm font-semibold text-foreground">
-                Feedback & change requests
+                Feedback
               </h4>
               <p className="text-xs text-muted-foreground">
                 Share project feedback with the EliteFlow team. Comments stay

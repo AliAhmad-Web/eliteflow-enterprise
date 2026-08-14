@@ -19,11 +19,17 @@ import {
   type RejectCustomerRequestInput,
   type StartCustomerRequestReviewInput,
   type UpdateCustomerRequestInput,
+  isCustomerRequestContinuationType,
+  REOPEN_ELIGIBLE_PROJECT_STATUSES,
 } from "@enterprise/shared";
 
 import { attachmentSecurityService } from "../files/attachment-security.service.js";
 import { ensurePortalCompanyLink } from "../clients/client-company-onboarding.service.js";
 import { notificationDispatcher } from "../notifications/notification.dispatcher.js";
+import {
+  logProjectAuditEvent,
+  PROJECT_AUDIT_ACTIONS,
+} from "../projects/projects.audit.js";
 import { projectsService } from "../projects/projects.service.js";
 import { tasksService } from "../tasks/tasks.service.js";
 import {
@@ -123,7 +129,10 @@ const CLIENT_ATTACH_STATUSES = new Set<CustomerRequestStatusValue>([
   "SUBMITTED",
   "UNDER_REVIEW",
   "CLARIFICATION_REQUESTED",
+  "CUSTOMER_RESPONDED",
 ]);
+
+const REOPEN_STATUSES = new Set<string>(REOPEN_ELIGIBLE_PROJECT_STATUSES);
 
 function isAdmin(actor: CustomerRequestActor): boolean {
   return (
@@ -219,23 +228,45 @@ export class CustomerRequestsService {
     actor: CustomerRequestActor,
   ): Promise<CustomerRequestDto> {
     this.assertIsClient(actor);
-    const clientId = actor.companyId ?? null;
+    const continuation = isCustomerRequestContinuationType(input.type);
 
-    if (input.targetProjectId) {
-      if (!clientId) {
+    let clientId = actor.companyId ?? null;
+    let targetProjectId = input.targetProjectId ?? null;
+    let parentRequestId: string | null = null;
+
+    if (continuation) {
+      if (!targetProjectId) {
         throw new CustomerRequestsError(
-          "Link your company account before attaching an existing project",
-          403,
-          CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED,
+          "A project is required for this request type",
+          400,
+          CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+          [{ field: "targetProjectId", message: "Project is required" }],
+        );
+      }
+      const owned = await this.requireOwnedProject(targetProjectId, actor);
+      targetProjectId = owned.id;
+      clientId = owned.clientId ?? clientId;
+      if (input.type === "REOPEN_PROJECT" && !REOPEN_STATUSES.has(owned.status)) {
+        throw new CustomerRequestsError(
+          "Only completed, cancelled, or on-hold projects can be reopened",
+          400,
+          CUSTOMER_REQUESTS_ERROR_CODES.PROJECT_NOT_ELIGIBLE,
           [
             {
               field: "targetProjectId",
-              message: "Company link required for target projects",
+              message: "Project is already active",
             },
           ],
         );
       }
-      await this.assertTargetProject(input.targetProjectId, clientId);
+      parentRequestId =
+        await customerRequestsRepository.findOriginalRequestIdForProject(
+          owned.id,
+        );
+    } else if (targetProjectId) {
+      const owned = await this.requireOwnedProject(targetProjectId, actor);
+      targetProjectId = owned.id;
+      clientId = owned.clientId ?? clientId;
     }
 
     const attachments = input.attachments?.length
@@ -258,7 +289,8 @@ export class CustomerRequestsService {
       currency: input.currency,
       priority: input.priority,
       additionalNotes: input.additionalNotes,
-      targetProjectId: input.targetProjectId,
+      targetProjectId,
+      parentRequestId,
       status: submitNow ? "SUBMITTED" : "DRAFT",
       submittedAt: submitNow ? new Date() : null,
       attachments,
@@ -272,6 +304,9 @@ export class CustomerRequestsService {
         type: created.type,
         status: created.status,
         submitted: submitNow,
+        continuation,
+        targetProjectId,
+        parentRequestId,
         onboardingUnlinked: !clientId,
       },
       ipAddress: actor.ipAddress,
@@ -320,33 +355,35 @@ export class CustomerRequestsService {
       }
     }
 
-    if (input.targetProjectId) {
-      if (!clientId) {
-        throw new CustomerRequestsError(
-          "Link your company account before attaching an existing project",
-          403,
-          CUSTOMER_REQUESTS_ERROR_CODES.UNLINKED,
-          [
-            {
-              field: "targetProjectId",
-              message: "Company link required for target projects",
-            },
-          ],
-        );
-      }
-      await this.assertTargetProject(input.targetProjectId, clientId);
+    const patch: UpdateCustomerRequestInput = { ...input };
+
+    if (isCustomerRequestContinuationType(existing.type)) {
+      delete patch.type;
+      delete patch.targetProjectId;
+    } else if (patch.type && isCustomerRequestContinuationType(patch.type)) {
+      throw new CustomerRequestsError(
+        "An intake request cannot be changed into a project change request",
+        400,
+        CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+        [{ field: "type", message: "Invalid request type change" }],
+      );
+    } else if (patch.targetProjectId) {
+      await this.requireOwnedProject(patch.targetProjectId, actor);
+    }
+    if (existing.status !== "DRAFT") {
+      delete patch.expectedBudget;
     }
 
     const reply =
-      typeof input.clarificationResponse === "string"
-        ? input.clarificationResponse.trim()
+      typeof patch.clarificationResponse === "string"
+        ? patch.clarificationResponse.trim()
         : "";
     const clarificationHistory =
       existing.status === "CLARIFICATION_REQUESTED" && reply
         ? upsertCustomerReply(existing.clarificationHistory, reply)
         : undefined;
 
-    const updated = await customerRequestsRepository.update(id, input, {
+    const updated = await customerRequestsRepository.update(id, patch, {
       clarificationHistory,
     });
 
@@ -355,7 +392,7 @@ export class CustomerRequestsService {
       action: CUSTOMER_REQUEST_AUDIT_ACTIONS.UPDATE,
       resourceId: id,
       metadata: {
-        fields: Object.keys(input),
+        fields: Object.keys(patch),
         clarificationReply: Boolean(reply),
       },
       ipAddress: actor.ipAddress,
@@ -372,13 +409,18 @@ export class CustomerRequestsService {
     this.assertIsClient(actor);
     const existing = await this.requireOwnedRequest(id, actor);
 
-    this.assertTransition(existing.status, "SUBMITTED", [
+    const nextStatus: CustomerRequestStatusValue =
+      existing.status === "CLARIFICATION_REQUESTED"
+        ? "CUSTOMER_RESPONDED"
+        : "SUBMITTED";
+
+    this.assertTransition(existing.status, nextStatus, [
       "DRAFT",
       "CLARIFICATION_REQUESTED",
     ]);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
-      status: "SUBMITTED",
+      status: nextStatus,
       submittedAt: new Date(),
     });
 
@@ -410,6 +452,7 @@ export class CustomerRequestsService {
     this.assertTransition(existing.status, "CANCELLED", [
       "SUBMITTED",
       "CLARIFICATION_REQUESTED",
+      "CUSTOMER_RESPONDED",
     ]);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
@@ -486,7 +529,10 @@ export class CustomerRequestsService {
     this.assertIsReviewer(actor);
     const existing = await this.requireRequest(id);
 
-    this.assertTransition(existing.status, "UNDER_REVIEW", ["SUBMITTED"]);
+    this.assertTransition(existing.status, "UNDER_REVIEW", [
+      "SUBMITTED",
+      "CUSTOMER_RESPONDED",
+    ]);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "UNDER_REVIEW",
@@ -518,6 +564,7 @@ export class CustomerRequestsService {
     this.assertTransition(existing.status, "CLARIFICATION_REQUESTED", [
       "SUBMITTED",
       "UNDER_REVIEW",
+      "CUSTOMER_RESPONDED",
     ]);
 
     const clarificationHistory = appendHistory(existing.clarificationHistory, {
@@ -564,13 +611,34 @@ export class CustomerRequestsService {
     this.assertTransition(existing.status, "APPROVED", [
       "SUBMITTED",
       "UNDER_REVIEW",
+      "CUSTOMER_RESPONDED",
     ]);
+
+    const continuation = isCustomerRequestContinuationType(existing.type);
+    const agreedAmount = input.agreedAmount?.trim() || null;
+
+    if (!continuation) {
+      if (!agreedAmount || Number(agreedAmount) <= 0) {
+        throw new CustomerRequestsError(
+          "Final agreed amount is required",
+          400,
+          CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+          [
+            {
+              field: "agreedAmount",
+              message: "Final agreed amount is required",
+            },
+          ],
+        );
+      }
+    }
 
     await this.activateSubmittingCustomer(existing, actor);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "APPROVED",
       staffNotes: input.staffNotes,
+      agreedAmount,
       reviewedById: actor.userId,
       reviewedAt: new Date(),
     });
@@ -583,10 +651,36 @@ export class CustomerRequestsService {
         fromStatus: existing.status,
         createdById: existing.createdById,
         clientId: updated.clientId,
+        expectedBudget: existing.expectedBudget?.toString() ?? null,
+        agreedAmount,
+        continuation,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
+
+    if (continuation) {
+      try {
+        const applied = await this.applyContinuation(id, existing, actor, {
+          staffNotes: input.staffNotes,
+          skipNotify: true,
+        });
+        const reopen = existing.type === "REOPEN_PROJECT";
+        this.notifyCreator(applied, {
+          title: reopen ? "Project reopened" : "Change request approved",
+          body: reopen
+            ? `Your request to reopen "${applied.targetProjectName ?? applied.title}" was approved. The existing project is active again.`
+            : `Your ${existing.type.replaceAll("_", " ").toLowerCase()} request "${applied.title}" was approved and linked to the existing project. This is not financial or invoice approval.`,
+        });
+        return applied;
+      } catch (error) {
+        this.notifyCreator(updated, {
+          title: "Change request approved",
+          body: `Your change request "${updated.title}" was approved.`,
+        });
+        throw error;
+      }
+    }
 
     const convertInput: ConvertCustomerRequestInput = {
       createProject:
@@ -625,6 +719,7 @@ export class CustomerRequestsService {
     this.assertTransition(existing.status, "REJECTED", [
       "SUBMITTED",
       "UNDER_REVIEW",
+      "CUSTOMER_RESPONDED",
     ]);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
@@ -667,6 +762,13 @@ export class CustomerRequestsService {
         400,
         CUSTOMER_REQUESTS_ERROR_CODES.INVALID_TRANSITION,
       );
+    }
+
+    if (isCustomerRequestContinuationType(existing.type)) {
+      return this.applyContinuation(id, existing, actor, {
+        staffNotes: input.staffNotes,
+        skipNotify: options?.skipNotify,
+      });
     }
 
     await this.activateSubmittingCustomer(existing, actor);
@@ -731,7 +833,7 @@ export class CustomerRequestsService {
 
     const description = combineConvertDescription(linked);
     const dueDate = dueDateString(linked.preferredDeadline);
-    const budget = budgetString(linked.expectedBudget);
+    const budget = budgetString(linked.agreedAmount ?? linked.expectedBudget);
 
     let convertedProjectId: string | null = projectId;
     let convertedTaskId: string | null = null;
@@ -808,6 +910,9 @@ export class CustomerRequestsService {
           convertedTaskId,
           createProject,
           createTask,
+          expectedBudget: linked.expectedBudget?.toString() ?? null,
+          agreedAmount: linked.agreedAmount?.toString() ?? null,
+          projectBudget: budget || null,
         },
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
@@ -817,6 +922,106 @@ export class CustomerRequestsService {
         this.notifyCreator(converted, {
           title: "Request converted",
           body: `Your work request "${converted.title}" was converted into delivery work.`,
+        });
+      }
+
+      return toCustomerRequestDto(converted);
+    } catch (error) {
+      await customerRequestsRepository.revertConversionClaim(id);
+      throw error;
+    }
+  }
+
+  private async applyContinuation(
+    id: string,
+    existing: CustomerRequestWithRelations,
+    actor: CustomerRequestActor,
+    options?: { staffNotes?: string | null; skipNotify?: boolean },
+  ): Promise<CustomerRequestDto> {
+    const projectId = existing.targetProjectId;
+    if (!projectId) {
+      throw new CustomerRequestsError(
+        "A linked project is required to apply this change request",
+        400,
+        CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+        [{ field: "targetProjectId", message: "Linked project is missing" }],
+      );
+    }
+
+    const clientId = existing.clientId;
+    if (clientId) {
+      await this.requireClientProject(projectId, clientId);
+    } else {
+      await this.requireOwnedProject(projectId, {
+        userId: existing.createdById,
+        role: UserRole.CLIENT,
+        email: actor.email,
+        companyId: null,
+      });
+    }
+
+    const claimed = await customerRequestsRepository.claimForConversion(
+      id,
+      actor.userId,
+      options?.staffNotes,
+    );
+
+    if (!claimed) {
+      throw new CustomerRequestsError(
+        "Request was already converted",
+        409,
+        CUSTOMER_REQUESTS_ERROR_CODES.ALREADY_CONVERTED,
+      );
+    }
+
+    try {
+      if (existing.type === "REOPEN_PROJECT") {
+        await projectsService.update(
+          projectId,
+          { status: "IN_PROGRESS" },
+          {
+            userId: actor.userId,
+            role: actor.role,
+            email: actor.email,
+            ipAddress: actor.ipAddress,
+            userAgent: actor.userAgent,
+          },
+        );
+        await logProjectAuditEvent({
+          userId: actor.userId,
+          action: PROJECT_AUDIT_ACTIONS.REOPEN,
+          resourceId: projectId,
+          metadata: { requestId: id, fromRequestType: existing.type },
+          ipAddress: actor.ipAddress,
+          userAgent: actor.userAgent,
+        });
+      }
+
+      const converted = await customerRequestsRepository.setConversionResults(
+        id,
+        {
+          convertedProjectId: projectId,
+          convertedTaskId: null,
+        },
+      );
+
+      await logCustomerRequestAuditEvent({
+        userId: actor.userId,
+        action: CUSTOMER_REQUEST_AUDIT_ACTIONS.APPLY,
+        resourceId: id,
+        metadata: {
+          convertedProjectId: projectId,
+          type: existing.type,
+          reopened: existing.type === "REOPEN_PROJECT",
+        },
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+      });
+
+      if (!options?.skipNotify) {
+        this.notifyCreator(converted, {
+          title: "Change request applied",
+          body: `Your change request "${converted.title}" was applied to the existing project.`,
         });
       }
 
@@ -1003,31 +1208,79 @@ export class CustomerRequestsService {
     return request;
   }
 
-  private async assertTargetProject(
+  private async requireOwnedProject(
     projectId: string,
-    clientId: string,
-  ): Promise<void> {
-    const ok = await customerRequestsRepository.projectBelongsToClient(
+    actor: CustomerRequestActor,
+  ): Promise<{
+    id: string;
+    name: string;
+    status: string;
+    clientId: string | null;
+  }> {
+    const project = await customerRequestsRepository.findProjectOwnedByCustomer(
       projectId,
-      clientId,
+      actor.userId,
+      actor.companyId ?? null,
     );
 
-    if (!ok) {
+    if (!project) {
       throw new CustomerRequestsError(
-        "Target project was not found for your company",
+        "This project was not found for your account",
         400,
         CUSTOMER_REQUESTS_ERROR_CODES.PROJECT_NOT_FOUND,
         [{ field: "targetProjectId", message: "Invalid target project" }],
       );
     }
+
+    if (!actor.companyId && project.clientId) {
+      await prisma.user.update({
+        where: { id: actor.userId },
+        data: { companyId: project.clientId },
+      });
+    }
+
+    return project;
+  }
+
+  private async requireClientProject(
+    projectId: string,
+    clientId: string,
+  ): Promise<{ id: string; name: string; status: string; clientId: string | null }> {
+    const project = await customerRequestsRepository.findClientProject(
+      projectId,
+      clientId,
+    );
+
+    if (!project) {
+      throw new CustomerRequestsError(
+        "This project was not found for your account",
+        400,
+        CUSTOMER_REQUESTS_ERROR_CODES.PROJECT_NOT_FOUND,
+        [{ field: "targetProjectId", message: "Invalid target project" }],
+      );
+    }
+
+    return project;
   }
 
   private notifyStaffOnSubmit(
     request: CustomerRequestWithRelations,
     actor: CustomerRequestActor,
   ): void {
-    const title = "New customer work request";
-    const body = `${actor.email} submitted "${request.title}"`;
+    const continuation = isCustomerRequestContinuationType(request.type);
+    const fromClarification = request.status === "CUSTOMER_RESPONDED";
+    const title = fromClarification
+      ? "Customer responded to clarification"
+      : continuation
+        ? "New project change request"
+        : "New customer work request";
+    const typeLabel = request.type.replaceAll("_", " ").toLowerCase();
+    const projectBit = request.targetProject?.name
+      ? ` for ${request.targetProject.name}`
+      : "";
+    const body = fromClarification
+      ? `${actor.email} responded on "${request.title}"`
+      : `${actor.email} submitted a ${typeLabel} request "${request.title}"${projectBit}`;
     const linkUrl = `/customer-requests/${request.id}`;
 
     void notificationDispatcher.notify({
@@ -1052,6 +1305,13 @@ export class CustomerRequestsService {
       entityId: request.id,
       audience: { type: "ROLE", roleCode: "SUPER_ADMIN" },
       createdById: actor.userId,
+    });
+
+    this.notifyCreator(request, {
+      title: fromClarification ? "Response submitted" : "Request submitted",
+      body: fromClarification
+        ? `Your response on "${request.title}" was sent to EliteFlow.`
+        : `Your request "${request.title}" was submitted.`,
     });
   }
 

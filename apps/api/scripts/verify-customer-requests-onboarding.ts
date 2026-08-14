@@ -242,7 +242,7 @@ async function main() {
   await customerRequestsService.submit(submitted.id, unlinked);
   const approved = await customerRequestsService.approve(
     submitted.id,
-    {},
+    { agreedAmount: "1000" },
     admin,
   );
   assert.ok(approved.clientId);

@@ -6,6 +6,7 @@ import type {
   CustomerRequestStatusValue,
   CustomerRequestTypeValue,
 } from "@enterprise/shared";
+import { isCustomerRequestContinuationType } from "@enterprise/shared";
 
 export type CustomerRequestAttachmentRecord = {
   id: string;
@@ -34,6 +35,7 @@ export type CustomerRequestWithRelations = {
   requirements: string | null;
   preferredDeadline: Date | null;
   expectedBudget: Prisma.Decimal | null;
+  agreedAmount: Prisma.Decimal | null;
   currency: string;
   priority: CustomerRequestPriorityValue;
   status: CustomerRequestStatusValue;
@@ -44,6 +46,7 @@ export type CustomerRequestWithRelations = {
   clarificationHistory: Prisma.JsonValue | null;
   rejectionReason: string | null;
   targetProjectId: string | null;
+  parentRequestId: string | null;
   convertedProjectId: string | null;
   convertedTaskId: string | null;
   reviewedById: string | null;
@@ -60,7 +63,8 @@ export type CustomerRequestWithRelations = {
     email: string;
   } | null;
   reviewedBy?: { id: string; firstName: string; lastName: string } | null;
-  targetProject?: { id: string; name: string } | null;
+  targetProject?: { id: string; name: string; status?: string } | null;
+  parentRequest?: { id: string; title: string } | null;
   attachments?: CustomerRequestAttachmentRecord[];
 };
 
@@ -86,6 +90,22 @@ function toBudgetNumber(value: Prisma.Decimal | null): number | null {
   }
 
   return Number(value);
+}
+
+function commercialAmount(
+  request: CustomerRequestWithRelations,
+): number | null {
+  if (request.agreedAmount != null) {
+    return toBudgetNumber(request.agreedAmount);
+  }
+  // Continuation expected budget is not commercial approval (Phase 3).
+  if (isCustomerRequestContinuationType(request.type)) {
+    return null;
+  }
+  if (request.status === "APPROVED" || request.status === "CONVERTED") {
+    return toBudgetNumber(request.expectedBudget);
+  }
+  return null;
 }
 
 function displayName(
@@ -148,11 +168,14 @@ export function toCustomerRequestDto(
     createdByName: displayName(request.createdBy),
     createdByEmail: request.createdBy?.email ?? null,
     type: request.type,
+    isContinuation: isCustomerRequestContinuationType(request.type),
     title: request.title,
     description: request.description,
     requirements: request.requirements,
     preferredDeadline: toDateOnly(request.preferredDeadline),
     expectedBudget: toBudgetNumber(request.expectedBudget),
+    agreedAmount: toBudgetNumber(request.agreedAmount),
+    commercialAmount: commercialAmount(request),
     currency: request.currency,
     priority: request.priority,
     status: request.status,
@@ -164,6 +187,8 @@ export function toCustomerRequestDto(
     rejectionReason: request.rejectionReason,
     targetProjectId: request.targetProjectId,
     targetProjectName: request.targetProject?.name ?? null,
+    parentRequestId: request.parentRequestId,
+    parentRequestTitle: request.parentRequest?.title ?? null,
     convertedProjectId: request.convertedProjectId,
     convertedTaskId: request.convertedTaskId,
     reviewedById: request.reviewedById,

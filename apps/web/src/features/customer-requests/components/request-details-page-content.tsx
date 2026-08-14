@@ -5,7 +5,11 @@ import type {
   CustomerRequestDto,
   UpdateCustomerRequestInput,
 } from "@enterprise/shared";
-import { PERMISSIONS } from "@enterprise/shared";
+import {
+  CUSTOMER_REQUEST_INTAKE_TYPES,
+  PERMISSIONS,
+  isCustomerRequestContinuationType,
+} from "@enterprise/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FolderKanban, LayoutDashboard, Send, Undo2 } from "lucide-react";
 import Link from "next/link";
@@ -19,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ROUTES, taskDetailPath } from "@/constants/routes";
+import { ROUTES, continuationRequestNewPath, taskDetailPath } from "@/constants/routes";
 import { AUTH_QUERY_KEYS } from "@/features/auth/types/auth.types";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
@@ -75,7 +79,11 @@ function canSubmitRequest(request: CustomerRequestDto) {
 }
 
 function canWithdrawRequest(request: CustomerRequestDto) {
-  return request.status === "SUBMITTED" || request.status === "UNDER_REVIEW";
+  return (
+    request.status === "SUBMITTED" ||
+    request.status === "CLARIFICATION_REQUESTED" ||
+    request.status === "CUSTOMER_RESPONDED"
+  );
 }
 
 export function RequestDetailsPageContent() {
@@ -124,11 +132,13 @@ export function RequestDetailsPageContent() {
       description: values.description,
       requirements: values.requirements,
       preferredDeadline: values.preferredDeadline,
-      expectedBudget: values.expectedBudget,
       currency: values.currency,
       priority: values.priority,
       additionalNotes: values.additionalNotes,
       targetProjectId: values.targetProjectId,
+      ...(request?.status === "DRAFT"
+        ? { expectedBudget: values.expectedBudget }
+        : {}),
     };
     try {
       await updateMutation.mutateAsync({ id: requestId, input });
@@ -287,20 +297,36 @@ export function RequestDetailsPageContent() {
         <Card className="border-emerald-500/30 bg-emerald-500/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">
-              Project approved and accepted
+              {isCustomerRequestContinuationType(request.type)
+                ? "Change request approved"
+                : "Project approved and accepted"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-foreground/90">
-              EliteFlow accepted this request. Your workspace is unlocked. The
-              agreed budget, requirements, deadline, files, and clarification
-              history stay on this page.
+              {isCustomerRequestContinuationType(request.type)
+                ? `EliteFlow approved this ${CUSTOMER_REQUEST_TYPE_LABELS[request.type].toLowerCase()} against ${request.targetProjectName ?? "your project"}. This is not financial or invoice approval.`
+                : "EliteFlow accepted this request. Your workspace is unlocked. The agreed budget, requirements, deadline, files, and clarification history stay on this page."}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailItem
-                label="Agreed budget"
+                label="Original expected budget"
                 value={formatMoney(request.expectedBudget, request.currency)}
               />
+              {!isCustomerRequestContinuationType(request.type) ? (
+                <DetailItem
+                  label="Agreed deal amount"
+                  value={formatMoney(
+                    request.commercialAmount ?? request.agreedAmount,
+                    request.currency,
+                  )}
+                />
+              ) : (
+                <DetailItem
+                  label="Expected budget (not commercially approved)"
+                  value={formatMoney(request.expectedBudget, request.currency)}
+                />
+              )}
               <DetailItem
                 label="Deadline"
                 value={
@@ -329,13 +355,27 @@ export function RequestDetailsPageContent() {
                   Open dashboard
                 </Link>
               </Button>
-              {request.convertedProjectId ? (
+              {request.convertedProjectId || request.targetProjectId ? (
                 <Button asChild variant="secondary">
                   <Link
-                    href={`${ROUTES.PROJECTS}?open=${request.convertedProjectId}`}
+                    href={`${ROUTES.PROJECTS}?open=${request.convertedProjectId ?? request.targetProjectId}`}
                   >
                     <FolderKanban className="mr-2 size-4" aria-hidden />
                     View project
+                  </Link>
+                </Button>
+              ) : null}
+              {request.convertedProjectId &&
+              canCreate &&
+              !isCustomerRequestContinuationType(request.type) ? (
+                <Button asChild variant="outline">
+                  <Link
+                    href={continuationRequestNewPath(
+                      request.convertedProjectId,
+                      "REVISION",
+                    )}
+                  >
+                    Request change
                   </Link>
                 </Button>
               ) : null}
@@ -455,6 +495,19 @@ export function RequestDetailsPageContent() {
               mode="edit"
               requestId={request.id}
               initialValues={request}
+              allowedTypes={
+                isCustomerRequestContinuationType(request.type)
+                  ? [request.type]
+                  : CUSTOMER_REQUEST_INTAKE_TYPES
+              }
+              lockedProject={
+                request.targetProjectId && request.targetProjectName
+                  ? {
+                      id: request.targetProjectId,
+                      name: request.targetProjectName,
+                    }
+                  : null
+              }
               projects={projectsQuery.data?.items ?? []}
               isSubmitting={updateMutation.isPending}
               onSubmit={async (values) => {
@@ -531,13 +584,26 @@ export function RequestDetailsPageContent() {
                   }
                 />
                 <DetailItem
-                  label="Expected budget"
+                  label="Original expected budget"
                   value={formatMoney(request.expectedBudget, request.currency)}
+                />
+                <DetailItem
+                  label="Agreed deal amount"
+                  value={formatMoney(
+                    request.agreedAmount ?? request.commercialAmount,
+                    request.currency,
+                  )}
                 />
                 <DetailItem
                   label="Target project"
                   value={request.targetProjectName ?? "—"}
                 />
+                {request.parentRequestTitle ? (
+                  <DetailItem
+                    label="Original request"
+                    value={request.parentRequestTitle}
+                  />
+                ) : null}
                 <DetailItem
                   label="Submitted"
                   value={

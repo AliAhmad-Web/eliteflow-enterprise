@@ -183,7 +183,7 @@ async function main() {
       description: "Build a portal",
       requirements: "Auth, dashboard",
       preferredDeadline: "2030-01-15",
-      expectedBudget: "5000",
+      expectedBudget: "550",
       currency: "USD",
       priority: "HIGH",
       additionalNotes: "Please review",
@@ -324,12 +324,14 @@ async function main() {
     draft.id,
     {
       additionalNotes: "Prefer Vercel hosting",
+      expectedBudget: "9999",
       clarificationResponse:
         "Yes, we can increase the budget to $800. Please proceed.",
     },
     clientA,
   );
   assert.equal(updated.additionalNotes, "Prefer Vercel hosting");
+  assert.equal(updated.expectedBudget, 550);
   assert.equal(
     updated.clarificationResponse,
     "Yes, we can increase the budget to $800. Please proceed.",
@@ -351,7 +353,7 @@ async function main() {
   );
 
   const resubmitted = await customerRequestsService.submit(draft.id, clientA);
-  assert.equal(resubmitted.status, "SUBMITTED");
+  assert.equal(resubmitted.status, "CUSTOMER_RESPONDED");
   assert.equal(
     resubmitted.clarificationResponse,
     "Yes, we can increase the budget to $800. Please proceed.",
@@ -377,11 +379,14 @@ async function main() {
 
   const approved = await customerRequestsService.approve(
     draft.id,
-    { staffNotes: "Approved" },
+    { agreedAmount: "1000", staffNotes: "Approved" },
     admin,
   );
   assert.equal(approved.status, "CONVERTED");
   assert.equal(approved.clientId, clientA.companyId);
+  assert.equal(approved.expectedBudget, 550);
+  assert.equal(approved.agreedAmount, 1000);
+  assert.equal(approved.commercialAmount, 1000);
   assert.ok(approved.convertedProjectId);
 
   const project = await projectsService.getById(
@@ -390,6 +395,7 @@ async function main() {
   );
   assert.equal(project.clientId, clientA.companyId);
   assert.equal(project.name, draft.title);
+  assert.equal(project.budget, 1000);
 
   const customerProject = await projectsService.getById(
     approved.convertedProjectId!,

@@ -1,8 +1,10 @@
 // =============================================================================
-// Customer Requests — Phase 2 client intake / work request lifecycle
+// Customer Requests — Phase 1 intake + Phase 2 project continuation
 // =============================================================================
 
-/// Customer-submitted work request (intake). Delivery remains Project/Task.
+/// Customer-submitted work request (intake or continuation).
+/// Delivery remains Project/Task. Continuation types stay linked to the
+/// existing project via `targetProjectId` and never create a duplicate project.
 /// `clientId` is optional during onboarding — unlinked requesters may submit
 /// before an admin associates a Client/Company account.
 model CustomerRequest {
@@ -15,6 +17,8 @@ model CustomerRequest {
   requirements         String?                  @db.Text
   preferredDeadline    DateTime?                @map("preferred_deadline") @db.Date
   expectedBudget       Decimal?                 @map("expected_budget") @db.Decimal(14, 2)
+  /// Final negotiated deal amount set by admin at approval. Never overwrites expectedBudget.
+  agreedAmount         Decimal?                 @map("agreed_amount") @db.Decimal(14, 2)
   currency             String                   @default("USD") @db.VarChar(3)
   priority             CustomerRequestPriority  @default(MEDIUM)
   status               CustomerRequestStatus    @default(DRAFT)
@@ -26,8 +30,10 @@ model CustomerRequest {
   /// Append-only JSON history of clarification rounds: { at, from, message }.
   clarificationHistory Json?                    @map("clarification_history")
   rejectionReason      String?                  @map("rejection_reason") @db.Text
-  /// Optional company-owned project the customer wants a NEW_TASK against.
+  /// Existing company project: NEW_TASK target, or required parent project for continuation types.
   targetProjectId      String?                  @map("target_project_id") @db.Uuid
+  /// Original intake request that produced the linked project (continuation only).
+  parentRequestId      String?                  @map("parent_request_id") @db.Uuid
   convertedProjectId   String?                  @map("converted_project_id") @db.Uuid
   convertedTaskId      String?                  @map("converted_task_id") @db.Uuid
   reviewedById         String?                  @map("reviewed_by_id") @db.Uuid
@@ -41,12 +47,16 @@ model CustomerRequest {
   createdBy        User                     @relation("CustomerRequestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   reviewedBy       User?                    @relation("CustomerRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   targetProject    Project?                 @relation("CustomerRequestTargetProject", fields: [targetProjectId], references: [id], onDelete: SetNull)
+  parentRequest    CustomerRequest?         @relation("CustomerRequestParent", fields: [parentRequestId], references: [id], onDelete: SetNull)
+  childRequests    CustomerRequest[]        @relation("CustomerRequestParent")
   convertedProject Project?                 @relation("CustomerRequestConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
   convertedTask    Task?                    @relation("CustomerRequestConvertedTask", fields: [convertedTaskId], references: [id], onDelete: SetNull)
   attachments      CustomerRequestAttachment[]
 
   @@index([clientId, status])
   @@index([createdById])
+  @@index([targetProjectId])
+  @@index([parentRequestId])
   @@index([convertedProjectId])
   @@index([convertedTaskId])
   @@index([status])

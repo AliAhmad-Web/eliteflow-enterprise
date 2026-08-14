@@ -11,6 +11,7 @@ const STATUS_VARIANT = {
   SUBMITTED: "info",
   UNDER_REVIEW: "warning",
   CLARIFICATION_REQUESTED: "warning",
+  CUSTOMER_RESPONDED: "info",
   APPROVED: "success",
   REJECTED: "destructive",
   CONVERTED: "success",

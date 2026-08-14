@@ -142,7 +142,7 @@ export function useApproveCustomerRequest() {
       input,
     }: {
       id: string;
-      input?: ApproveCustomerRequestInput;
+      input: ApproveCustomerRequestInput;
     }) => customerRequestsService.approve(id, input),
     onSuccess: async (_data, variables) => {
       await invalidateDetail(queryClient, variables.id);

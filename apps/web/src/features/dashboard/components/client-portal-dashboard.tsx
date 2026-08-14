@@ -150,6 +150,9 @@ function ClientRequestIntakeCard() {
             <Link href={ROUTES.REQUESTS}>View My Requests</Link>
           </Button>
           <Button asChild variant="outline">
+            <Link href={ROUTES.PROJECTS}>Open a project to request a change</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href={ROUTES.MESSAGES}>Contact EliteFlow</Link>
           </Button>
         </div>

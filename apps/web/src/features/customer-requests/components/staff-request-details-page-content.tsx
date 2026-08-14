@@ -1,7 +1,7 @@
 "use client";
 
 import type { ConvertCustomerRequestInput } from "@enterprise/shared";
-import { PERMISSIONS } from "@enterprise/shared";
+import { PERMISSIONS, isCustomerRequestContinuationType } from "@enterprise/shared";
 import { ArrowLeft, Check, MessageSquareWarning, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -42,6 +42,14 @@ import {
 import { ClarificationHistoryList } from "./clarification-history";
 import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
 import { RequestLifecycleSteps } from "./request-lifecycle-steps";
+
+function isReviewOpen(status: string) {
+  return (
+    status === "SUBMITTED" ||
+    status === "UNDER_REVIEW" ||
+    status === "CUSTOMER_RESPONDED"
+  );
+}
 
 const selectClassName = FORM_SELECT_CLASS_MD;
 
@@ -92,6 +100,7 @@ export function StaffRequestDetailsPageContent() {
   const convertMutation = useConvertCustomerRequest();
 
   const [staffNotes, setStaffNotes] = useState("");
+  const [agreedAmount, setAgreedAmount] = useState("");
   const [clarificationMessage, setClarificationMessage] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [createProject, setCreateProject] = useState(true);
@@ -115,6 +124,12 @@ export function StaffRequestDetailsPageContent() {
       setCreateTask(false);
     }
   }, [request?.id, request?.type, request?.targetProjectId]);
+
+  useEffect(() => {
+    if (request?.agreedAmount != null) {
+      setAgreedAmount(String(request.agreedAmount));
+    }
+  }, [request?.id, request?.agreedAmount]);
 
   const busy =
     reviewMutation.isPending ||
@@ -163,6 +178,9 @@ export function StaffRequestDetailsPageContent() {
     );
   }
 
+  const continuation = isCustomerRequestContinuationType(request.type);
+  const reviewOpen = isReviewOpen(request.status);
+
   const handleConvert = async () => {
     const input: ConvertCustomerRequestInput = {
       createProject,
@@ -200,15 +218,37 @@ export function StaffRequestDetailsPageContent() {
         <Card className="border-emerald-500/30 bg-emerald-500/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">
-              Project approved and accepted
+              {continuation
+                ? "Change request approved"
+                : "Project approved and accepted"}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-foreground/90">
             This request is associated with{" "}
             {request.createdByName ?? "the submitting customer"}
             {request.createdByEmail ? ` (${request.createdByEmail})` : ""}.
-            Their workspace is active. Agreed budget:{" "}
-            {formatMoney(request.expectedBudget, request.currency)}.
+            {continuation ? (
+              <>
+                {" "}
+                It remains linked to{" "}
+                {request.targetProjectName ?? "the existing project"}. Expected
+                budget:{" "}
+                {formatMoney(request.expectedBudget, request.currency)}. Work
+                approval is not financial or invoice approval.
+              </>
+            ) : (
+              <>
+                {" "}
+                Their workspace is active. Original expected budget:{" "}
+                {formatMoney(request.expectedBudget, request.currency)}. Agreed
+                deal amount:{" "}
+                {formatMoney(
+                  request.commercialAmount ?? request.agreedAmount,
+                  request.currency,
+                )}
+                .
+              </>
+            )}
           </CardContent>
         </Card>
       ) : null}
@@ -333,9 +373,10 @@ export function StaffRequestDetailsPageContent() {
               <CardHeader>
                 <CardTitle className="text-base">Review</CardTitle>
                 <p className="text-sm font-normal text-muted-foreground">
-                  Customer submits → clarification if needed → Approve & Accept
-                  Project. The submitting customer is associated automatically
-                  — no company picker.
+                  Customer submits → clarification if needed →{" "}
+                  {continuation
+                    ? "approve the change against the existing project."
+                    : "Approve & Accept Project. The submitting customer is associated automatically — no company picker."}
                 </p>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -349,8 +390,39 @@ export function StaffRequestDetailsPageContent() {
                   />
                 </div>
 
+                {reviewOpen && !continuation ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="agreed-amount">
+                      Final agreed amount
+                    </Label>
+                    <Input
+                      id="agreed-amount"
+                      inputMode="decimal"
+                      placeholder="1000.00"
+                      value={agreedAmount}
+                      onChange={(event) => setAgreedAmount(event.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Original expected budget stays{" "}
+                      {formatMoney(request.expectedBudget, request.currency)}.
+                      This agreed amount is the commercial figure used for the
+                      project and billing.
+                    </p>
+                  </div>
+                ) : null}
+
+                {reviewOpen && continuation ? (
+                  <p className="text-xs text-muted-foreground">
+                    Approving this change keeps it on{" "}
+                    {request.targetProjectName ?? "the existing project"}. It
+                    does not create a new project and is not financial or
+                    invoice approval.
+                  </p>
+                ) : null}
+
                 <div className="flex flex-wrap gap-2">
-                  {request.status === "SUBMITTED" && (
+                  {(request.status === "SUBMITTED" ||
+                    request.status === "CUSTOMER_RESPONDED") && (
                     <Button
                       type="button"
                       variant="secondary"
@@ -370,30 +442,41 @@ export function StaffRequestDetailsPageContent() {
                     </Button>
                   )}
 
-                  {(request.status === "SUBMITTED" ||
-                    request.status === "UNDER_REVIEW") && (
+                  {reviewOpen && (
                     <Button
                       type="button"
-                      disabled={busy}
+                      disabled={
+                        busy || (!continuation && !agreedAmount.trim())
+                      }
                       onClick={() =>
                         void runAction(
                           () =>
                             approveMutation.mutateAsync({
                               id: request.id,
-                              input: { staffNotes: staffNotes || null },
+                              input: {
+                                agreedAmount: continuation
+                                  ? agreedAmount.trim() || null
+                                  : agreedAmount.trim(),
+                                staffNotes: staffNotes || null,
+                              },
                             }),
-                          "Project approved and accepted. Customer workspace is now active.",
+                          continuation
+                            ? "Change request approved and linked to the existing project."
+                            : "Project approved and accepted. Customer workspace is now active.",
                         )
                       }
                     >
                       <Check className="mr-2 size-4" aria-hidden />
-                      Approve & Accept Project
+                      {continuation
+                        ? request.type === "REOPEN_PROJECT"
+                          ? "Approve reopen"
+                          : "Approve change"
+                        : "Approve & Accept Project"}
                     </Button>
                   )}
                 </div>
 
-                {(request.status === "SUBMITTED" ||
-                  request.status === "UNDER_REVIEW") && (
+                {reviewOpen && (
                 <div className="space-y-3 rounded-xl border border-border/50 p-4">
                   <Label htmlFor="clarify-message">Request clarification</Label>
                   <Textarea
@@ -429,8 +512,7 @@ export function StaffRequestDetailsPageContent() {
                 </div>
                 )}
 
-                {(request.status === "SUBMITTED" ||
-                  request.status === "UNDER_REVIEW") && (
+                {reviewOpen && (
                 <div className="space-y-3 rounded-xl border border-destructive/20 p-4">
                   <Label htmlFor="reject-reason">Reject request</Label>
                   <Textarea
@@ -464,7 +546,7 @@ export function StaffRequestDetailsPageContent() {
                 </div>
                 )}
 
-                {request.status === "APPROVED" ? (
+                {request.status === "APPROVED" && !continuation ? (
                   <div className="space-y-4 rounded-xl border border-border/50 p-4">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">
@@ -594,14 +676,27 @@ export function StaffRequestDetailsPageContent() {
                     : "—"
                 }
               />
-              <DetailItem
-                label="Expected budget"
-                value={formatMoney(request.expectedBudget, request.currency)}
-              />
+                <DetailItem
+                  label="Original expected budget"
+                  value={formatMoney(request.expectedBudget, request.currency)}
+                />
+                <DetailItem
+                  label="Agreed deal amount"
+                  value={formatMoney(
+                    request.agreedAmount ?? request.commercialAmount,
+                    request.currency,
+                  )}
+                />
               <DetailItem
                 label="Target project"
                 value={request.targetProjectName ?? "—"}
               />
+              {request.parentRequestTitle ? (
+                <DetailItem
+                  label="Original request"
+                  value={request.parentRequestTitle}
+                />
+              ) : null}
               <DetailItem
                 label="Submitted"
                 value={

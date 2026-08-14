@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  CUSTOMER_REQUEST_INTAKE_TYPES,
   CUSTOMER_REQUEST_PRIORITIES,
-  CUSTOMER_REQUEST_TYPES,
   FILES_API_PREFIX,
   PERMISSIONS,
   createCustomerRequestSchema,
+  isCustomerRequestContinuationType,
   type CreateCustomerRequestInput,
   type CustomerRequestAttachmentDto,
   type CustomerRequestDto,
@@ -52,6 +53,10 @@ interface RequestFormProps {
   requestId?: string;
   initialValues?: CustomerRequestDto | null;
   defaultType?: CustomerRequestTypeValue;
+  /** Restrict selectable types (defaults to Phase 1 intake types). */
+  allowedTypes?: readonly CustomerRequestTypeValue[];
+  /** When set, the request is bound to this project and the selector is hidden. */
+  lockedProject?: { id: string; name: string } | null;
   projects: Project[];
   isSubmitting?: boolean;
   onSubmit: (
@@ -74,6 +79,7 @@ function toDateInputValue(value: string | null | undefined): string {
 function toFormValues(
   request?: CustomerRequestDto | null,
   defaultType?: CustomerRequestTypeValue,
+  lockedProjectId?: string | null,
 ): RequestFormValues {
   return {
     type: request?.type ?? defaultType ?? "NEW_PROJECT",
@@ -86,7 +92,8 @@ function toFormValues(
     currency: request?.currency ?? "USD",
     priority: request?.priority ?? "MEDIUM",
     additionalNotes: request?.additionalNotes ?? "",
-    targetProjectId: request?.targetProjectId ?? "",
+    targetProjectId:
+      lockedProjectId ?? request?.targetProjectId ?? "",
     submit: false,
   };
 }
@@ -96,6 +103,8 @@ export function RequestForm({
   requestId,
   initialValues,
   defaultType,
+  allowedTypes = CUSTOMER_REQUEST_INTAKE_TYPES,
+  lockedProject = null,
   projects,
   isSubmitting = false,
   onSubmit,
@@ -124,17 +133,22 @@ export function RequestForm({
     formState: { errors },
   } = useForm<RequestFormValues>({
     resolver: zodResolver(createCustomerRequestSchema),
-    defaultValues: toFormValues(initialValues, defaultType),
+    defaultValues: toFormValues(
+      initialValues,
+      defaultType,
+      lockedProject?.id,
+    ),
   });
 
   const requestType = watch("type");
+  const continuation = isCustomerRequestContinuationType(requestType);
 
   useEffect(() => {
-    reset(toFormValues(initialValues, defaultType));
+    reset(toFormValues(initialValues, defaultType, lockedProject?.id));
     setExistingAttachments(initialValues?.attachments ?? []);
     setPendingAttachments([]);
     setAttachError(null);
-  }, [initialValues, defaultType, reset]);
+  }, [initialValues, defaultType, lockedProject?.id, reset]);
 
   async function handleAttachFiles(fileList: FileList | null) {
     if (!fileList?.length) return;
@@ -191,10 +205,18 @@ export function RequestForm({
       description: values.description || null,
       requirements: values.requirements || null,
       preferredDeadline: values.preferredDeadline || null,
-      expectedBudget: values.expectedBudget || null,
+      expectedBudget:
+        mode === "edit" && initialValues?.status !== "DRAFT"
+          ? undefined
+          : values.expectedBudget || null,
       additionalNotes: values.additionalNotes || null,
-      targetProjectId:
-        values.type === "NEW_TASK" ? values.targetProjectId || null : null,
+      targetProjectId: lockedProject
+        ? lockedProject.id
+        : values.type === "NEW_TASK"
+          ? values.targetProjectId || null
+          : isCustomerRequestContinuationType(values.type)
+            ? values.targetProjectId || null
+            : null,
       attachments:
         mode === "create" && pendingAttachments.length > 0
           ? pendingAttachments
@@ -229,12 +251,16 @@ export function RequestForm({
                 shouldDirty: true,
                 shouldValidate: true,
               });
-              if (next !== "NEW_TASK") {
+              if (lockedProject) {
+                setValue("targetProjectId", lockedProject.id, {
+                  shouldDirty: true,
+                });
+              } else if (next !== "NEW_TASK") {
                 setValue("targetProjectId", "", { shouldDirty: true });
               }
             }}
           >
-            {CUSTOMER_REQUEST_TYPES.map((type) => (
+            {allowedTypes.map((type) => (
               <option key={type} value={type}>
                 {CUSTOMER_REQUEST_TYPE_LABELS[type]}
               </option>
@@ -294,7 +320,21 @@ export function RequestForm({
           <FormFieldError message={errors.requirements?.message} />
         </div>
 
-        {requestType === "NEW_TASK" ? (
+        {lockedProject ? (
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="request-locked-project">Project</Label>
+            <Input
+              id="request-locked-project"
+              value={lockedProject.name}
+              readOnly
+              disabled
+            />
+            <p className="text-xs text-muted-foreground">
+              This change request stays attached to this project. You do not
+              need to select a project.
+            </p>
+          </div>
+        ) : requestType === "NEW_TASK" ? (
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="request-target-project">
               Target project (optional)
@@ -331,9 +371,22 @@ export function RequestForm({
             id="request-budget"
             inputMode="decimal"
             placeholder="0.00"
+            disabled={mode === "edit" && initialValues?.status !== "DRAFT"}
             {...register("expectedBudget")}
           />
-          <FormFieldError message={errors.expectedBudget?.message} />
+          {continuation ? (
+            <p className="text-xs text-muted-foreground">
+              Optional. Approving this change request is not financial or
+              invoice approval.
+            </p>
+          ) : mode === "edit" && initialValues?.status !== "DRAFT" ? (
+            <p className="text-xs text-muted-foreground">
+              The original expected budget is kept for history. The final deal
+              amount is set by EliteFlow at approval.
+            </p>
+          ) : (
+            <FormFieldError message={errors.expectedBudget?.message} />
+          )}
         </div>
 
         <div className="space-y-2">
@@ -348,7 +401,9 @@ export function RequestForm({
         </div>
 
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="request-notes">Additional notes</Label>
+          <Label htmlFor="request-notes">
+            {continuation ? "Reason / context" : "Additional notes"}
+          </Label>
           <Textarea id="request-notes" rows={3} {...register("additionalNotes")} />
           <FormFieldError message={errors.additionalNotes?.message} />
         </div>
@@ -360,7 +415,7 @@ export function RequestForm({
             <p className="text-sm font-medium">Attachments</p>
             <p className="text-xs text-muted-foreground">
               Files upload through File Manager security and stay scoped to your
-              company account.
+              account.
             </p>
           </div>
           <div>

@@ -37,4 +37,5 @@ export const CUSTOMER_REQUEST_AUDIT_ACTIONS = {
   REJECT: "customer_request.reject",
   CONVERT: "customer_request.convert",
   ATTACH: "customer_request.attach",
+  APPLY: "customer_request.apply_continuation",
 } as const;

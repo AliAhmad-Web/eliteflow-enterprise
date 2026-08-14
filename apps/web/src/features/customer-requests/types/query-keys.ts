@@ -5,6 +5,10 @@ import type {
   CustomerRequestTypeValue,
   ListCustomerRequestsQueryInput,
 } from "@enterprise/shared";
+import {
+  CUSTOMER_REQUEST_CONTINUATION_TYPES,
+  isCustomerRequestContinuationType,
+} from "@enterprise/shared";
 
 export const CUSTOMER_REQUESTS_QUERY_KEYS = {
   all: ["customer-requests"] as const,
@@ -34,6 +38,11 @@ export const CUSTOMER_REQUEST_TYPE_LABELS: Record<
   NEW_PROJECT: "New project",
   NEW_TASK: "New task / service",
   GENERAL_SERVICE: "General service",
+  REVISION: "Revision",
+  ADDITIONAL_SCOPE: "Additional scope",
+  REOPEN_PROJECT: "Reopen project",
+  NEXT_PHASE: "Next phase",
+  MAINTENANCE: "Maintenance / follow-up",
 };
 
 export const CUSTOMER_REQUEST_STATUS_LABELS: Record<
@@ -44,6 +53,7 @@ export const CUSTOMER_REQUEST_STATUS_LABELS: Record<
   SUBMITTED: "Submitted",
   UNDER_REVIEW: "Under review",
   CLARIFICATION_REQUESTED: "Clarification requested",
+  CUSTOMER_RESPONDED: "Customer responded",
   APPROVED: "Approved",
   REJECTED: "Rejected",
   CONVERTED: "Approved & accepted",
@@ -59,3 +69,20 @@ export const CUSTOMER_REQUEST_PRIORITY_LABELS: Record<
   HIGH: "High",
   URGENT: "Urgent",
 };
+
+export function continuationOrdinalLabel(
+  items: Pick<CustomerRequestDto, "id" | "type" | "createdAt">[],
+  current: Pick<CustomerRequestDto, "id" | "type" | "createdAt">,
+): string {
+  const sameType = items
+    .filter((item) => item.type === current.type)
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+  const index = sameType.findIndex((item) => item.id === current.id);
+  const n = index >= 0 ? index + 1 : sameType.length + 1;
+  return `${CUSTOMER_REQUEST_TYPE_LABELS[current.type]} #${n}`;
+}
+
+export { isCustomerRequestContinuationType, CUSTOMER_REQUEST_CONTINUATION_TYPES };

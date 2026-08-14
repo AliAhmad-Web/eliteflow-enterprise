@@ -885,21 +885,29 @@ enum SecurityIncidentStatus {
   @@map("security_incident_status")
 }
 
-/// Customer self-service intake request type (Phase 2).
+/// Customer self-service request type.
+/// Intake (Phase 1): NEW_PROJECT, NEW_TASK, GENERAL_SERVICE.
+/// Continuation (Phase 2): linked to an existing project; does not create a duplicate project.
 enum CustomerRequestType {
   NEW_PROJECT
   NEW_TASK
   GENERAL_SERVICE
+  REVISION
+  ADDITIONAL_SCOPE
+  REOPEN_PROJECT
+  NEXT_PHASE
+  MAINTENANCE
 
   @@map("customer_request_type")
 }
 
-/// Customer request workflow status (Phase 2).
+/// Customer request workflow status.
 enum CustomerRequestStatus {
   DRAFT
   SUBMITTED
   UNDER_REVIEW
   CLARIFICATION_REQUESTED
+  CUSTOMER_RESPONDED
   APPROVED
   REJECTED
   CONVERTED

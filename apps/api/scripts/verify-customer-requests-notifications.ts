@@ -289,13 +289,13 @@ async function main() {
   await customerRequestsService.submit(created.id, client);
   await waitForNotifications({
     entityId: created.id,
-    title: "New customer work request",
-    minCount: staffRows.length + 1,
+    title: "Customer responded to clarification",
+    minCount: 1,
   });
   await customerRequestsService.startReview(created.id, {}, admin);
   await customerRequestsService.approve(
     created.id,
-    { staffNotes: "Looks good" },
+    { agreedAmount: "1000", staffNotes: "Looks good" },
     admin,
   );
   const approveRows = await waitForNotifications({

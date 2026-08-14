@@ -31,6 +31,12 @@ function toQueryString(query: ListCustomerRequestsQueryInput): string {
   if (query.priority) {
     params.set("priority", query.priority);
   }
+  if (query.kind) {
+    params.set("kind", query.kind);
+  }
+  if (query.relatedProjectId) {
+    params.set("relatedProjectId", query.relatedProjectId);
+  }
   params.set("sortBy", query.sortBy);
   params.set("sortOrder", query.sortOrder);
   params.set("page", String(query.page));
@@ -121,7 +127,7 @@ export const customerRequestsService = {
     );
   },
 
-  approve(id: string, input: ApproveCustomerRequestInput = {}) {
+  approve(id: string, input: ApproveCustomerRequestInput) {
     return apiRequest<CustomerRequestDto>(
       `${CUSTOMER_REQUESTS_API_PREFIX}/${id}/approve`,
       {

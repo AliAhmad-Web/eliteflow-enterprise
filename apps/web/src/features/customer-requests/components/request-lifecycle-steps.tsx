@@ -15,6 +15,7 @@ function activeStep(status: CustomerRequestStatusValue): number {
     case "DRAFT":
       return -1;
     case "SUBMITTED":
+    case "CUSTOMER_RESPONDED":
       return 0;
     case "UNDER_REVIEW":
     case "CLARIFICATION_REQUESTED":

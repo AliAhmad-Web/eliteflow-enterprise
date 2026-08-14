@@ -10,6 +10,10 @@ import type {
   ListCustomerRequestsQueryInput,
   UpdateCustomerRequestInput,
 } from "@enterprise/shared";
+import {
+  CUSTOMER_REQUEST_CONTINUATION_TYPES,
+  CUSTOMER_REQUEST_INTAKE_TYPES,
+} from "@enterprise/shared";
 
 import type { CustomerRequestWithRelations } from "./customer-requests.types.js";
 
@@ -21,7 +25,8 @@ const requestInclude = {
   reviewedBy: {
     select: { id: true, firstName: true, lastName: true },
   },
-  targetProject: { select: { id: true, name: true } },
+  targetProject: { select: { id: true, name: true, status: true } },
+  parentRequest: { select: { id: true, title: true } },
   attachments: {
     orderBy: { createdAt: "asc" as const },
   },
@@ -111,6 +116,7 @@ export type CreateCustomerRequestData = Omit<
   preferredDeadline?: string | null;
   expectedBudget?: string | null;
   targetProjectId?: string | null;
+  parentRequestId?: string | null;
   attachments?: SecuredAttachmentInput[];
 };
 
@@ -171,6 +177,7 @@ export class CustomerRequestsRepository {
         status: data.status,
         additionalNotes: emptyToNull(data.additionalNotes) ?? null,
         targetProjectId: emptyToNull(data.targetProjectId) ?? null,
+        parentRequestId: emptyToNull(data.parentRequestId) ?? null,
         submittedAt: data.submittedAt ?? null,
         attachments: data.attachments?.length
           ? {
@@ -278,6 +285,7 @@ export class CustomerRequestsRepository {
       clarificationMessage?: string | null;
       clarificationResponse?: string | null;
       clarificationHistory?: Prisma.InputJsonValue;
+      agreedAmount?: string | null;
       rejectionReason?: string | null;
       reviewedById?: string | null;
       reviewedAt?: Date | null;
@@ -309,6 +317,9 @@ export class CustomerRequestsRepository {
           : {}),
         ...(data.clarificationHistory !== undefined
           ? { clarificationHistory: data.clarificationHistory }
+          : {}),
+        ...(data.agreedAmount !== undefined
+          ? { agreedAmount: parseOptionalBudget(data.agreedAmount) ?? null }
           : {}),
         ...(data.rejectionReason !== undefined
           ? { rejectionReason: emptyToNull(data.rejectionReason) ?? null }
@@ -456,49 +467,126 @@ export class CustomerRequestsRepository {
     projectId: string,
     clientId: string,
   ): Promise<boolean> {
+    const project = await this.findClientProject(projectId, clientId);
+    return Boolean(project);
+  }
+
+  async findClientProject(
+    projectId: string,
+    clientId: string,
+  ): Promise<{ id: string; name: string; status: string; clientId: string | null } | null> {
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
         clientId,
         deletedAt: null,
       },
+      select: { id: true, name: true, status: true, clientId: true },
+    });
+
+    return project;
+  }
+
+  /**
+   * Customer-owned project without requiring a manual company picker.
+   * Owned if the project belongs to the customer's linked Client, or if they
+   * created the original intake request that converted into this project.
+   */
+  async findProjectOwnedByCustomer(
+    projectId: string,
+    userId: string,
+    companyId: string | null,
+  ): Promise<{ id: string; name: string; status: string; clientId: string | null } | null> {
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        deletedAt: null,
+      },
+      select: { id: true, name: true, status: true, clientId: true },
+    });
+
+    if (!project) {
+      return null;
+    }
+
+    if (companyId && project.clientId === companyId) {
+      return project;
+    }
+
+    const original = await prisma.customerRequest.findFirst({
+      where: {
+        convertedProjectId: projectId,
+        createdById: userId,
+        deletedAt: null,
+      },
       select: { id: true },
     });
 
-    return Boolean(project);
+    return original ? project : null;
+  }
+
+  async findOriginalRequestIdForProject(
+    projectId: string,
+  ): Promise<string | null> {
+    const original = await prisma.customerRequest.findFirst({
+      where: {
+        convertedProjectId: projectId,
+        deletedAt: null,
+        type: { in: [...CUSTOMER_REQUEST_INTAKE_TYPES] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    return original?.id ?? null;
   }
 
   private buildWhere(
     query: ListCustomerRequestsQueryInput,
     scope: CustomerRequestAccessScope,
   ): Record<string, unknown> {
-    const where: Record<string, unknown> = {
-      deletedAt: null,
-      ...this.scopeFilter(scope),
-    };
+    const and: Record<string, unknown>[] = [
+      { deletedAt: null },
+      this.scopeFilter(scope),
+    ];
 
     if (query.status) {
-      where.status = query.status;
+      and.push({ status: query.status });
     }
 
     if (query.type) {
-      where.type = query.type;
+      and.push({ type: query.type });
+    } else if (query.kind === "continuation") {
+      and.push({ type: { in: [...CUSTOMER_REQUEST_CONTINUATION_TYPES] } });
+    } else if (query.kind === "intake") {
+      and.push({ type: { in: [...CUSTOMER_REQUEST_INTAKE_TYPES] } });
     }
 
     if (query.priority) {
-      where.priority = query.priority;
+      and.push({ priority: query.priority });
+    }
+
+    if (query.relatedProjectId) {
+      and.push({
+        OR: [
+          { targetProjectId: query.relatedProjectId },
+          { convertedProjectId: query.relatedProjectId },
+        ],
+      });
     }
 
     const search = query.search?.trim();
     if (search) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-        { requirements: { contains: search, mode: "insensitive" } },
-      ];
+      and.push({
+        OR: [
+          { title: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+          { requirements: { contains: search, mode: "insensitive" } },
+        ],
+      });
     }
 
-    return where;
+    return { AND: and };
   }
 
   private scopeFilter(

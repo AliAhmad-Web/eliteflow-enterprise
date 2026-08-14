@@ -60,6 +60,17 @@ export function customerRequestDetailPath(id: string): string {
   return `${ROUTES.CUSTOMER_REQUESTS}/${id}`;
 }
 
+export function continuationRequestNewPath(
+  projectId: string,
+  type?: string,
+): string {
+  const params = new URLSearchParams({ projectId });
+  if (type) {
+    params.set("type", type);
+  }
+  return `${ROUTES.REQUESTS_NEW}?${params.toString()}`;
+}
+
 export function invoiceDetailPath(id: string): string {
   return `${ROUTES.INVOICES}/${id}`;
 }

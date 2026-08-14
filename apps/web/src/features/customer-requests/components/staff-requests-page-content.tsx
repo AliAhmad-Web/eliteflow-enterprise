@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  CUSTOMER_REQUEST_KINDS,
   CUSTOMER_REQUEST_PRIORITIES,
   CUSTOMER_REQUEST_STATUSES,
   CUSTOMER_REQUEST_TYPES,
+  type CustomerRequestKindValue,
   type CustomerRequestPriorityValue,
   type CustomerRequestStatusValue,
   type CustomerRequestTypeValue,
@@ -11,7 +13,8 @@ import {
 } from "@enterprise/shared";
 import { ClipboardList, Search } from "lucide-react";
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/feedback/empty-state";
 import { ErrorState } from "@/components/common/feedback/error-state";
@@ -36,6 +39,13 @@ import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
 const selectClassName = FORM_SELECT_CLASS;
 
 export function StaffRequestsPageContent() {
+  const searchParams = useSearchParams();
+  const kindParam = searchParams.get("kind");
+  const initialKind: CustomerRequestKindValue | "ALL" =
+    kindParam === "continuation" || kindParam === "intake"
+      ? kindParam
+      : "ALL";
+
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim());
   const debouncedSearch = useDebouncedValue(deferredSearch, 300);
@@ -43,24 +53,33 @@ export function StaffRequestsPageContent() {
     "SUBMITTED",
   );
   const [type, setType] = useState<CustomerRequestTypeValue | "ALL">("ALL");
+  const [kind, setKind] = useState<CustomerRequestKindValue | "ALL">(
+    initialKind,
+  );
   const [priority, setPriority] = useState<
     CustomerRequestPriorityValue | "ALL"
   >("ALL");
   const [page, setPage] = useState(1);
   const limit = 15;
 
+  useEffect(() => {
+    setKind(initialKind);
+    setPage(1);
+  }, [initialKind]);
+
   const query = useMemo<ListCustomerRequestsQueryInput>(
     () => ({
       search: debouncedSearch,
       status: status === "ALL" ? undefined : status,
       type: type === "ALL" ? undefined : type,
+      kind: kind === "ALL" ? undefined : kind,
       priority: priority === "ALL" ? undefined : priority,
       sortBy: "createdAt",
       sortOrder: "desc",
       page,
       limit,
     }),
-    [debouncedSearch, status, type, priority, page],
+    [debouncedSearch, status, type, kind, priority, page],
   );
 
   const { data, isLoading, isError, error, refetch, isFetching } =
@@ -74,8 +93,12 @@ export function StaffRequestsPageContent() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Work Requests"
-        description="Review client intake requests, clarify requirements, approve, and convert to delivery work."
+        title={kind === "continuation" ? "Project Change Requests" : "Work Requests"}
+        description={
+          kind === "continuation"
+            ? "Review customer revision, additional scope, reopen, next phase, and maintenance requests linked to existing projects."
+            : "Review client intake requests, clarify requirements, approve, and convert to delivery work."
+        }
       />
 
       <Card className="border-border/50 shadow-(--shadow-sm)">
@@ -114,6 +137,27 @@ export function StaffRequestsPageContent() {
                 {CUSTOMER_REQUEST_STATUSES.map((value) => (
                   <option key={value} value={value}>
                     {CUSTOMER_REQUEST_STATUS_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                className={cn(selectClassName, "min-w-35")}
+                value={kind}
+                aria-label="Filter by request kind"
+                onChange={(event) => {
+                  setKind(
+                    event.target.value as CustomerRequestKindValue | "ALL",
+                  );
+                  setPage(1);
+                }}
+              >
+                <option value="ALL">All requests</option>
+                {CUSTOMER_REQUEST_KINDS.map((value) => (
+                  <option key={value} value={value}>
+                    {value === "continuation"
+                      ? "Change requests"
+                      : "Intake requests"}
                   </option>
                 ))}
               </select>
@@ -199,6 +243,7 @@ export function StaffRequestsPageContent() {
                         <th className="px-4 py-3 font-medium">Title</th>
                         <th className="px-4 py-3 font-medium">Customer</th>
                         <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 font-medium">Project</th>
                         <th className="px-4 py-3 font-medium">Priority</th>
                         <th className="px-4 py-3 font-medium">Status</th>
                         <th className="px-4 py-3 font-medium">Submitted</th>
@@ -223,6 +268,9 @@ export function StaffRequestsPageContent() {
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
                             {CUSTOMER_REQUEST_TYPE_LABELS[item.type]}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {item.targetProjectName ?? "—"}
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
                             {CUSTOMER_REQUEST_PRIORITY_LABELS[item.priority]}
