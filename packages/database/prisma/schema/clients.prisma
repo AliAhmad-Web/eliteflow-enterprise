@@ -26,6 +26,7 @@ model Client {
   portalUsers User[] @relation("UserCompany")
   projects    Project[]
   invoices    Invoice[]
+  quotes      Quote[]
   folders     Folder[]
   managedFiles ManagedFile[]
   fileShares  FileShare[]

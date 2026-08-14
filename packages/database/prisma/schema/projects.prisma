@@ -25,6 +25,7 @@ model Project {
   attachments ProjectAttachment[]
   tasks       Task[]
   invoices    Invoice[]
+  quotes      Quote[]
   folders     Folder[]
   managedFiles ManagedFile[]
   calendarEvents CalendarEvent[]

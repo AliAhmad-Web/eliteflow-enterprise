@@ -77,6 +77,20 @@ invoicesRouter.post(
   asyncHandler((req, res) => invoicesController.reportPaymentNotice(req, res)),
 );
 
+invoicesRouter.post(
+  "/:id/issue",
+  authorizePermissions(PERMISSIONS.INVOICES_WRITE),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),
+  rateLimit({
+    name: "invoices.issue",
+    max: 40,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(invoiceIdParamsSchema, "params"),
+  asyncHandler((req, res) => invoicesController.issue(req, res)),
+);
+
 invoicesRouter.get(
   "/:id",
   authorizePermissions(PERMISSIONS.INVOICES_READ),

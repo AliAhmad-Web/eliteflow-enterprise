@@ -52,6 +52,7 @@ model CustomerRequest {
   convertedProject Project?                 @relation("CustomerRequestConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
   convertedTask    Task?                    @relation("CustomerRequestConvertedTask", fields: [convertedTaskId], references: [id], onDelete: SetNull)
   attachments      CustomerRequestAttachment[]
+  quotes           Quote[]
 
   @@index([clientId, status])
   @@index([createdById])

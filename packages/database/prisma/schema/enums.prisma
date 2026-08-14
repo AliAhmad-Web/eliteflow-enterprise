@@ -130,7 +130,7 @@ enum TaskPriority {
   @@map("task_priority")
 }
 
-/// Invoice payment / lifecycle status.
+/// Invoice commercial lifecycle status (issue/cancel). Distinct from paymentStatus.
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -140,6 +140,61 @@ enum InvoiceStatus {
   CANCELLED
 
   @@map("invoice_status")
+}
+
+/// Payment execution state. PAID is never accepted from frontend input.
+enum InvoicePaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+
+  @@map("invoice_payment_status")
+}
+
+/// Invoice commercial kind. STANDARD preserves pre-Phase-3 invoices.
+enum InvoiceKind {
+  STANDARD
+  ADVANCE
+  MILESTONE
+  FINAL
+
+  @@map("invoice_kind")
+}
+
+/// Quote / estimate workflow status.
+enum QuoteStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+
+  @@map("quote_status")
+}
+
+/// Configurable payment split applied to the agreed quote total.
+enum PaymentModel {
+  UPFRONT_100
+  SPLIT_50_50
+  SPLIT_30_70
+  MILESTONE
+  CUSTOM
+
+  @@map("payment_model")
+}
+
+/// A single installment in a quote payment schedule.
+enum PaymentScheduleKind {
+  ADVANCE
+  MILESTONE
+  FINAL
+  CUSTOM
+
+  @@map("payment_schedule_kind")
 }
 
 /// Role of a message in an AI conversation.

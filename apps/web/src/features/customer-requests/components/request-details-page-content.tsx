@@ -23,9 +23,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ROUTES, continuationRequestNewPath, taskDetailPath } from "@/constants/routes";
+import { ROUTES, continuationRequestNewPath, quoteDetailPath, taskDetailPath } from "@/constants/routes";
 import { AUTH_QUERY_KEYS } from "@/features/auth/types/auth.types";
 import { useProjects } from "@/features/projects/hooks/use-projects";
+import { QuoteStatusBadge } from "@/features/quotes/components/quote-status-badge";
+import { useQuotes } from "@/features/quotes/hooks/use-quotes";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { getApiErrorMessage } from "@/services/api/api-error";
 
@@ -93,6 +95,14 @@ export function RequestDetailsPageContent() {
   const queryClient = useQueryClient();
 
   const requestQuery = useCustomerRequest(requestId);
+  const quotesQuery = useQuotes({
+    search: "",
+    customerRequestId: requestId,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+    page: 1,
+    limit: 10,
+  });
   const projectsQuery = useProjects({
     search: "",
     sortBy: "name",
@@ -387,6 +397,25 @@ export function RequestDetailsPageContent() {
                 </Button>
               ) : null}
             </div>
+            {quotesQuery.data?.items.length ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Quotes
+                </p>
+                {quotesQuery.data.items.map((quote) => (
+                  <Link
+                    key={quote.id}
+                    href={quoteDetailPath(quote.id)}
+                    className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2 text-sm hover:bg-muted/30"
+                  >
+                    <span>
+                      {quote.quoteNumber} · {formatMoney(quote.total, quote.currency)}
+                    </span>
+                    <QuoteStatusBadge status={quote.status} />
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

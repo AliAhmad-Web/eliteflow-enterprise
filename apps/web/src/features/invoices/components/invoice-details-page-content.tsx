@@ -19,9 +19,13 @@ import {
 } from "@/features/rbac/hooks/use-permissions";
 import { ApiClientError } from "@/services/api/api-error";
 
-import { useDownloadInvoicePdf, useReportInvoicePaymentNotice } from "../hooks/use-invoice-mutations";
+import { useDownloadInvoicePdf, useIssueInvoice, useReportInvoicePaymentNotice } from "../hooks/use-invoice-mutations";
 import { useInvoice } from "../hooks/use-invoices";
-import { INVOICE_STATUS_LABELS } from "../types/invoices.types";
+import {
+  INVOICE_KIND_LABELS,
+  INVOICE_PAYMENT_STATUS_LABELS,
+  INVOICE_STATUS_LABELS,
+} from "../types/invoices.types";
 import { DeleteInvoiceDialog } from "./delete-invoice-dialog";
 import { InvoiceFormDialog } from "./invoice-form-dialog";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
@@ -68,6 +72,7 @@ export function InvoiceDetailsPageContent() {
 
   const invoiceQuery = useInvoice(invoiceId);
   const pdfMutation = useDownloadInvoicePdf();
+  const issueMutation = useIssueInvoice();
   const paymentNoticeMutation = useReportInvoicePaymentNotice();
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
@@ -128,7 +133,17 @@ export function InvoiceDetailsPageContent() {
               <Download className="mr-2 size-4" aria-hidden />
               Download PDF
             </Button>
-            {canWrite ? (
+            {canWrite && invoice.status === "DRAFT" ? (
+              <Button
+                type="button"
+                variant="secondary"
+                isLoading={issueMutation.isPending}
+                onClick={() => void issueMutation.mutateAsync(invoice.id)}
+              >
+                Issue invoice
+              </Button>
+            ) : null}
+            {canWrite && !invoice.quoteId ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -276,9 +291,26 @@ export function InvoiceDetailsPageContent() {
                 value={invoice.projectName ?? "—"}
               />
               <DetailItem
-                label="Status"
+                label="Commercial status"
                 value={INVOICE_STATUS_LABELS[invoice.status]}
               />
+              <DetailItem
+                label="Payment status"
+                value={
+                  INVOICE_PAYMENT_STATUS_LABELS[
+                    invoice.paymentStatus ?? "UNPAID"
+                  ]
+                }
+              />
+              {invoice.invoiceKind ? (
+                <DetailItem
+                  label="Invoice type"
+                  value={INVOICE_KIND_LABELS[invoice.invoiceKind]}
+                />
+              ) : null}
+              {invoice.quoteNumber ? (
+                <DetailItem label="Quote" value={invoice.quoteNumber} />
+              ) : null}
               <DetailItem label="Issue date" value={invoice.issueDate} />
               <DetailItem label="Due date" value={invoice.dueDate} />
               <DetailItem label="Currency" value={invoice.currency} />
@@ -288,7 +320,8 @@ export function InvoiceDetailsPageContent() {
 
           {isClient &&
           invoice.status !== "PAID" &&
-          invoice.status !== "CANCELLED" ? (
+          invoice.status !== "CANCELLED" &&
+          invoice.paymentStatus !== "PAID" ? (
             <Card className="border-primary/20 bg-primary/5">
               <CardHeader>
                 <CardTitle className="text-base">Pay offline</CardTitle>

@@ -75,6 +75,7 @@ export class InvoicesService {
     actor: InvoiceActor,
   ): Promise<InvoiceDto> {
     this.assertCanMutate(actor);
+    this.assertPaidNotFromClient(input.status);
     await this.assertClientAndProject(input.clientId, input.projectId);
 
     const created = await invoicesRepository.create(input, actor.userId);
@@ -101,6 +102,7 @@ export class InvoicesService {
     actor: InvoiceActor,
   ): Promise<InvoiceDto> {
     this.assertCanMutate(actor);
+    this.assertPaidNotFromClient(input.status);
 
     const existing = await invoicesRepository.findById(id, { all: true });
     if (!existing) {
@@ -108,6 +110,20 @@ export class InvoicesService {
         "Invoice not found",
         404,
         INVOICES_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    if (
+      existing.quoteId &&
+      (input.items !== undefined ||
+        input.discountAmount !== undefined ||
+        input.taxRate !== undefined ||
+        input.clientId !== undefined)
+    ) {
+      throw new InvoicesError(
+        "Quote-linked invoice amounts cannot be changed after generation",
+        403,
+        INVOICES_ERROR_CODES.FORBIDDEN,
       );
     }
 
@@ -161,6 +177,36 @@ export class InvoicesService {
     return { id };
   }
 
+  async issue(id: string, actor: InvoiceActor): Promise<InvoiceDto> {
+    this.assertCanMutate(actor);
+    const existing = await invoicesRepository.findById(id, { all: true });
+    if (!existing) {
+      throw new InvoicesError(
+        "Invoice not found",
+        404,
+        INVOICES_ERROR_CODES.NOT_FOUND,
+      );
+    }
+    if (existing.status === "CANCELLED") {
+      throw new InvoicesError(
+        "Cancelled invoices cannot be issued",
+        409,
+        INVOICES_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const updated = await invoicesRepository.issue(id, actor.userId);
+    await logInvoiceAuditEvent({
+      userId: actor.userId,
+      action: INVOICE_AUDIT_ACTIONS.ISSUE,
+      resourceId: id,
+      metadata: { invoiceNumber: updated.invoiceNumber },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
+    return toInvoiceDto(updated);
+  }
+
   async getStats(actor: InvoiceActor): Promise<InvoiceStats> {
     const scope = await this.resolveScope(actor);
     return invoicesRepository.getStats(scope);
@@ -206,7 +252,7 @@ export class InvoicesService {
     }
 
     const invoice = await this.getById(id, actor);
-    if (invoice.status === "PAID" || invoice.status === "CANCELLED") {
+    if (invoice.status === "PAID" || invoice.status === "CANCELLED" || invoice.paymentStatus === "PAID") {
       throw new InvoicesError(
         "This invoice cannot accept a payment notice in its current status",
         409,
@@ -257,6 +303,16 @@ export class InvoicesService {
     });
 
     return toInvoiceDto(updated);
+  }
+
+  private assertPaidNotFromClient(status: string | undefined): void {
+    if (status === "PAID") {
+      throw new InvoicesError(
+        "Invoice payment status cannot be set to PAID from the client",
+        403,
+        INVOICES_ERROR_CODES.FORBIDDEN,
+      );
+    }
   }
 
   private async assertClientAndProject(

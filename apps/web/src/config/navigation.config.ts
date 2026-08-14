@@ -24,6 +24,7 @@ import {
   PenTool,
   Plug,
   Receipt,
+  ScrollText,
   Settings,
   Shield,
   UserCog,
@@ -95,6 +96,13 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         permission: PERMISSIONS.CUSTOMER_REQUESTS_READ,
         roles: [UserRole.CLIENT],
       },
+      {
+        title: "Quotes",
+        href: ROUTES.QUOTES,
+        icon: ScrollText,
+        permission: PERMISSIONS.QUOTES_READ,
+        roles: [UserRole.CLIENT],
+      },
     ],
   },
   {
@@ -131,6 +139,13 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: `${ROUTES.CUSTOMER_REQUESTS}?kind=continuation`,
         icon: GitBranch,
         permission: PERMISSIONS.CUSTOMER_REQUESTS_REVIEW,
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN],
+      },
+      {
+        title: "Quotes",
+        href: ROUTES.QUOTES,
+        icon: ScrollText,
+        permission: PERMISSIONS.QUOTES_READ,
         roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN],
       },
       {

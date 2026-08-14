@@ -19,6 +19,8 @@ export const ROUTES = {
   REQUESTS: "/requests",
   REQUESTS_NEW: "/requests/new",
   CUSTOMER_REQUESTS: "/customer-requests",
+  QUOTES: "/quotes",
+  QUOTES_NEW: "/quotes/new",
   INVOICES: "/invoices",
   REPORTS: "/reports",
   CALENDAR: "/calendar",
@@ -69,6 +71,18 @@ export function continuationRequestNewPath(
     params.set("type", type);
   }
   return `${ROUTES.REQUESTS_NEW}?${params.toString()}`;
+}
+
+export function quoteDetailPath(id: string): string {
+  return `${ROUTES.QUOTES}/${id}`;
+}
+
+export function quoteNewFromRequestPath(requestId: string): string {
+  return `${ROUTES.QUOTES_NEW}?requestId=${encodeURIComponent(requestId)}`;
+}
+
+export function quoteNewFromProjectPath(projectId: string): string {
+  return `${ROUTES.QUOTES_NEW}?projectId=${encodeURIComponent(projectId)}`;
 }
 
 export function invoiceDetailPath(id: string): string {

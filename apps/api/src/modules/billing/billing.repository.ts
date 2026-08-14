@@ -97,7 +97,7 @@ export class BillingRepository {
     return prisma.$transaction(async (tx) => {
       const updated = await tx.invoice.update({
         where: { id: invoice.id },
-        data: { status: "PAID" },
+        data: { status: "PAID", paymentStatus: "PAID" },
       });
       await tx.invoicePaymentHistory.create({
         data: {

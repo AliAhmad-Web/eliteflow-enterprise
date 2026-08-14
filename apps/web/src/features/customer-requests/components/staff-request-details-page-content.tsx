@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ROUTES,
+  quoteNewFromRequestPath,
   taskDetailPath,
 } from "@/constants/routes";
 import {
@@ -731,6 +732,22 @@ export function StaffRequestDetailsPageContent() {
                   >
                     View project
                   </Link>
+                </div>
+              ) : null}
+              {(request.status === "APPROVED" ||
+                request.status === "CONVERTED") &&
+              request.convertedProjectId &&
+              !isCustomerRequestContinuationType(request.type) ? (
+                <div className="min-w-0 sm:col-span-2">
+                  <Button asChild>
+                    <Link href={quoteNewFromRequestPath(request.id)}>
+                      Create quote
+                    </Link>
+                  </Button>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Customer and project are filled in from this request. Set
+                    the agreed deal amount and payment model next.
+                  </p>
                 </div>
               ) : null}
               {request.convertedTaskId ? (

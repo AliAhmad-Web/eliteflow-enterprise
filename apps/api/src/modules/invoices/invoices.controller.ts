@@ -67,7 +67,15 @@ export class InvoicesController {
       body,
       getActor(req),
     );
-    res.json(successResponse(result, "Invoice updated successfully"));
+    res.json(
+      successResponse(result, "Invoice updated successfully"),
+    );
+  }
+
+  async issue(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as InvoiceIdParamsInput;
+    const result = await invoicesService.issue(params.id, getActor(req));
+    res.json(successResponse(result, "Invoice issued successfully"));
   }
 
   async remove(req: Request, res: Response): Promise<void> {

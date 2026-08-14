@@ -10,6 +10,7 @@ import { Prisma } from "@enterprise/database";
 type InvoiceWithRelations = Invoice & {
   client: { id: string; companyName: string };
   project: { id: string; name: string } | null;
+  quote?: { id: string; quoteNumber: string } | null;
   items?: InvoiceItem[];
   paymentHistory?: (InvoicePaymentHistory & {
     actor: Pick<User, "id" | "firstName" | "lastName"> | null;
@@ -32,9 +33,15 @@ export function toInvoiceDto(invoice: InvoiceWithRelations): InvoiceDto {
     clientName: invoice.client.companyName,
     projectId: invoice.projectId,
     projectName: invoice.project?.name ?? null,
+    quoteId: invoice.quoteId,
+    quoteNumber: invoice.quote?.quoteNumber ?? null,
+    paymentScheduleItemId: invoice.paymentScheduleItemId,
+    invoiceKind: invoice.invoiceKind,
     status: invoice.status,
+    paymentStatus: invoice.paymentStatus,
     issueDate: toDateOnly(invoice.issueDate),
     dueDate: toDateOnly(invoice.dueDate),
+    issuedAt: invoice.issuedAt?.toISOString() ?? null,
     currency: invoice.currency,
     taxRate: toMoney(invoice.taxRate),
     discountAmount: toMoney(invoice.discountAmount),

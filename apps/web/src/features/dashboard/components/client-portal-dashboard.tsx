@@ -42,6 +42,7 @@ import {
   formatRelativeTime,
 } from "@/features/notifications/types/notifications.types";
 import { useProjectStats, useProjects } from "@/features/projects/hooks/use-projects";
+import { CustomerCommercialCard } from "@/features/quotes/components/customer-commercial-card";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { useTaskStats, useTasks } from "@/features/tasks/hooks/use-tasks";
 import { staggerContainer } from "@/lib/motion";
@@ -458,6 +459,7 @@ function ClientLinkedDashboard({
       {!isLoading && !isError ? (
         <>
           <ClientRequestIntakeCard />
+          <CustomerCommercialCard />
 
           {hasAnyBusinessData ? <KpiStatsGrid stats={kpiStats} /> : null}
 

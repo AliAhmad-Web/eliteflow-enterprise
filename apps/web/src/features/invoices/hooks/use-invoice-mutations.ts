@@ -68,6 +68,22 @@ export function useDownloadInvoicePdf() {
   });
 }
 
+export function useIssueInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => invoicesService.issue(id),
+    onSuccess: async (_data, id) => {
+      await queryClient.invalidateQueries({
+        queryKey: INVOICES_QUERY_KEYS.detail(id),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: INVOICES_QUERY_KEYS.all,
+      });
+    },
+  });
+}
+
 export function useReportInvoicePaymentNotice() {
   const queryClient = useQueryClient();
 

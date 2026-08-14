@@ -1,0 +1,96 @@
+// =============================================================================
+// Quotes — Commercial estimates, payment schedules, quote-linked invoices
+// =============================================================================
+
+/// Commercial quote / estimate. The approved total is the agreed deal amount.
+/// Never treat CustomerRequest.expectedBudget as the commercial total.
+model Quote {
+  id                String       @id @default(uuid()) @db.Uuid
+  quoteNumber       String       @unique @map("quote_number") @db.VarChar(40)
+  title             String       @db.VarChar(200)
+  description       String?      @db.Text
+  notes             String?      @db.Text
+  clientId          String       @map("client_id") @db.Uuid
+  customerRequestId String?      @map("customer_request_id") @db.Uuid
+  projectId         String       @map("project_id") @db.Uuid
+  status            QuoteStatus  @default(DRAFT)
+  paymentModel      PaymentModel @default(UPFRONT_100) @map("payment_model")
+  currency          String       @default("USD") @db.VarChar(3)
+  taxRate           Decimal      @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  discountAmount    Decimal      @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  subtotal          Decimal      @default(0) @db.Decimal(14, 2)
+  taxAmount         Decimal      @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  total             Decimal      @default(0) @db.Decimal(14, 2)
+  issueDate         DateTime     @map("issue_date") @db.Date
+  expiryDate        DateTime     @map("expiry_date") @db.Date
+  sentAt            DateTime?    @map("sent_at")
+  approvedAt        DateTime?    @map("approved_at")
+  approvedById      String?      @map("approved_by_id") @db.Uuid
+  rejectedAt        DateTime?    @map("rejected_at")
+  rejectedById      String?      @map("rejected_by_id") @db.Uuid
+  rejectionReason   String?      @map("rejection_reason") @db.Text
+  cancelledAt       DateTime?    @map("cancelled_at")
+  createdById       String?      @map("created_by_id") @db.Uuid
+  updatedById       String?      @map("updated_by_id") @db.Uuid
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  deletedAt         DateTime?    @map("deleted_at")
+
+  client          Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  customerRequest CustomerRequest?       @relation(fields: [customerRequestId], references: [id], onDelete: SetNull)
+  project         Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdBy       User?                  @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?                  @relation("QuoteUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  approvedBy      User?                  @relation("QuoteApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy      User?                  @relation("QuoteRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
+  items           QuoteItem[]
+  paymentSchedule PaymentScheduleItem[]
+  invoices        Invoice[]
+
+  @@index([clientId, status])
+  @@index([projectId])
+  @@index([customerRequestId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([createdById])
+  @@index([createdAt])
+  @@index([expiryDate])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  quoteId     String   @map("quote_id") @db.Uuid
+  description String   @db.VarChar(500)
+  quantity    Decimal  @db.Decimal(12, 2)
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(14, 2)
+  lineTotal   Decimal  @map("line_total") @db.Decimal(14, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, sortOrder])
+  @@map("quote_items")
+}
+
+/// Installment derived from the agreed quote total and selected payment model.
+model PaymentScheduleItem {
+  id        String              @id @default(uuid()) @db.Uuid
+  quoteId   String              @map("quote_id") @db.Uuid
+  kind      PaymentScheduleKind
+  label     String              @db.VarChar(200)
+  percent   Decimal             @db.Decimal(5, 2)
+  amount    Decimal             @db.Decimal(14, 2)
+  dueDate   DateTime?           @map("due_date") @db.Date
+  sortOrder Int                 @default(0) @map("sort_order")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  quote   Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  invoice Invoice?
+
+  @@index([quoteId, sortOrder])
+  @@map("payment_schedule_items")
+}

@@ -11,8 +11,42 @@ export const INVOICE_STATUSES = [
   "CANCELLED",
 ] as const;
 
+/** Commercial statuses that the frontend/API may set. PAID is server-only. */
+export const INVOICE_COMMERCIAL_MUTATION_STATUSES = [
+  "DRAFT",
+  "SENT",
+  "PENDING",
+  "OVERDUE",
+  "CANCELLED",
+] as const;
+
+export const INVOICE_PAYMENT_STATUSES = [
+  "UNPAID",
+  "PENDING",
+  "PAID",
+  "FAILED",
+  "EXPIRED",
+  "REFUNDED",
+] as const;
+
+export const INVOICE_KINDS = [
+  "STANDARD",
+  "ADVANCE",
+  "MILESTONE",
+  "FINAL",
+] as const;
+
 export const invoiceStatusSchema = z.enum(INVOICE_STATUSES);
+export const invoiceCommercialMutationStatusSchema = z.enum(
+  INVOICE_COMMERCIAL_MUTATION_STATUSES,
+);
+export const invoicePaymentStatusSchema = z.enum(INVOICE_PAYMENT_STATUSES);
+export const invoiceKindSchema = z.enum(INVOICE_KINDS);
 export type InvoiceStatusValue = z.infer<typeof invoiceStatusSchema>;
+export type InvoicePaymentStatusValue = z.infer<
+  typeof invoicePaymentStatusSchema
+>;
+export type InvoiceKindValue = z.infer<typeof invoiceKindSchema>;
 
 const optionalText = (label: string, max: number) =>
   z
@@ -63,7 +97,7 @@ export const invoiceFieldsSchema = z.object({
       (value) => value === "" || z.string().uuid().safeParse(value).success,
       "Invalid project",
     ),
-  status: invoiceStatusSchema,
+  status: invoiceCommercialMutationStatusSchema,
   issueDate: dateStringSchema,
   dueDate: dateStringSchema,
   currency: z
@@ -123,6 +157,7 @@ export const listInvoicesQuerySchema = z.object({
   status: invoiceStatusSchema.optional(),
   clientId: uuidSchema.optional(),
   projectId: uuidSchema.optional(),
+  quoteId: uuidSchema.optional(),
   sortBy: z.enum(INVOICE_SORT_FIELDS).optional().default("createdAt"),
   sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
   page: z.coerce.number().int().min(1).optional().default(1),
@@ -230,9 +265,15 @@ export const invoiceSchema = z.object({
   clientName: z.string(),
   projectId: uuidSchema.nullable(),
   projectName: z.string().nullable(),
+  quoteId: uuidSchema.nullable().optional(),
+  quoteNumber: z.string().nullable().optional(),
+  paymentScheduleItemId: uuidSchema.nullable().optional(),
+  invoiceKind: invoiceKindSchema.optional(),
   status: invoiceStatusSchema,
+  paymentStatus: invoicePaymentStatusSchema.optional(),
   issueDate: z.string(),
   dueDate: z.string(),
+  issuedAt: z.string().nullable().optional(),
   currency: z.string(),
   taxRate: z.number(),
   discountAmount: z.number(),

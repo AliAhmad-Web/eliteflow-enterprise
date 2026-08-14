@@ -18,3 +18,19 @@ export const INVOICE_STATUS_LABELS = {
   OVERDUE: "Overdue",
   CANCELLED: "Cancelled",
 } as const;
+
+export const INVOICE_PAYMENT_STATUS_LABELS = {
+  UNPAID: "Unpaid",
+  PENDING: "Pending verification",
+  PAID: "Paid",
+  FAILED: "Failed",
+  EXPIRED: "Expired",
+  REFUNDED: "Refunded",
+} as const;
+
+export const INVOICE_KIND_LABELS = {
+  STANDARD: "Standard",
+  ADVANCE: "Advance",
+  MILESTONE: "Milestone",
+  FINAL: "Final",
+} as const;

@@ -80,6 +80,14 @@ export const invoicesService = {
     });
   },
 
+  issue(id: string) {
+    return apiRequest<Invoice>(`${INVOICES_API_PREFIX}/${id}/issue`, {
+      method: "POST",
+      body: {},
+      auth: true,
+    });
+  },
+
   async downloadPdf(id: string): Promise<{ blob: Blob; filename: string }> {
     const response = await authenticatedFetch(
       `${INVOICES_API_PREFIX}/${id}/pdf`,

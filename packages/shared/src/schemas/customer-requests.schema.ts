@@ -375,7 +375,8 @@ export const customerRequestSchema = z.object({
   agreedAmount: z.number().nullable(),
   /**
    * Server-derived commercial amount for project/billing.
-   * After approval this is agreedAmount (legacy fallback: expectedBudget).
+   * After approval this is agreedAmount from the request or approved quote.
+   * Never the original expectedBudget.
    */
   commercialAmount: z.number().nullable(),
   currency: z.string(),

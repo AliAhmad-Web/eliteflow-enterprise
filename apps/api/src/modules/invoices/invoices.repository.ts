@@ -15,6 +15,7 @@ import type { InvoiceWithRelations } from "./invoices.types.js";
 const listInclude = {
   client: { select: { id: true, companyName: true } },
   project: { select: { id: true, name: true } },
+  quote: { select: { id: true, quoteNumber: true } },
 } satisfies Prisma.InvoiceInclude;
 
 const detailInclude = {
@@ -115,6 +116,7 @@ export class InvoicesRepository {
         clientId: input.clientId,
         projectId: emptyToNull(input.projectId),
         status: input.status as InvoiceStatus,
+        paymentStatus: "UNPAID",
         issueDate: parseDate(input.issueDate),
         dueDate: parseDate(input.dueDate),
         currency: input.currency || "USD",
@@ -138,7 +140,7 @@ export class InvoicesRepository {
         paymentHistory: {
           create: {
             status: input.status as InvoiceStatus,
-            amount: input.status === "PAID" ? totals.total : null,
+            amount: input.status === ("PAID" as InvoiceStatus) ? totals.total : null,
             note: "Invoice created",
             actorId,
           },
@@ -291,14 +293,50 @@ export class InvoicesRepository {
     id: string,
     input: { note: string; actorId: string; status: string },
   ): Promise<InvoiceWithRelations> {
-    await prisma.invoicePaymentHistory.create({
-      data: {
-        invoiceId: id,
-        status: input.status as never,
-        amount: null,
-        note: input.note,
-        actorId: input.actorId,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice.update({
+        where: { id },
+        data: { paymentStatus: "PENDING" },
+      });
+      await tx.invoicePaymentHistory.create({
+        data: {
+          invoiceId: id,
+          status: input.status as never,
+          amount: null,
+          note: input.note,
+          actorId: input.actorId,
+        },
+      });
+    });
+
+    return (await prisma.invoice.findFirstOrThrow({
+      where: { id },
+      include: detailInclude,
+    })) as InvoiceWithRelations;
+  }
+
+  async issue(
+    id: string,
+    actorId: string | null,
+  ): Promise<InvoiceWithRelations> {
+    await prisma.$transaction(async (tx) => {
+      await tx.invoice.update({
+        where: { id },
+        data: {
+          status: "SENT",
+          issuedAt: new Date(),
+          updatedById: actorId,
+        },
+      });
+      await tx.invoicePaymentHistory.create({
+        data: {
+          invoiceId: id,
+          status: "SENT",
+          amount: null,
+          note: "Invoice issued",
+          actorId,
+        },
+      });
     });
 
     return (await prisma.invoice.findFirstOrThrow({
@@ -453,6 +491,9 @@ export class InvoicesRepository {
     }
     if (query.projectId) {
       where.projectId = query.projectId;
+    }
+    if (query.quoteId) {
+      where.quoteId = query.quoteId;
     }
 
     if (query.search) {

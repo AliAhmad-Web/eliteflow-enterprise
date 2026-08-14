@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  INVOICE_STATUSES,
+  INVOICE_COMMERCIAL_MUTATION_STATUSES,
   calculateInvoiceTotals,
   createInvoiceSchema,
   type Client,
@@ -38,10 +38,17 @@ interface InvoiceFormProps {
 }
 
 function toFormValues(invoice?: Invoice | null): CreateInvoiceInput {
+  const status =
+    invoice?.status &&
+    (INVOICE_COMMERCIAL_MUTATION_STATUSES as readonly string[]).includes(
+      invoice.status,
+    )
+      ? invoice.status
+      : "DRAFT";
   return {
     clientId: invoice?.clientId ?? "",
     projectId: invoice?.projectId ?? "",
-    status: invoice?.status ?? "DRAFT",
+    status: status as CreateInvoiceInput["status"],
     issueDate: invoice?.issueDate ?? new Date().toISOString().slice(0, 10),
     dueDate:
       invoice?.dueDate ??
@@ -179,7 +186,7 @@ export function InvoiceForm({
             className={selectClassName}
             {...register("status")}
           >
-            {INVOICE_STATUSES.map((value) => (
+            {INVOICE_COMMERCIAL_MUTATION_STATUSES.map((value) => (
               <option key={value} value={value}>
                 {INVOICE_STATUS_LABELS[value]}
               </option>

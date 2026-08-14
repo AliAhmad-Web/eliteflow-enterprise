@@ -98,13 +98,7 @@ function commercialAmount(
   if (request.agreedAmount != null) {
     return toBudgetNumber(request.agreedAmount);
   }
-  // Continuation expected budget is not commercial approval (Phase 3).
-  if (isCustomerRequestContinuationType(request.type)) {
-    return null;
-  }
-  if (request.status === "APPROVED" || request.status === "CONVERTED") {
-    return toBudgetNumber(request.expectedBudget);
-  }
+  // Original expectedBudget is historical only and never the commercial deal.
   return null;
 }
 

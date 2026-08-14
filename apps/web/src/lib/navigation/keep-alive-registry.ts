@@ -43,6 +43,10 @@ export const KEEP_ALIVE_LOADERS: Record<string, KeepAliveLoader> = {
     import("@/features/invoices/components/invoices-page-content").then(
       (m) => ({ default: m.InvoicesPageContent }),
     ),
+  [ROUTES.QUOTES]: () =>
+    import("@/features/quotes/components/quotes-page-content").then((m) => ({
+      default: m.QuotesPageContent,
+    })),
   [ROUTES.REPORTS]: () =>
     import("@/features/reports/components/reports-page-content").then((m) => ({
       default: m.ReportsPageContent,

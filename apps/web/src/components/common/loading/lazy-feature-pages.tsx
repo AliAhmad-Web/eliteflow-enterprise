@@ -120,6 +120,30 @@ export const LazyInvoicesPage = dynamic(
   { loading: () => null },
 );
 
+export const LazyQuotesPage = dynamic(
+  () =>
+    import("@/features/quotes/components/quotes-page-content").then(
+      (m) => m.QuotesPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyQuoteDetailsPage = dynamic(
+  () =>
+    import("@/features/quotes/components/quote-details-page-content").then(
+      (m) => m.QuoteDetailsPageContent,
+    ),
+  { loading: () => null },
+);
+
+export const LazyQuoteFormPage = dynamic(
+  () =>
+    import("@/features/quotes/components/quote-form-page-content").then(
+      (m) => m.QuoteFormPageContent,
+    ),
+  { loading: () => null },
+);
+
 export const LazyTeamPage = dynamic(
   () =>
     import("@/features/team/components/team-page-content").then(

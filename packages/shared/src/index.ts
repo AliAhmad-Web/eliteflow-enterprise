@@ -29,6 +29,7 @@ export {
   INTEGRATIONS_API_PREFIX,
   WHITEBOARDS_API_PREFIX,
   CUSTOMER_REQUESTS_API_PREFIX,
+  QUOTES_API_PREFIX,
   AUTH_COOKIES,
   AUTH_ERROR_CODES,
   AUTH_HEADERS,
@@ -214,6 +215,12 @@ export type {
   InvoiceListResponse,
   InvoiceStats,
 } from "./types/invoices.types.js";
+
+// Types — Quotes
+export type {
+  Quote,
+  QuoteListResponse,
+} from "./types/quotes.types.js";
 
 // Types — AI
 export type {
@@ -484,15 +491,21 @@ export type {
 
 // Schemas — Invoices
 export {
+  INVOICE_COMMERCIAL_MUTATION_STATUSES,
+  INVOICE_KINDS,
+  INVOICE_PAYMENT_STATUSES,
   INVOICE_SORT_FIELDS,
   INVOICE_STATUSES,
   calculateInvoiceTotals,
   createInvoiceSchema,
+  invoiceCommercialMutationStatusSchema,
   invoiceFieldsSchema,
   invoiceIdParamsSchema,
   invoiceItemSchema,
+  invoiceKindSchema,
   invoicePaymentHistorySchema,
   invoicePaymentNoticeSchema,
+  invoicePaymentStatusSchema,
   invoiceSchema,
   invoiceStatusSchema,
   listInvoicesQuerySchema,
@@ -504,8 +517,10 @@ export type {
   InvoiceDto,
   InvoiceIdParamsInput,
   InvoiceItemDto,
+  InvoiceKindValue,
   InvoicePaymentHistoryDto,
   InvoicePaymentNoticeInput,
+  InvoicePaymentStatusValue,
   InvoiceStatusValue,
   InvoiceTotals,
   ListInvoicesQueryInput,
@@ -1752,3 +1767,49 @@ export type {
   StartCustomerRequestReviewInput,
   UpdateCustomerRequestInput,
 } from "./schemas/customer-requests.schema.js";
+
+// Schemas — Quotes (Phase 3 commercial foundation)
+export {
+  PAYMENT_MODELS,
+  PAYMENT_SCHEDULE_KINDS,
+  QUOTE_SORT_FIELDS,
+  QUOTE_STATUSES,
+  calculateQuoteTotals,
+  createQuoteSchema,
+  generateQuoteInvoicesSchema,
+  listQuotesQuerySchema,
+  paymentModelSchema,
+  paymentScheduleInputSchema,
+  paymentScheduleItemSchema,
+  paymentScheduleKindSchema,
+  quoteIdParamsSchema,
+  quoteItemSchema,
+  quoteSchema,
+  quoteStatusSchema,
+  rejectQuoteSchema,
+  updateQuoteSchema,
+} from "./schemas/quotes.schema.js";
+
+export type {
+  CreateQuoteInput,
+  GenerateQuoteInvoicesInput,
+  ListQuotesQueryInput,
+  PaymentModelValue,
+  PaymentScheduleInput,
+  PaymentScheduleItemDto,
+  PaymentScheduleKindValue,
+  QuoteDto,
+  QuoteIdParamsInput,
+  QuoteItemDto,
+  QuoteStatusValue,
+  RejectQuoteInput,
+  UpdateQuoteInput,
+} from "./schemas/quotes.schema.js";
+
+export {
+  PAYMENT_MODEL_LABELS,
+  PAYMENT_SCHEDULE_KIND_LABELS,
+  calculatePaymentSchedule,
+} from "./utils/payment-schedule.js";
+
+export type { CalculatedScheduleItem } from "./utils/payment-schedule.js";

@@ -32,6 +32,11 @@ export const PERMISSIONS = {
   INVOICES_SEND: "invoices:send",
   INVOICES_DELETE: "invoices:delete",
 
+  QUOTES_READ: "quotes:read",
+  QUOTES_WRITE: "quotes:write",
+  QUOTES_SEND: "quotes:send",
+  QUOTES_APPROVE: "quotes:approve",
+
   REPORTS_READ: "reports:read",
   REPORTS_EXPORT: "reports:export",
 
@@ -84,6 +89,7 @@ export const MODULE_PERMISSIONS = {
   projects: PERMISSIONS.PROJECTS_READ,
   tasks: PERMISSIONS.TASKS_READ,
   invoices: PERMISSIONS.INVOICES_READ,
+  quotes: PERMISSIONS.QUOTES_READ,
   billing: PERMISSIONS.INVOICES_READ,
   reports: PERMISSIONS.REPORTS_READ,
   calendar: PERMISSIONS.CALENDAR_READ,
@@ -112,6 +118,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/projects": PERMISSIONS.PROJECTS_READ,
   "/tasks": PERMISSIONS.TASKS_READ,
   "/invoices": PERMISSIONS.INVOICES_READ,
+  "/quotes": PERMISSIONS.QUOTES_READ,
   "/reports": PERMISSIONS.REPORTS_READ,
   "/calendar": PERMISSIONS.CALENDAR_READ,
   // /whiteboard — all signed-in users may open the workspace UI;

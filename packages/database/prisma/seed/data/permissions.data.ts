@@ -174,6 +174,32 @@ export const PERMISSIONS: PermissionSeedDefinition[] = [
     description: "Cancel or delete invoices",
   },
 
+  // Quotes (Phase 3 commercial foundation)
+  {
+    key: "quotes:read",
+    resource: "quotes",
+    action: "read",
+    description: "View quotes, payment schedules, and commercial status",
+  },
+  {
+    key: "quotes:write",
+    resource: "quotes",
+    action: "write",
+    description: "Create and update quotes and payment schedules",
+  },
+  {
+    key: "quotes:send",
+    resource: "quotes",
+    action: "send",
+    description: "Send quotes to customers",
+  },
+  {
+    key: "quotes:approve",
+    resource: "quotes",
+    action: "approve",
+    description: "Approve or reject quotes assigned to the customer",
+  },
+
   // Reports
   {
     key: "reports:read",
