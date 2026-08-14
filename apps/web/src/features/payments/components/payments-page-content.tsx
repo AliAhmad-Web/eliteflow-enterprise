@@ -151,11 +151,11 @@ export function PaymentsPageContent() {
                       }
                     />
                   </div>
-                ) : (
+                ) : method.method === "JAZZCASH" ? (
                   <div className="space-y-2">
                     <Input
                       defaultValue={method.merchantPublicId ?? ""}
-                      placeholder="Public merchant / store ID"
+                      placeholder="JazzCash Till ID"
                       onBlur={(event) =>
                         void updateMethod.mutateAsync({
                           method: method.method,
@@ -163,10 +163,64 @@ export function PaymentsPageContent() {
                         })
                       }
                     />
+                    <Textarea
+                      defaultValue={method.instructions ?? ""}
+                      placeholder="JazzCash QR instructions shown to customers"
+                      onBlur={(event) =>
+                        void updateMethod.mutateAsync({
+                          method: method.method,
+                          input: { instructions: event.target.value || null },
+                        })
+                      }
+                    />
+                    {method.qrImageUrl ? (
+                      <img
+                        src={method.qrImageUrl}
+                        alt="JazzCash QR"
+                        className="mx-auto w-32 rounded-md border bg-white p-1"
+                      />
+                    ) : null}
                     <p className="text-xs text-muted-foreground">
-                      {method.providerReady
-                        ? "Merchant credentials are configured on the server. Secrets are never sent to the browser."
-                        : "Hosted checkout needs merchant credentials in API environment variables. Customers can still submit a transaction ID for admin verification."}
+                      Customers pay by scanning the JazzCash QR and submitting a transaction ID. Merchant API secrets are not required. Admin verification still marks the invoice paid.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Input
+                      defaultValue={method.merchantPublicId ?? ""}
+                      placeholder={
+                        method.method === "EASYPAISA"
+                          ? "EasyPaisa MSISDN (masked)"
+                          : "Public merchant / store ID"
+                      }
+                      onBlur={(event) =>
+                        void updateMethod.mutateAsync({
+                          method: method.method,
+                          input: { merchantPublicId: event.target.value || null },
+                        })
+                      }
+                    />
+                    <Textarea
+                      defaultValue={method.instructions ?? ""}
+                      placeholder="EasyPaisa QR instructions shown to customers"
+                      onBlur={(event) =>
+                        void updateMethod.mutateAsync({
+                          method: method.method,
+                          input: { instructions: event.target.value || null },
+                        })
+                      }
+                    />
+                    {method.qrImageUrl ? (
+                      <img
+                        src={method.qrImageUrl}
+                        alt="EasyPaisa QR"
+                        className="mx-auto w-32 rounded-md border bg-white p-1"
+                      />
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Customers pay by scanning the EasyPaisa QR and submitting a Transaction ID.
+                      Store ID and Hash Key are not required. Admin verification still marks the
+                      invoice paid.
                     </p>
                   </div>
                 )}

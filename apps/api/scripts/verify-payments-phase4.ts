@@ -11,6 +11,8 @@ import { prisma, UserStatus } from "@enterprise/database";
 import {
   UserRole,
   canTransitionPaymentStatus,
+  JAZZCASH_QR_IMAGE_PATH,
+  EASYPAISA_QR_IMAGE_PATH,
 } from "@enterprise/shared";
 
 import { ROLE_PERMISSION_MAP } from "../../../packages/database/prisma/seed/data/role-permissions.data.js";
@@ -659,6 +661,96 @@ async function main() {
   );
   assert.equal(easyCancelInv.paymentStatus, "FAILED");
   console.log("[phase4] EasyPaisa cancelled callback OK");
+
+  const savedJazz = {
+    merchantId: process.env.JAZZCASH_MERCHANT_ID,
+    password: process.env.JAZZCASH_PASSWORD,
+    salt: process.env.JAZZCASH_INTEGRITY_SALT,
+  };
+  delete process.env.JAZZCASH_MERCHANT_ID;
+  delete process.env.JAZZCASH_PASSWORD;
+  delete process.env.JAZZCASH_INTEGRITY_SALT;
+  try {
+    const methods = await paymentsService.listMethods();
+    const jazz = methods.find((item) => item.method === "JAZZCASH");
+    assert.equal(jazz?.providerReady, true);
+    assert.equal(jazz?.qrImageUrl, JAZZCASH_QR_IMAGE_PATH);
+    const pkrQr = await issueAdvanceInvoice(clientA, admin, "PKR");
+    const qrPay = await paymentsService.submitWalletNotice(
+      {
+        invoiceId: pkrQr.invoice.id,
+        method: "JAZZCASH",
+        amount: 300,
+        customerReference: `JC-QR-${RUN_ID}`,
+        paidAt: today(),
+      },
+      clientA,
+    );
+    assert.equal(qrPay.status, "PENDING_VERIFICATION");
+    assert.equal(qrPay.method, "JAZZCASH");
+    await expectError(
+      () => paymentsService.verify(qrPay.id, {}, clientA),
+      PAYMENTS_ERROR_CODES.FORBIDDEN,
+      "customer cannot verify JazzCash QR payment",
+    );
+    const qrVerified = await paymentsService.verify(qrPay.id, {}, admin);
+    assert.equal(qrVerified.status, "VERIFIED");
+    const qrInvoice = await invoicesService.getById(pkrQr.invoice.id, admin);
+    assert.equal(qrInvoice.paymentStatus, "PAID");
+    console.log("[phase4] JazzCash QR without merchant API credentials OK");
+  } finally {
+    if (savedJazz.merchantId) process.env.JAZZCASH_MERCHANT_ID = savedJazz.merchantId;
+    if (savedJazz.password) process.env.JAZZCASH_PASSWORD = savedJazz.password;
+    if (savedJazz.salt) process.env.JAZZCASH_INTEGRITY_SALT = savedJazz.salt;
+  }
+
+  const savedEasy = {
+    storeId: process.env.EASYPAISA_STORE_ID,
+    hashKey: process.env.EASYPAISA_HASH_KEY,
+  };
+  delete process.env.EASYPAISA_STORE_ID;
+  delete process.env.EASYPAISA_HASH_KEY;
+  try {
+    const methods = await paymentsService.listMethods();
+    const easyQr = methods.find((item) => item.method === "EASYPAISA");
+    assert.equal(easyQr?.providerReady, true);
+    assert.equal(easyQr?.qrImageUrl, EASYPAISA_QR_IMAGE_PATH);
+    const pkrEasyQr = await issueAdvanceInvoice(clientA, admin, "PKR");
+    const easyNotice = await paymentsService.submitWalletNotice(
+      {
+        invoiceId: pkrEasyQr.invoice.id,
+        method: "EASYPAISA",
+        amount: 300,
+        customerReference: `EP-QR-${RUN_ID}`,
+        paidAt: today(),
+      },
+      clientA,
+    );
+    assert.equal(easyNotice.status, "PENDING_VERIFICATION");
+    assert.equal(easyNotice.method, "EASYPAISA");
+    const pendingInvoice = await invoicesService.getById(
+      pkrEasyQr.invoice.id,
+      admin,
+    );
+    assert.notEqual(pendingInvoice.paymentStatus, "PAID");
+    assert.equal(pendingInvoice.paidAmount, 0);
+    await expectError(
+      () => paymentsService.verify(easyNotice.id, {}, clientA),
+      PAYMENTS_ERROR_CODES.FORBIDDEN,
+      "customer cannot verify EasyPaisa QR payment",
+    );
+    const easyVerified = await paymentsService.verify(easyNotice.id, {}, admin);
+    assert.equal(easyVerified.status, "VERIFIED");
+    const easyQrInvoice = await invoicesService.getById(
+      pkrEasyQr.invoice.id,
+      admin,
+    );
+    assert.equal(easyQrInvoice.paymentStatus, "PAID");
+    console.log("[phase4] EasyPaisa QR without Store ID / Hash Key OK");
+  } finally {
+    if (savedEasy.storeId) process.env.EASYPAISA_STORE_ID = savedEasy.storeId;
+    if (savedEasy.hashKey) process.env.EASYPAISA_HASH_KEY = savedEasy.hashKey;
+  }
 
   await cleanup();
   console.log("[phase4] PASS");

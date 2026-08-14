@@ -1,7 +1,17 @@
 "use client";
 
-import type { Invoice, PakistanPaymentMethodValue } from "@enterprise/shared";
-import { PERMISSIONS } from "@enterprise/shared";
+import {
+  EASYPAISA_QR_ACCOUNT_NAME,
+  EASYPAISA_QR_IMAGE_PATH,
+  EASYPAISA_QR_MSISDN_MASKED,
+  JAZZCASH_QR_IMAGE_PATH,
+  JAZZCASH_QR_MERCHANT_NAME,
+  JAZZCASH_QR_TILL_ID,
+  JAZZCASH_QR_USSD,
+  PERMISSIONS,
+  type Invoice,
+  type PakistanPaymentMethodValue,
+} from "@enterprise/shared";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,11 +21,8 @@ import { paymentDetailPath } from "@/constants/routes";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { filesService } from "@/features/files/services/files.service";
 import { ApiClientError } from "@/services/api/api-error";
-import { getApiBaseUrl } from "@/services/api/api-error";
 
 import {
-  useInitiateEasyPaisa,
-  useInitiateJazzCash,
   useSubmitBankTransfer,
   useSubmitWalletNotice,
 } from "../hooks/use-payment-mutations";
@@ -43,8 +50,6 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
   });
   const bankMutation = useSubmitBankTransfer();
   const walletMutation = useSubmitWalletNotice();
-  const jazzMutation = useInitiateJazzCash();
-  const easyMutation = useInitiateEasyPaisa();
 
   const remaining =
     invoice.remainingAmount ??
@@ -65,17 +70,14 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
   const [message, setMessage] = useState<string | null>(null);
 
   const selected = methods.find((item) => item.method === method);
-  const pending = bankMutation.isPending || walletMutation.isPending || jazzMutation.isPending || easyMutation.isPending || uploading;
+  const pending =
+    bankMutation.isPending || walletMutation.isPending || uploading;
   const error =
     bankMutation.error instanceof ApiClientError
       ? bankMutation.error
       : walletMutation.error instanceof ApiClientError
         ? walletMutation.error
-        : jazzMutation.error instanceof ApiClientError
-          ? jazzMutation.error
-          : easyMutation.error instanceof ApiClientError
-            ? easyMutation.error
-            : null;
+        : null;
 
   async function onProofChange(file: File | null) {
     if (!file) {
@@ -121,19 +123,21 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
       notes: notes || undefined,
       proofFileId: proofFileId ?? undefined,
     });
-    setMessage("Payment submitted for verification. A success screen is not enough — admin confirmation is required.");
-  }
-
-  async function startHosted(provider: "JAZZCASH" | "EASYPAISA") {
-    setMessage(null);
-    const result =
-      provider === "JAZZCASH"
-        ? await jazzMutation.mutateAsync({ invoiceId: invoice.id })
-        : await easyMutation.mutateAsync({ invoiceId: invoice.id });
-    window.location.href = `${getApiBaseUrl()}${result.checkout.checkoutPath}`;
+    setMessage(
+      method === "JAZZCASH"
+        ? "JazzCash QR payment submitted. Admin will verify the transaction ID before the invoice is marked paid."
+        : method === "EASYPAISA"
+          ? "EasyPaisa QR payment submitted. Admin will verify the Transaction ID before the invoice is marked paid."
+          : "Payment submitted for verification. A success screen is not enough — admin confirmation is required.",
+    );
   }
 
   if (!canPay) return null;
+
+  const jazzTillId = selected?.merchantPublicId || JAZZCASH_QR_TILL_ID;
+  const jazzQrSrc = selected?.qrImageUrl || JAZZCASH_QR_IMAGE_PATH;
+  const easyMsisdn = selected?.merchantPublicId || EASYPAISA_QR_MSISDN_MASKED;
+  const easyQrSrc = selected?.qrImageUrl || EASYPAISA_QR_IMAGE_PATH;
 
   return (
     <Card className="border-primary/20 bg-primary/5">
@@ -200,11 +204,6 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
                     onChange={() => setMethod(item.method)}
                   />
                   {item.displayName || PAYMENT_METHOD_LABELS[item.method]}
-                  {!item.providerReady && item.method !== "BANK_TRANSFER" ? (
-                    <span className="text-xs text-muted-foreground">
-                      (hosted checkout not configured — you can still submit a transaction ID)
-                    </span>
-                  ) : null}
                 </label>
               ))}
             </fieldset>
@@ -225,25 +224,62 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
               </div>
             ) : null}
 
-            {selected &&
-            selected.method !== "BANK_TRANSFER" &&
-            selected.providerReady &&
-            invoice.currency.toUpperCase() === "PKR" ? (
-              <Button
-                type="button"
-                disabled={pending}
-                onClick={() => void startHosted(selected.method as "JAZZCASH" | "EASYPAISA")}
-              >
-                Continue to {PAYMENT_METHOD_LABELS[selected.method]}
-              </Button>
+            {selected?.method === "JAZZCASH" ? (
+              <div className="space-y-3 rounded-md border bg-background p-3">
+                <p className="font-medium">Pay via JazzCash QR</p>
+                <p className="text-muted-foreground">
+                  Scan this QR in JazzCash, or dial {JAZZCASH_QR_USSD} and enter Till ID{" "}
+                  <span className="font-medium text-foreground">{jazzTillId}</span>. Pay{" "}
+                  <span className="font-medium text-foreground">
+                    {formatMoney(remaining, invoice.currency)}
+                  </span>{" "}
+                  for invoice {invoice.invoiceNumber}.
+                </p>
+                <img
+                  src={jazzQrSrc}
+                  alt={`JazzCash QR for ${JAZZCASH_QR_MERCHANT_NAME}`}
+                  className="mx-auto w-full max-w-xs rounded-md border bg-white p-2"
+                />
+                <p className="text-center text-xs text-muted-foreground">
+                  {JAZZCASH_QR_MERCHANT_NAME} · Till ID {jazzTillId}
+                </p>
+                {selected.instructions ? (
+                  <p className="whitespace-pre-wrap text-muted-foreground">
+                    {selected.instructions}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
-            {selected &&
-            selected.method !== "BANK_TRANSFER" &&
-            invoice.currency.toUpperCase() !== "PKR" ? (
-              <p className="text-xs text-muted-foreground">
-                JazzCash and EasyPaisa hosted checkout require a PKR invoice.
-                You can still submit a transaction ID for admin verification.
-              </p>
+
+            {selected?.method === "EASYPAISA" ? (
+              <div className="space-y-3 rounded-md border bg-background p-3">
+                <p className="font-medium">Pay via EasyPaisa QR</p>
+                <p className="text-muted-foreground">
+                  Scan this QR in EasyPaisa to send money to{" "}
+                  <span className="font-medium text-foreground">
+                    {EASYPAISA_QR_ACCOUNT_NAME}
+                  </span>
+                  . Pay{" "}
+                  <span className="font-medium text-foreground">
+                    {formatMoney(remaining, invoice.currency)}
+                  </span>{" "}
+                  for invoice {invoice.invoiceNumber}, then submit your Transaction ID /
+                  Reference ID.
+                </p>
+                <img
+                  src={easyQrSrc}
+                  alt={`EasyPaisa QR for ${EASYPAISA_QR_ACCOUNT_NAME}`}
+                  className="mx-auto w-full max-w-xs rounded-md border bg-white p-2"
+                />
+                <p className="text-center text-xs text-muted-foreground">
+                  {EASYPAISA_QR_ACCOUNT_NAME} · MSISDN {easyMsisdn}
+                </p>
+                {selected.instructions ? (
+                  <p className="whitespace-pre-wrap text-muted-foreground">
+                    {selected.instructions}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             {selected ? (
@@ -259,7 +295,13 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
                 <Input
                   value={reference}
                   onChange={(event) => setReference(event.target.value)}
-                  placeholder="Transaction / reference number"
+                  placeholder={
+                    method === "JAZZCASH"
+                      ? "JazzCash transaction / reference ID"
+                      : method === "EASYPAISA"
+                        ? "EasyPaisa Transaction ID / Reference ID"
+                        : "Transaction / reference number"
+                  }
                 />
                 <Input
                   type="date"

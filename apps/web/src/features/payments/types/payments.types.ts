@@ -32,6 +32,6 @@ export const PAYMENT_EXECUTION_LABELS: Record<
 export const PAYMENT_METHOD_LABELS: Record<PakistanPaymentMethodValue, string> =
   {
     BANK_TRANSFER: "Bank Transfer",
-    JAZZCASH: "JazzCash",
-    EASYPAISA: "EasyPaisa",
+    JAZZCASH: "JazzCash QR",
+    EASYPAISA: "EasyPaisa QR",
   };

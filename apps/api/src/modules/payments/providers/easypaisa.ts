@@ -4,6 +4,11 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
+/**
+ * EasyPaisa hosted checkout helpers (Store ID + Hash Key).
+ * Customer Phase 4 QR payments do not use these credentials — they submit a
+ * Transaction ID for admin verification instead.
+ */
 export const EASYPAISA_SANDBOX_URL =
   "https://easypaystg.easypaisa.com.pk/easypay/Index.jsf";
 export const EASYPAISA_PRODUCTION_URL =

@@ -2,6 +2,15 @@ import { z } from "zod";
 
 import { uuidSchema } from "./common.schema.js";
 
+export const JAZZCASH_QR_IMAGE_PATH = "/payments/jazzcash-qr.png" as const;
+export const JAZZCASH_QR_TILL_ID = "984175579" as const;
+export const JAZZCASH_QR_USSD = "*786*10#" as const;
+export const JAZZCASH_QR_MERCHANT_NAME = "ALI Shop" as const;
+
+export const EASYPAISA_QR_IMAGE_PATH = "/payments/easypaisa-qr.png" as const;
+export const EASYPAISA_QR_ACCOUNT_NAME = "ALI AHMED" as const;
+export const EASYPAISA_QR_MSISDN_MASKED = "********2254" as const;
+
 export const PAKISTAN_PAYMENT_METHODS = [
   "BANK_TRANSFER",
   "JAZZCASH",
@@ -335,6 +344,7 @@ export const paymentMethodConfigSchema = z.object({
   accountNumber: z.string().nullable(),
   iban: z.string().nullable(),
   merchantPublicId: z.string().nullable(),
+  qrImageUrl: z.string().nullable().optional(),
   providerReady: z.boolean(),
   updatedAt: z.string(),
 });

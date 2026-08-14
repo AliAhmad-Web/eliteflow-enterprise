@@ -4,13 +4,15 @@ import type {
   User,
 } from "@enterprise/database";
 import { Prisma } from "@enterprise/database";
-import type {
-  PaymentDto,
-  PaymentMethodConfigDto,
-  PaymentRefundDto,
+import {
+  EASYPAISA_QR_IMAGE_PATH,
+  EASYPAISA_QR_MSISDN_MASKED,
+  JAZZCASH_QR_IMAGE_PATH,
+  JAZZCASH_QR_TILL_ID,
+  type PaymentDto,
+  type PaymentMethodConfigDto,
+  type PaymentRefundDto,
 } from "@enterprise/shared";
-import { getEasyPaisaCredentials } from "./providers/easypaisa.js";
-import { getJazzCashCredentials } from "./providers/jazzcash.js";
 
 type PaymentWithRelations = Payment & {
   invoice?: {
@@ -126,9 +128,7 @@ export function toPaymentMethodConfigDto(row: {
   const providerReady =
     row.method === "BANK_TRANSFER"
       ? Boolean(row.bankName && row.accountTitle && (row.accountNumber || row.iban))
-      : row.method === "JAZZCASH"
-        ? Boolean(getJazzCashCredentials())
-        : Boolean(getEasyPaisaCredentials());
+      : true;
 
   return {
     method: row.method,
@@ -139,7 +139,18 @@ export function toPaymentMethodConfigDto(row: {
     accountTitle: row.accountTitle,
     accountNumber: row.accountNumber,
     iban: row.iban,
-    merchantPublicId: row.merchantPublicId,
+    merchantPublicId:
+      row.method === "JAZZCASH"
+        ? row.merchantPublicId || JAZZCASH_QR_TILL_ID
+        : row.method === "EASYPAISA"
+          ? row.merchantPublicId || EASYPAISA_QR_MSISDN_MASKED
+          : row.merchantPublicId,
+    qrImageUrl:
+      row.method === "JAZZCASH"
+        ? JAZZCASH_QR_IMAGE_PATH
+        : row.method === "EASYPAISA"
+          ? EASYPAISA_QR_IMAGE_PATH
+          : null,
     providerReady,
     updatedAt: row.updatedAt.toISOString(),
   };
