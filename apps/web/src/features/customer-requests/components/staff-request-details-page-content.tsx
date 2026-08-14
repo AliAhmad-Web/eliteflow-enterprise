@@ -41,6 +41,7 @@ import {
 } from "../types/query-keys";
 import { ClarificationHistoryList } from "./clarification-history";
 import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
+import { RequestLifecycleSteps } from "./request-lifecycle-steps";
 
 const selectClassName = FORM_SELECT_CLASS_MD;
 
@@ -193,6 +194,25 @@ export function StaffRequestDetailsPageContent() {
         <CustomerRequestStatusBadge status={request.status} />
       </div>
 
+      <RequestLifecycleSteps status={request.status} />
+
+      {request.status === "APPROVED" || request.status === "CONVERTED" ? (
+        <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Project approved and accepted
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-foreground/90">
+            This request is associated with{" "}
+            {request.createdByName ?? "the submitting customer"}
+            {request.createdByEmail ? ` (${request.createdByEmail})` : ""}.
+            Their workspace is active. Agreed budget:{" "}
+            {formatMoney(request.expectedBudget, request.currency)}.
+          </CardContent>
+        </Card>
+      ) : null}
+
       {actionError ? (
         <p className="text-sm text-destructive" role="alert">
           {actionError}
@@ -313,8 +333,9 @@ export function StaffRequestDetailsPageContent() {
               <CardHeader>
                 <CardTitle className="text-base">Review</CardTitle>
                 <p className="text-sm font-normal text-muted-foreground">
-                  Customer → Request → Review → Clarification (if needed) →
-                  Approve or Reject
+                  Customer submits → clarification if needed → Approve & Accept
+                  Project. The submitting customer is associated automatically
+                  — no company picker.
                 </p>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -349,7 +370,8 @@ export function StaffRequestDetailsPageContent() {
                     </Button>
                   )}
 
-                  {request.status === "UNDER_REVIEW" && (
+                  {(request.status === "SUBMITTED" ||
+                    request.status === "UNDER_REVIEW") && (
                     <Button
                       type="button"
                       disabled={busy}
@@ -360,12 +382,12 @@ export function StaffRequestDetailsPageContent() {
                               id: request.id,
                               input: { staffNotes: staffNotes || null },
                             }),
-                          "Request approved.",
+                          "Project approved and accepted. Customer workspace is now active.",
                         )
                       }
                     >
                       <Check className="mr-2 size-4" aria-hidden />
-                      Approve Request
+                      Approve & Accept Project
                     </Button>
                   )}
                 </div>
@@ -407,6 +429,8 @@ export function StaffRequestDetailsPageContent() {
                 </div>
                 )}
 
+                {(request.status === "SUBMITTED" ||
+                  request.status === "UNDER_REVIEW") && (
                 <div className="space-y-3 rounded-xl border border-destructive/20 p-4">
                   <Label htmlFor="reject-reason">Reject request</Label>
                   <Textarea
@@ -438,6 +462,7 @@ export function StaffRequestDetailsPageContent() {
                     Reject Request
                   </Button>
                 </div>
+                )}
 
                 {request.status === "APPROVED" ? (
                   <div className="space-y-4 rounded-xl border border-border/50 p-4">
@@ -446,8 +471,9 @@ export function StaffRequestDetailsPageContent() {
                         Convert to delivery work
                       </h3>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Approve is separate from convert. Configure what to
-                        create, then convert.
+                        Optional fallback if automatic accept did not create
+                        delivery work. The submitting customer is associated
+                        automatically — no company picker.
                       </p>
                     </div>
 

@@ -375,28 +375,27 @@ async function main() {
   );
   console.log("[phase2] customer clarification reply OK");
 
-  await customerRequestsService.startReview(draft.id, {}, admin);
   const approved = await customerRequestsService.approve(
     draft.id,
     { staffNotes: "Approved" },
     admin,
   );
-  assert.equal(approved.status, "APPROVED");
-
-  const converted = await customerRequestsService.convert(
-    draft.id,
-    { createProject: true, createTask: false },
-    admin,
-  );
-  assert.equal(converted.status, "CONVERTED");
-  assert.ok(converted.convertedProjectId);
+  assert.equal(approved.status, "CONVERTED");
+  assert.equal(approved.clientId, clientA.companyId);
+  assert.ok(approved.convertedProjectId);
 
   const project = await projectsService.getById(
-    converted.convertedProjectId!,
+    approved.convertedProjectId!,
     admin,
   );
   assert.equal(project.clientId, clientA.companyId);
   assert.equal(project.name, draft.title);
+
+  const customerProject = await projectsService.getById(
+    approved.convertedProjectId!,
+    clientA,
+  );
+  assert.equal(customerProject.id, approved.convertedProjectId);
 
   // Double convert blocked (status no longer APPROVED)
   try {

@@ -46,7 +46,7 @@ export const CUSTOMER_REQUEST_STATUS_LABELS: Record<
   CLARIFICATION_REQUESTED: "Clarification requested",
   APPROVED: "Approved",
   REJECTED: "Rejected",
-  CONVERTED: "Converted",
+  CONVERTED: "Approved & accepted",
   CANCELLED: "Cancelled",
 };
 

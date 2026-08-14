@@ -240,30 +240,37 @@ async function main() {
     admin,
   );
   await customerRequestsService.submit(submitted.id, unlinked);
-  await customerRequestsService.startReview(submitted.id, {}, admin);
   const approved = await customerRequestsService.approve(
     submitted.id,
     {},
     admin,
   );
-  assert.equal(approved.clientId, null);
-  assert.equal(approved.status, "APPROVED");
+  assert.ok(approved.clientId);
+  assert.equal(approved.status, "CONVERTED");
+  assert.ok(approved.convertedProjectId);
   assert.equal(approved.createdById, unlinkedUser.id);
   assert.equal(approved.createdByEmail, unlinkedUser.email);
 
-  const stillUnlinkedUser = await prisma.user.findUnique({
+  const activatedUser = await prisma.user.findUnique({
     where: { id: unlinkedUser.id },
     select: { companyId: true },
   });
-  assert.equal(stillUnlinkedUser?.companyId, null);
+  assert.equal(activatedUser?.companyId, approved.clientId);
 
   const seenByCustomer = await customerRequestsService.getById(
     submitted.id,
-    unlinked,
+    { ...unlinked, companyId: activatedUser?.companyId ?? null },
   );
-  assert.equal(seenByCustomer.status, "APPROVED");
+  assert.equal(seenByCustomer.status, "CONVERTED");
   assert.equal(seenByCustomer.createdById, unlinkedUser.id);
-  console.log("[p2-onboard] admin clarify/resubmit/approve without company OK");
+  assert.ok(seenByCustomer.convertedProjectId);
+
+  const customerProject = await projectsService.getById(
+    approved.convertedProjectId!,
+    { ...unlinked, companyId: activatedUser?.companyId ?? null },
+  );
+  assert.equal(customerProject.clientId, approved.clientId);
+  console.log("[p2-onboard] admin approve auto-associates customer OK");
 
   // 6) Linked workflow still works
   const linkedDraft = await customerRequestsService.create(
@@ -320,23 +327,70 @@ async function main() {
   console.log("[p2-onboard] CRM portal-user link backfills requests OK");
 
   // Cleanup seeded rows
-  await prisma.customerRequest.deleteMany({
+  const onboardUsers = [unlinkedUser.id, linkedUser.id, pendingUser.id, adminUser.id];
+  const onboardRequests = await prisma.customerRequest.findMany({
     where: {
       OR: [
-        { createdById: { in: [unlinkedUser.id, linkedUser.id, pendingUser.id] } },
+        { createdById: { in: onboardUsers } },
         { title: { contains: RUN_ID } },
       ],
     },
-  });
-  await prisma.user.deleteMany({
-    where: {
-      id: {
-        in: [unlinkedUser.id, linkedUser.id, pendingUser.id, adminUser.id],
-      },
+    select: {
+      id: true,
+      clientId: true,
+      convertedProjectId: true,
+      convertedTaskId: true,
     },
   });
+  const projectIds = [
+    ...new Set(
+      onboardRequests
+        .map((row) => row.convertedProjectId)
+        .filter(Boolean) as string[],
+    ),
+  ];
+  const taskIds = [
+    ...new Set(
+      onboardRequests
+        .map((row) => row.convertedTaskId)
+        .filter(Boolean) as string[],
+    ),
+  ];
+  if (taskIds.length) {
+    await prisma.task.deleteMany({ where: { id: { in: taskIds } } });
+  }
+  if (projectIds.length) {
+    await prisma.projectAttachment.deleteMany({
+      where: { projectId: { in: projectIds } },
+    });
+    await prisma.projectMember.deleteMany({
+      where: { projectId: { in: projectIds } },
+    });
+    await prisma.projectMilestone.deleteMany({
+      where: { projectId: { in: projectIds } },
+    });
+    await prisma.project.deleteMany({ where: { id: { in: projectIds } } });
+  }
+  await prisma.customerRequest.deleteMany({
+    where: { id: { in: onboardRequests.map((row) => row.id) } },
+  });
+  const autoClientIds = [
+    ...new Set(
+      [
+        ...onboardRequests.map((row) => row.clientId),
+        activatedUser?.companyId ?? null,
+      ].filter(Boolean) as string[],
+    ),
+  ];
+  await prisma.user.updateMany({
+    where: { id: { in: onboardUsers } },
+    data: { companyId: null },
+  });
+  await prisma.user.deleteMany({
+    where: { id: { in: onboardUsers } },
+  });
   await prisma.client.deleteMany({
-    where: { id: { in: [company.id, otherCompany.id] } },
+    where: { id: { in: [...autoClientIds, company.id, otherCompany.id] } },
   });
 
   console.log("[p2-onboard] PASS");

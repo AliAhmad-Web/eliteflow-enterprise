@@ -6,7 +6,8 @@ import type {
   UpdateCustomerRequestInput,
 } from "@enterprise/shared";
 import { PERMISSIONS } from "@enterprise/shared";
-import { ArrowLeft, Send, Undo2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, FolderKanban, LayoutDashboard, Send, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,7 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ROUTES } from "@/constants/routes";
+import { ROUTES, taskDetailPath } from "@/constants/routes";
+import { AUTH_QUERY_KEYS } from "@/features/auth/types/auth.types";
 import { useProjects } from "@/features/projects/hooks/use-projects";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { getApiErrorMessage } from "@/services/api/api-error";
@@ -36,6 +38,7 @@ import {
 import { ClarificationHistoryList } from "./clarification-history";
 import { CustomerRequestStatusBadge } from "./customer-request-status-badge";
 import { RequestForm } from "./request-form";
+import { RequestLifecycleSteps } from "./request-lifecycle-steps";
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -79,6 +82,7 @@ export function RequestDetailsPageContent() {
   const params = useParams<{ id: string }>();
   const requestId = params.id;
   const canCreate = useHasPermission(PERMISSIONS.CUSTOMER_REQUESTS_CREATE);
+  const queryClient = useQueryClient();
 
   const requestQuery = useCustomerRequest(requestId);
   const projectsQuery = useProjects({
@@ -101,6 +105,15 @@ export function RequestDetailsPageContent() {
   useEffect(() => {
     setResponseText(request?.clarificationResponse ?? "");
   }, [request?.id, request?.clarificationResponse]);
+
+  useEffect(() => {
+    if (
+      request?.status === "APPROVED" ||
+      request?.status === "CONVERTED"
+    ) {
+      void queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEYS.me });
+    }
+  }, [queryClient, request?.id, request?.status]);
 
   const handleUpdate = async (values: CreateCustomerRequestInput) => {
     if (!requestId) return;
@@ -267,6 +280,76 @@ export function RequestDetailsPageContent() {
           Priority: {CUSTOMER_REQUEST_PRIORITY_LABELS[request.priority]}
         </span>
       </div>
+
+      <RequestLifecycleSteps status={request.status} />
+
+      {request.status === "APPROVED" || request.status === "CONVERTED" ? (
+        <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Project approved and accepted
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-foreground/90">
+              EliteFlow accepted this request. Your workspace is unlocked. The
+              agreed budget, requirements, deadline, files, and clarification
+              history stay on this page.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <DetailItem
+                label="Agreed budget"
+                value={formatMoney(request.expectedBudget, request.currency)}
+              />
+              <DetailItem
+                label="Deadline"
+                value={
+                  request.preferredDeadline
+                    ? new Date(request.preferredDeadline).toLocaleDateString()
+                    : "—"
+                }
+              />
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Next steps
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>Review the accepted scope and files on this request.</li>
+                <li>Open your dashboard for projects, tasks, and invoices.</li>
+                {request.convertedProjectId ? (
+                  <li>Follow the accepted project for delivery progress.</li>
+                ) : null}
+              </ul>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href={ROUTES.PORTAL}>
+                  <LayoutDashboard className="mr-2 size-4" aria-hidden />
+                  Open dashboard
+                </Link>
+              </Button>
+              {request.convertedProjectId ? (
+                <Button asChild variant="secondary">
+                  <Link
+                    href={`${ROUTES.PROJECTS}?open=${request.convertedProjectId}`}
+                  >
+                    <FolderKanban className="mr-2 size-4" aria-hidden />
+                    View project
+                  </Link>
+                </Button>
+              ) : null}
+              {request.convertedTaskId ? (
+                <Button asChild variant="outline">
+                  <Link href={taskDetailPath(request.convertedTaskId)}>
+                    View task
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {request.status === "CLARIFICATION_REQUESTED" &&
       request.clarificationMessage ? (

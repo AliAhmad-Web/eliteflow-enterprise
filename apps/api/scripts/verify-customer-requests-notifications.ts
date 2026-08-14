@@ -300,25 +300,11 @@ async function main() {
   );
   const approveRows = await waitForNotifications({
     entityId: created.id,
-    title: "Request approved",
+    title: "Project approved and accepted",
     userId: client.userId,
   });
   assert.equal(approveRows[0]?.entityId, created.id);
   console.log("[p2-notify] approve→customer OK");
-
-  // Convert → customer
-  await customerRequestsService.convert(
-    created.id,
-    { createProject: true, createTask: false },
-    admin,
-  );
-  const convertRows = await waitForNotifications({
-    entityId: created.id,
-    title: "Request converted",
-    userId: client.userId,
-  });
-  assert.equal(convertRows[0]?.userId, client.userId);
-  console.log("[p2-notify] convert→customer OK");
 
   // Reject path (separate request)
   const rejectable = await customerRequestsService.create(

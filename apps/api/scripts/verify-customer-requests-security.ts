@@ -339,29 +339,30 @@ async function main() {
   console.log("[p2-sec] unlinked targetProject blocked OK");
 
   // Admin can review + approve unlinked without company selection
-  await customerRequestsService.startReview(unlinkedCreated.id, {}, admin);
   const approvedUnlinked = await customerRequestsService.approve(
     unlinkedCreated.id,
     {},
     admin,
   );
-  assert.equal(approvedUnlinked.clientId, null);
+  assert.ok(approvedUnlinked.clientId);
   assert.equal(approvedUnlinked.createdById, unlinkedUser.id);
-  const stillUnlinked = await prisma.user.findUnique({
+  assert.equal(approvedUnlinked.status, "CONVERTED");
+  assert.ok(approvedUnlinked.convertedProjectId);
+  const activatedUnlinked = await prisma.user.findUnique({
     where: { id: unlinkedUser.id },
     select: { companyId: true },
   });
-  assert.equal(stillUnlinked?.companyId, null);
-  console.log("[p2-sec] admin approve unlinked without company OK");
-
-  // Staff convert creates project visible to client company
-  await customerRequestsService.startReview(created.id, {}, admin);
-  await customerRequestsService.approve(created.id, {}, admin);
-  const converted = await customerRequestsService.convert(
-    created.id,
-    { createProject: true, createTask: false },
-    admin,
+  assert.equal(activatedUnlinked?.companyId, approvedUnlinked.clientId);
+  const unlinkedProject = await projectsService.getById(
+    approvedUnlinked.convertedProjectId!,
+    { ...unlinkedActor, companyId: activatedUnlinked?.companyId ?? null },
   );
+  assert.equal(unlinkedProject.clientId, approvedUnlinked.clientId);
+  console.log("[p2-sec] admin approve auto-associates customer OK");
+
+  // Staff approve creates project visible to client company
+  await customerRequestsService.startReview(created.id, {}, admin);
+  const converted = await customerRequestsService.approve(created.id, {}, admin);
   assert.ok(converted.convertedProjectId);
   const project = await projectsService.getById(
     converted.convertedProjectId!,

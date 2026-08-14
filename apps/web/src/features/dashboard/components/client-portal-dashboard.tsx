@@ -169,7 +169,7 @@ function ClientUnlinkedOnboarding({ firstName }: { firstName: string }) {
       <RoleDashboardHeader
         badge="Client Portal"
         title={`Welcome, ${firstName}`}
-        subtitle="Submit a project request to get started. Company-scoped ERP access unlocks after onboarding review."
+        subtitle="Submit a project request to get started. Your dashboard unlocks after EliteFlow approves and accepts your request."
       />
 
       <Card className="border-border/50">
@@ -183,10 +183,9 @@ function ClientUnlinkedOnboarding({ firstName }: { firstName: string }) {
                 Start with a project request
               </CardTitle>
               <p className="mt-2 text-sm text-muted-foreground">
-                Submit your project request. Our team will review your request
-                and connect it to your business account during onboarding.
-                Projects, invoices, tasks, and files stay locked until that
-                link is complete.
+                Submit your project request. After clarification and approval,
+                your workspace unlocks automatically — projects, invoices,
+                tasks, and files become visible for your account.
               </p>
             </div>
           </div>
@@ -198,11 +197,11 @@ function ClientUnlinkedOnboarding({ firstName }: { firstName: string }) {
               existing company account is required.
             </li>
             <li>
-              After approval, an administrator associates your login with the
-              correct Client/Company record.
+              After EliteFlow approves your request, your customer account is
+              activated automatically. No extra company selection is required.
             </li>
             <li>
-              Until then, you only see your onboarding requests — never another
+              Until then, you only see your own requests — never another
               company&apos;s business data.
             </li>
           </ul>

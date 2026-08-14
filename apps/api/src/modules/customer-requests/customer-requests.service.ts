@@ -22,6 +22,7 @@ import {
 } from "@enterprise/shared";
 
 import { attachmentSecurityService } from "../files/attachment-security.service.js";
+import { ensurePortalCompanyLink } from "../clients/client-company-onboarding.service.js";
 import { notificationDispatcher } from "../notifications/notification.dispatcher.js";
 import { projectsService } from "../projects/projects.service.js";
 import { tasksService } from "../tasks/tasks.service.js";
@@ -560,7 +561,12 @@ export class CustomerRequestsService {
     this.assertIsReviewer(actor);
     const existing = await this.requireRequest(id);
 
-    this.assertTransition(existing.status, "APPROVED", ["UNDER_REVIEW"]);
+    this.assertTransition(existing.status, "APPROVED", [
+      "SUBMITTED",
+      "UNDER_REVIEW",
+    ]);
+
+    await this.activateSubmittingCustomer(existing, actor);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "APPROVED",
@@ -576,18 +582,36 @@ export class CustomerRequestsService {
       metadata: {
         fromStatus: existing.status,
         createdById: existing.createdById,
-        clientId: existing.clientId,
+        clientId: updated.clientId,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
 
-    this.notifyCreator(updated, {
-      title: "Request approved",
-      body: `Your work request "${updated.title}" was approved.`,
-    });
+    const convertInput: ConvertCustomerRequestInput = {
+      createProject:
+        existing.type !== "NEW_TASK" || !existing.targetProjectId,
+      createTask: existing.type === "NEW_TASK",
+      projectId: existing.targetProjectId,
+      staffNotes: input.staffNotes,
+    };
 
-    return toCustomerRequestDto(updated);
+    try {
+      const converted = await this.convert(id, convertInput, actor, {
+        skipNotify: true,
+      });
+      this.notifyCreator(converted, {
+        title: "Project approved and accepted",
+        body: `Your request "${converted.title}" was approved and accepted. Your workspace is now active — you can view the agreed budget, requirements, files, and next steps.`,
+      });
+      return converted;
+    } catch (error) {
+      this.notifyCreator(updated, {
+        title: "Request approved",
+        body: `Your work request "${updated.title}" was approved.`,
+      });
+      throw error;
+    }
   }
 
   async reject(
@@ -598,7 +622,10 @@ export class CustomerRequestsService {
     this.assertIsReviewer(actor);
     const existing = await this.requireRequest(id);
 
-    this.assertTransition(existing.status, "REJECTED", ["UNDER_REVIEW"]);
+    this.assertTransition(existing.status, "REJECTED", [
+      "SUBMITTED",
+      "UNDER_REVIEW",
+    ]);
 
     const updated = await customerRequestsRepository.updateStatus(id, {
       status: "REJECTED",
@@ -629,6 +656,7 @@ export class CustomerRequestsService {
     id: string,
     input: ConvertCustomerRequestInput,
     actor: CustomerRequestActor,
+    options?: { skipNotify?: boolean },
   ): Promise<CustomerRequestDto> {
     this.assertIsReviewer(actor);
     const existing = await this.requireRequest(id);
@@ -641,22 +669,26 @@ export class CustomerRequestsService {
       );
     }
 
-    if (!existing.clientId) {
+    await this.activateSubmittingCustomer(existing, actor);
+    const linked = await this.requireRequest(id);
+
+    const clientId = linked.clientId;
+    if (!clientId) {
       throw new CustomerRequestsError(
-        "Associate a Client/Company account before converting this request",
+        "Could not associate the submitting customer before conversion",
         400,
         CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
         [
           {
             field: "clientId",
-            message: "Client company is required before conversion",
+            message: "Customer account could not be activated",
           },
         ],
       );
     }
 
     const { createProject, createTask, projectId } =
-      this.resolveConvertFlags(existing, input);
+      this.resolveConvertFlags(linked, input);
 
     if (createTask && !projectId && !createProject) {
       throw new CustomerRequestsError(
@@ -697,9 +729,9 @@ export class CustomerRequestsService {
       userAgent: actor.userAgent,
     };
 
-    const description = combineConvertDescription(existing);
-    const dueDate = dueDateString(existing.preferredDeadline);
-    const budget = budgetString(existing.expectedBudget);
+    const description = combineConvertDescription(linked);
+    const dueDate = dueDateString(linked.preferredDeadline);
+    const budget = budgetString(linked.expectedBudget);
 
     let convertedProjectId: string | null = projectId;
     let convertedTaskId: string | null = null;
@@ -707,11 +739,11 @@ export class CustomerRequestsService {
     try {
       if (createProject) {
         const projectInput: CreateProjectInput = {
-          name: existing.title,
+          name: linked.title,
           description,
-          clientId: existing.clientId!,
+          clientId,
           status: "NOT_STARTED",
-          priority: mapProjectPriority(existing.priority),
+          priority: mapProjectPriority(linked.priority),
           startDate: "",
           dueDate,
           progress: 0,
@@ -741,12 +773,12 @@ export class CustomerRequestsService {
         }
 
         const taskInput: CreateTaskInput = {
-          title: existing.title,
+          title: linked.title,
           description,
           projectId: convertedProjectId,
           assignedToId: input.assignedToId ?? "",
           status: "TODO",
-          priority: mapTaskPriority(existing.priority),
+          priority: mapTaskPriority(linked.priority),
           labels: [],
           startDate: "",
           dueDate,
@@ -781,16 +813,66 @@ export class CustomerRequestsService {
         userAgent: actor.userAgent,
       });
 
-      this.notifyCreator(converted, {
-        title: "Request converted",
-        body: `Your work request "${converted.title}" was converted into delivery work.`,
-      });
+      if (!options?.skipNotify) {
+        this.notifyCreator(converted, {
+          title: "Request converted",
+          body: `Your work request "${converted.title}" was converted into delivery work.`,
+        });
+      }
 
       return toCustomerRequestDto(converted);
     } catch (error) {
       await customerRequestsRepository.revertConversionClaim(id);
       throw error;
     }
+  }
+
+  private async activateSubmittingCustomer(
+    existing: CustomerRequestWithRelations,
+    actor: CustomerRequestActor,
+  ): Promise<string> {
+    if (existing.clientId) {
+      const submitter = await prisma.user.findFirst({
+        where: { id: existing.createdById, deletedAt: null },
+        select: {
+          id: true,
+          companyId: true,
+          role: { select: { code: true } },
+        },
+      });
+      if (
+        submitter &&
+        submitter.role.code === UserRole.CLIENT &&
+        !submitter.companyId
+      ) {
+        await prisma.user.update({
+          where: { id: submitter.id },
+          data: { companyId: existing.clientId },
+        });
+      }
+      return existing.clientId;
+    }
+
+    const link = await ensurePortalCompanyLink(existing.createdById, {
+      userId: actor.userId,
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
+
+    if (!link?.companyId) {
+      throw new CustomerRequestsError(
+        "Could not activate the submitting customer account",
+        400,
+        CUSTOMER_REQUESTS_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    await customerRequestsRepository.associateUnlinkedRequestsForCreator(
+      existing.createdById,
+      link.companyId,
+    );
+
+    return link.companyId;
   }
 
   private resolveConvertFlags(
@@ -974,7 +1056,7 @@ export class CustomerRequestsService {
   }
 
   private notifyCreator(
-    request: CustomerRequestWithRelations,
+    request: { id: string; createdById: string },
     message: { title: string; body: string },
   ): void {
     void notificationDispatcher.notify({
