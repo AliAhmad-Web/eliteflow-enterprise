@@ -12,19 +12,23 @@ import { ROUTES } from "@/constants/routes";
 import { filterNavigationByCommunicationFlags } from "@/features/communication/utils/filter-communication-nav";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
 import { filterNavigationByAccess } from "@/features/rbac/utils/filter-navigation";
+import { useClientWorkspaceAccess } from "@/features/quotes/hooks/use-client-workspace-access";
 import { useUiStore } from "@/stores/ui.store";
 
 export function MobileNav() {
   const mobileSidebarOpen = useUiStore((state) => state.mobileSidebarOpen);
   const setMobileSidebarOpen = useUiStore((state) => state.setMobileSidebarOpen);
   const { subject } = usePermissions();
+  const { unlocked } = useClientWorkspaceAccess();
 
   const sections = useMemo(
     () =>
       filterNavigationByCommunicationFlags(
-        filterNavigationByAccess(MAIN_NAVIGATION, subject),
+        filterNavigationByAccess(MAIN_NAVIGATION, subject, {
+          clientWorkspaceUnlocked: unlocked,
+        }),
       ),
-    [subject],
+    [subject, unlocked],
   );
 
   return (

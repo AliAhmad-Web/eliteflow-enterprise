@@ -329,6 +329,7 @@ export const paymentSchema = z.object({
   invoicePaidAmount: z.number().nullable().optional(),
   invoiceRemainingAmount: z.number().nullable().optional(),
   invoicePaymentStatus: z.string().nullable().optional(),
+  invoiceKind: z.string().nullable().optional(),
   refunds: z.array(paymentRefundSchema).optional(),
 });
 

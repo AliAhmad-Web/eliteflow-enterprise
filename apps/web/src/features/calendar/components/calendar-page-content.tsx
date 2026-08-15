@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
 import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
+import { ClientWorkspaceGate } from "@/features/quotes/components/client-workspace-gate";
 import {
   useHasPermission,
   useRole,
@@ -110,6 +111,14 @@ function eventsForDay(events: CalendarEvent[], day: Date) {
 }
 
 export function CalendarPageContent() {
+  return (
+    <ClientWorkspaceGate>
+      <CalendarPageBody />
+    </ClientWorkspaceGate>
+  );
+}
+
+function CalendarPageBody() {
   const { isClient, isAdmin } = useRole();
   const canWrite = useHasPermission(PERMISSIONS.CALENDAR_WRITE) && !isClient;
   const currentUserId = useAuthStore((state) => state.user?.id);

@@ -18,6 +18,10 @@ import {
   CustomerRequestsError,
 } from "../src/modules/customer-requests/customer-requests.errors.js";
 import { customerRequestsService } from "../src/modules/customer-requests/customer-requests.service.js";
+import {
+  PROJECTS_ERROR_CODES,
+  ProjectsError,
+} from "../src/modules/projects/projects.errors.js";
 import { projectsService } from "../src/modules/projects/projects.service.js";
 
 const RUN_ID = randomUUID().slice(0, 8);
@@ -397,11 +401,13 @@ async function main() {
   assert.equal(project.name, draft.title);
   assert.equal(project.budget, 1000);
 
-  const customerProject = await projectsService.getById(
-    approved.convertedProjectId!,
-    clientA,
-  );
-  assert.equal(customerProject.id, approved.convertedProjectId);
+  try {
+    await projectsService.getById(approved.convertedProjectId!, clientA);
+    assert.fail("customer must not open the project before advance verification");
+  } catch (error) {
+    assert.ok(error instanceof ProjectsError);
+    assert.equal(error.code, PROJECTS_ERROR_CODES.NOT_FOUND);
+  }
 
   // Double convert blocked (status no longer APPROVED)
   try {

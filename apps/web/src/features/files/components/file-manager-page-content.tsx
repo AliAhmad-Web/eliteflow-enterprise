@@ -49,6 +49,7 @@ import {
   AiUiToastViewport,
   useAiUiToasts,
 } from "@/features/ai/components/ai-ui-toast";
+import { ClientWorkspaceGate } from "@/features/quotes/components/client-workspace-gate";
 import {
   useHasPermission,
 } from "@/features/rbac/hooks/use-permissions";
@@ -95,6 +96,14 @@ type LibraryView = ListFilesQueryInput["view"];
 type LayoutMode = "grid" | "table";
 
 export function FileManagerPageContent() {
+  return (
+    <ClientWorkspaceGate>
+      <FileManagerPageBody />
+    </ClientWorkspaceGate>
+  );
+}
+
+function FileManagerPageBody() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();

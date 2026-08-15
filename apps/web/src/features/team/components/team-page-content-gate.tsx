@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
 import { LoadingState } from "@/components/common/feedback/loading-state";
+import { ClientWorkspaceGate } from "@/features/quotes/components/client-workspace-gate";
 
 const TeamPageContentLazy = dynamic(
   () => import("./team-page-content").then((m) => m.TeamPageContent),
@@ -32,5 +33,9 @@ export function TeamPageContentGate() {
     );
   }
 
-  return <TeamPageContentLazy />;
+  return (
+    <ClientWorkspaceGate>
+      <TeamPageContentLazy />
+    </ClientWorkspaceGate>
+  );
 }

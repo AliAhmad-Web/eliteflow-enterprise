@@ -2,6 +2,7 @@ import {
   NotificationCategory,
   NotificationPriority,
 } from "@enterprise/database";
+import { findClientUnlockedProjectIds } from "../quotes/commercial-access.js";
 import { UserRole } from "@enterprise/shared";
 import type {
   CreateTaskCommentInput,
@@ -434,7 +435,8 @@ export class TasksService {
 
     if (actor.role === UserRole.CLIENT) {
       const companyId = await tasksRepository.getUserCompanyId(actor.userId);
-      return { all: false, clientCompanyId: companyId };
+      const unlockedProjectIds = await findClientUnlockedProjectIds(companyId);
+      return { all: false, clientCompanyId: companyId, unlockedProjectIds };
     }
 
     return { all: false };

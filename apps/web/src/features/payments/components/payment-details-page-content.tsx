@@ -4,7 +4,7 @@ import { PERMISSIONS } from "@enterprise/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { LoadingState } from "@/components/common/feedback/loading-state";
@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ROUTES, invoiceDetailPath } from "@/constants/routes";
+import { useFileDetail } from "@/features/files/hooks/use-files";
+import { filesService } from "@/features/files/services/files.service";
+import { fileViewerPath } from "@/features/files/components/file-viewer/file-viewer.utils";
 import {
   useHasPermission,
   useRole,
@@ -34,6 +37,68 @@ function formatMoney(value: number, currency: string) {
     style: "currency",
     currency,
   }).format(value);
+}
+
+function PaymentProofPreview({ fileId }: { fileId: string }) {
+  const fileQuery = useFileDetail(fileId);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    void filesService
+      .downloadBlob(fileId, "preview")
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(objectUrl);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setPreviewError(
+          error instanceof ApiClientError
+            ? error.message
+            : "Could not load payment proof",
+        );
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [fileId]);
+
+  const mime = fileQuery.data?.mimeType ?? "";
+  const isImage = mime.startsWith("image/");
+  const isPdf = mime === "application/pdf";
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs uppercase text-muted-foreground">
+        Uploaded payment proof
+      </p>
+      {fileQuery.data ? (
+        <p className="text-sm">{fileQuery.data.originalName}</p>
+      ) : null}
+      {previewError ? (
+        <p className="text-sm text-destructive">{previewError}</p>
+      ) : null}
+      {previewUrl && isImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={previewUrl}
+          alt="Payment proof"
+          className="max-h-96 rounded-md border"
+        />
+      ) : null}
+      {previewUrl && isPdf ? (
+        <iframe title="Payment proof" src={previewUrl} className="h-96 w-full rounded-md border" />
+      ) : null}
+      <Button variant="outline" size="sm" asChild>
+        <Link href={fileViewerPath(fileId)}>Open in File Manager</Link>
+      </Button>
+    </div>
+  );
 }
 
 export function PaymentDetailsPageContent() {
@@ -97,6 +162,15 @@ export function PaymentDetailsPageContent() {
             <p>Amount: {formatMoney(payment.amount, payment.currency)}</p>
             <p>Customer: {payment.clientName ?? "—"}</p>
             <p>Project: {payment.projectName ?? "—"}</p>
+            {payment.invoiceKind === "ADVANCE" ? (
+              <p>
+                Required advance:{" "}
+                {formatMoney(payment.invoiceTotal ?? payment.amount, payment.currency)}
+              </p>
+            ) : null}
+            <p>
+              Submitted amount: {formatMoney(payment.amount, payment.currency)}
+            </p>
             <p>Quote: {payment.quoteNumber ?? "—"}</p>
             <p>
               Invoice:{" "}
@@ -104,10 +178,19 @@ export function PaymentDetailsPageContent() {
                 {payment.invoiceNumber ?? payment.invoiceId}
               </Link>
             </p>
-            <p>Reference: {payment.customerReference || payment.providerTxnId || "—"}</p>
+            <p>
+              Transaction / Reference ID:{" "}
+              {payment.customerReference || payment.providerTxnId || "—"}
+            </p>
+            <p>Payment method: {PAYMENT_METHOD_LABELS[payment.method]}</p>
             <p>Submitted: {payment.submittedAt ? new Date(payment.submittedAt).toLocaleString() : "—"}</p>
             <p>Verified by: {payment.verifiedByName || "—"}</p>
             <p>Verified at: {payment.verifiedAt ? new Date(payment.verifiedAt).toLocaleString() : "—"}</p>
+            {payment.proofFileId ? (
+              <PaymentProofPreview fileId={payment.proofFileId} />
+            ) : (
+              <p className="text-muted-foreground">No payment screenshot uploaded.</p>
+            )}
             {payment.notes ? <p>Notes: {payment.notes}</p> : null}
             {payment.rejectionReason ? (
               <p className="text-destructive">Rejected: {payment.rejectionReason}</p>
@@ -134,6 +217,10 @@ export function PaymentDetailsPageContent() {
                 onChange={(event) => setNotes(event.target.value)}
                 placeholder="Verification notes"
               />
+              <p className="text-xs text-muted-foreground">
+                Confirm the money in the actual bank or wallet account before
+                verifying. A screenshot alone does not mark the invoice paid.
+              </p>
               <Button
                 type="button"
                 disabled={verifyMutation.isPending}
@@ -144,7 +231,7 @@ export function PaymentDetailsPageContent() {
                   })
                 }
               >
-                Verify payment
+                Confirm Payment Received
               </Button>
               <Input
                 value={rejectReason}

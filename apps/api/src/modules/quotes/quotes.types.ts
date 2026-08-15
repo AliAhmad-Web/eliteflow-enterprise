@@ -9,12 +9,13 @@ import type {
 import type { PaymentModelValue, QuoteDto } from "@enterprise/shared";
 import {
   normalizeAllowedPaymentModels,
+  quoteCommercialStage,
   quoteCommercialSummary,
 } from "@enterprise/shared";
 
 export type QuoteWithRelations = Quote & {
   client: { id: string; companyName: string };
-  project: { id: string; name: string };
+  project: { id: string; name: string; status: string };
   customerRequest: {
     id: string;
     title: string;
@@ -24,16 +25,17 @@ export type QuoteWithRelations = Quote & {
   } | null;
   items?: QuoteItem[];
   paymentSchedule?: (PaymentScheduleItem & {
-    invoice: Pick<
-      Invoice,
-      | "id"
-      | "invoiceNumber"
-      | "status"
-      | "paymentStatus"
-      | "paidAmount"
-      | "total"
-      | "deletedAt"
-    > | null;
+      invoice: Pick<
+        Invoice,
+        | "id"
+        | "invoiceNumber"
+        | "status"
+        | "paymentStatus"
+        | "paidAmount"
+        | "total"
+        | "invoiceKind"
+        | "deletedAt"
+      > | null;
   })[];
 };
 
@@ -82,6 +84,11 @@ export function toQuoteDto(quote: QuoteWithRelations): QuoteDto {
     total: toMoney(quote.total),
     paymentSchedule,
   });
+  const stage = quoteCommercialStage({
+    status: quote.status,
+    paymentSchedule,
+    projectStatus: quote.project.status,
+  });
 
   return {
     id: quote.id,
@@ -116,6 +123,9 @@ export function toQuoteDto(quote: QuoteWithRelations): QuoteDto {
     paidAmount: commercial.paidAmount,
     remainingAmount: commercial.remainingAmount,
     overallPaymentStatus: commercial.paymentStatus,
+    commercialStage: stage.commercialStage,
+    workspaceUnlocked: stage.workspaceUnlocked,
+    projectStatus: quote.project.status,
     issueDate: toDateOnly(quote.issueDate) ?? "",
     expiryDate: toDateOnly(quote.expiryDate) ?? "",
     sentAt: quote.sentAt?.toISOString() ?? null,

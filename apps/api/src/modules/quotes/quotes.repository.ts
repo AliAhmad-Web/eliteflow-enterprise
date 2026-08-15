@@ -15,7 +15,7 @@ import type { QuoteWithRelations } from "./quotes.types.js";
 
 const listInclude = {
   client: { select: { id: true, companyName: true } },
-  project: { select: { id: true, name: true } },
+  project: { select: { id: true, name: true, status: true } },
   customerRequest: {
     select: {
       id: true,
@@ -40,6 +40,7 @@ const detailInclude = {
           paymentStatus: true,
           paidAmount: true,
           total: true,
+          invoiceKind: true,
           deletedAt: true,
         },
       },

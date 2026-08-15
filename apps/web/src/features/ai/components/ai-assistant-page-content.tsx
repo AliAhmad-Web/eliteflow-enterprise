@@ -35,6 +35,7 @@ import {
   isCommunicationVoiceCommandsEnabled,
   isCommunicationVoicePresentationEnabled,
 } from "@/features/communication/feature-flags";
+import { ClientWorkspaceGate } from "@/features/quotes/components/client-workspace-gate";
 import {
   getVoiceSttProviderInfo,
   getVoiceTtsProviderInfo,
@@ -97,6 +98,14 @@ const HISTORY_PAGE_SIZE_PAGED = 20;
  * Phase 2 UX enhancements are opt-in via feature flags (default OFF).
  */
 export function AiAssistantPageContent() {
+  return (
+    <ClientWorkspaceGate>
+      <AiAssistantPageBody />
+    </ClientWorkspaceGate>
+  );
+}
+
+function AiAssistantPageBody() {
   useRenderProfiler("AiAssistantPageContent");
   useAdvancedPerformanceProfiler("AiAssistantPageContent");
 

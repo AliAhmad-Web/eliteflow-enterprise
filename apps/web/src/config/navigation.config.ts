@@ -50,7 +50,9 @@ export interface NavigationItem {
   /** At least one of these permissions */
   anyPermissions?: readonly (PermissionKey | string)[];
   /** Optional role allow-list (in addition to permissions) */
-  roles?: readonly UserRole[];
+  roles?: readonly string[];
+  /** Hide from CLIENT until advance payment is verified. */
+  requiresClientWorkspace?: boolean;
 }
 
 export interface NavigationSection {
@@ -128,12 +130,14 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.PROJECTS,
         icon: FolderKanban,
         permission: PERMISSIONS.PROJECTS_READ,
+        requiresClientWorkspace: true,
       },
       {
         title: "Tasks",
         href: ROUTES.TASKS,
         icon: CheckSquare,
         permission: PERMISSIONS.TASKS_READ,
+        requiresClientWorkspace: true,
       },
       {
         title: "Work Requests",
@@ -179,12 +183,14 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.AI_DOCUMENTS,
         icon: FileText,
         permission: PERMISSIONS.AI_USE,
+        requiresClientWorkspace: true,
       },
       {
         title: "AI Assistant",
         href: ROUTES.AI_ASSISTANT,
         icon: Bot,
         permission: PERMISSIONS.AI_USE,
+        requiresClientWorkspace: true,
       },
     ],
   },
@@ -297,6 +303,7 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.CALENDAR,
         icon: Calendar,
         permission: PERMISSIONS.CALENDAR_READ,
+        requiresClientWorkspace: true,
       },
       {
         title: "Whiteboard",
@@ -310,6 +317,7 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.FILE_MANAGER,
         icon: FolderOpen,
         permission: PERMISSIONS.FILES_READ,
+        requiresClientWorkspace: true,
       },
       {
         title: "Reports",
@@ -323,6 +331,7 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.TEAM,
         icon: UserCog,
         permission: PERMISSIONS.TEAM_READ,
+        requiresClientWorkspace: true,
       },
       {
         title: "Notifications",

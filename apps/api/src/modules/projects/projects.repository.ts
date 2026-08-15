@@ -92,8 +92,9 @@ export interface ProjectAccessScope {
   all: boolean;
   /** Employee: only projects where they are a member */
   memberUserId?: string;
-  /** Client portal: only projects for their linked company */
+  /** Client portal: only unlocked company projects (advance verified). */
   clientCompanyId?: string | null;
+  unlockedProjectIds?: string[];
 }
 
 export class ProjectsRepository {
@@ -443,7 +444,13 @@ export class ProjectsRepository {
     }
 
     if (scope.clientCompanyId) {
-      return { clientId: scope.clientCompanyId };
+      const ids = scope.unlockedProjectIds ?? [];
+      return {
+        clientId: scope.clientCompanyId,
+        id: {
+          in: ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"],
+        },
+      };
     }
 
     // No access scope resolved — return nothing

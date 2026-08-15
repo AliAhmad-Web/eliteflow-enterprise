@@ -21,6 +21,7 @@ type PaymentWithRelations = Payment & {
     total: Prisma.Decimal;
     paidAmount: Prisma.Decimal;
     paymentStatus: string;
+    invoiceKind?: string;
   } | null;
   client?: { id: string; companyName: string } | null;
   project?: { id: string; name: string } | null;
@@ -109,6 +110,7 @@ export function toPaymentDto(payment: PaymentWithRelations): PaymentDto {
     invoicePaidAmount: invoicePaid,
     invoiceRemainingAmount: remaining,
     invoicePaymentStatus: payment.invoice?.paymentStatus ?? null,
+    invoiceKind: payment.invoice?.invoiceKind ?? null,
     refunds: payment.refunds?.map(toPaymentRefundDto),
   };
 }

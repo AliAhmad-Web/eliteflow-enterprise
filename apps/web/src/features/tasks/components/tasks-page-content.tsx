@@ -32,6 +32,7 @@ import { taskDetailPath, ROUTES } from "@/constants/routes";
 import { useAuthStore } from "@/features/auth/stores/auth.store";
 import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
+import { ClientWorkspaceGate } from "@/features/quotes/components/client-workspace-gate";
 import {
   useHasPermission,
   useRole,
@@ -52,6 +53,14 @@ import { TasksTable } from "./tasks-table";
 const selectClassName = FORM_SELECT_CLASS;
 
 export function TasksPageContent() {
+  return (
+    <ClientWorkspaceGate>
+      <TasksPageBody />
+    </ClientWorkspaceGate>
+  );
+}
+
+function TasksPageBody() {
   const router = useRouter();
   const { isAdmin, isEmployee, isClient } = useRole();
   const currentUserId = useAuthStore((state) => state.user?.id);

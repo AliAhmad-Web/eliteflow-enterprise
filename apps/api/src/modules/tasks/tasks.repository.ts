@@ -101,6 +101,7 @@ export interface TaskAccessScope {
   all: boolean;
   assignedUserId?: string;
   clientCompanyId?: string | null;
+  unlockedProjectIds?: string[];
 }
 
 export class TasksRepository {
@@ -412,7 +413,11 @@ export class TasksRepository {
     };
 
     if (!scope.all && scope.clientCompanyId) {
+      const ids = scope.unlockedProjectIds ?? [];
       where.clientId = scope.clientCompanyId;
+      where.id = {
+        in: ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"],
+      };
     }
 
     if (!scope.all && scope.assignedUserId) {
@@ -558,10 +563,14 @@ export class TasksRepository {
     }
 
     if (scope.clientCompanyId) {
+      const ids = scope.unlockedProjectIds ?? [];
       return {
         project: {
           clientId: scope.clientCompanyId,
           deletedAt: null,
+          id: {
+            in: ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"],
+          },
         },
       };
     }

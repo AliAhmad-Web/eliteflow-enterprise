@@ -1816,15 +1816,17 @@ export type {
 } from "./schemas/quotes.schema.js";
 
 export {
+  COMMERCIAL_STAGES,
   CUSTOMER_SELECTABLE_PAYMENT_MODELS,
   PAYMENT_MODEL_LABELS,
   PAYMENT_SCHEDULE_KIND_LABELS,
   calculatePaymentSchedule,
   normalizeAllowedPaymentModels,
+  quoteCommercialStage,
   quoteCommercialSummary,
 } from "./utils/payment-schedule.js";
 
-export type { CalculatedScheduleItem } from "./utils/payment-schedule.js";
+export type { CalculatedScheduleItem, CommercialStageValue } from "./utils/payment-schedule.js";
 
 // Schemas — Payments (Phase 4 Pakistan execution)
 export {

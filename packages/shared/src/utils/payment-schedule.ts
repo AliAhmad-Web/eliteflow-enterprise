@@ -217,6 +217,63 @@ export function quoteCommercialSummary(input: {
   };
 }
 
+export const COMMERCIAL_STAGES = [
+  "DEAL_APPROVED",
+  "ADVANCE_REQUIRED",
+  "PAYMENT_PROOF_SUBMITTED",
+  "PENDING_VERIFICATION",
+  "PAYMENT_VERIFIED",
+  "PROJECT_STARTED",
+] as const;
+
+export type CommercialStageValue = (typeof COMMERCIAL_STAGES)[number];
+
+export function quoteCommercialStage(input: {
+  status: string;
+  paymentSchedule: Array<{
+    kind: string;
+    paymentStatus?: string | null;
+  }>;
+  projectStatus?: string | null;
+}): {
+  commercialStage: CommercialStageValue | null;
+  workspaceUnlocked: boolean;
+} {
+  const first =
+    input.paymentSchedule.find((item) => item.kind === "ADVANCE") ??
+    input.paymentSchedule[0];
+  const firstPaid = first?.paymentStatus === "PAID";
+  const firstPending =
+    first?.paymentStatus === "PENDING" ||
+    first?.paymentStatus === "PARTIALLY_PAID";
+
+  if (input.status === "SENT") {
+    return { commercialStage: "DEAL_APPROVED", workspaceUnlocked: false };
+  }
+  if (input.status !== "APPROVED") {
+    return { commercialStage: null, workspaceUnlocked: false };
+  }
+  if (firstPaid) {
+    const started =
+      input.projectStatus === "IN_PROGRESS" ||
+      input.projectStatus === "COMPLETED";
+    return {
+      commercialStage: started ? "PROJECT_STARTED" : "PAYMENT_VERIFIED",
+      workspaceUnlocked: true,
+    };
+  }
+  if (firstPending) {
+    return {
+      commercialStage:
+        first?.paymentStatus === "PARTIALLY_PAID"
+          ? "PENDING_VERIFICATION"
+          : "PAYMENT_PROOF_SUBMITTED",
+      workspaceUnlocked: false,
+    };
+  }
+  return { commercialStage: "ADVANCE_REQUIRED", workspaceUnlocked: false };
+}
+
 export const PAYMENT_SCHEDULE_KIND_LABELS: Record<
   PaymentScheduleKindValue,
   string

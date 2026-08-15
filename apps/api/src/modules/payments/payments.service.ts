@@ -266,8 +266,10 @@ export class PaymentsService {
       });
     }
     this.notifyAdmins(
-      "Bank transfer submitted",
-      `${actor.email} submitted ${paymentNumber} for ${invoice.invoiceNumber}`,
+      invoice.invoiceKind === "ADVANCE"
+        ? "Advance payment requires verification"
+        : "Bank transfer submitted",
+      `${actor.email} submitted ${paymentNumber} for ${invoice.invoiceNumber}. Review the payment proof and confirm the money was received before verifying.`,
       created.id,
       actor.userId,
     );
@@ -325,8 +327,10 @@ export class PaymentsService {
       userAgent: actor.userAgent,
     });
     this.notifyAdmins(
-      `${input.method} payment submitted`,
-      `${actor.email} submitted ${paymentNumber} for ${invoice.invoiceNumber}`,
+      invoice.invoiceKind === "ADVANCE"
+        ? "Advance payment requires verification"
+        : `${input.method} payment submitted`,
+      `${actor.email} submitted ${paymentNumber} for ${invoice.invoiceNumber}. Review the payment proof and confirm the money was received before verifying.`,
       created.id,
       actor.userId,
     );
@@ -442,19 +446,22 @@ export class PaymentsService {
         resourceId: payment.invoiceId,
         metadata: { paymentId: id },
       });
+      await this.startProjectIfAdvanceSettled(invoice);
     }
     const remaining = roundMoney(
       Math.max(0, Number(invoice.total) - Number(invoice.paidAmount)),
     );
     const remainingLabel = `${invoice.currency} ${remaining.toFixed(2)}`;
-    const isAdvance = invoice.invoiceKind === "ADVANCE";
+    const isAdvance =
+      invoice.invoiceKind === "ADVANCE" ||
+      (await this.isFirstInstallment(invoice.id));
     const customerId = payment.submittedById;
     if (customerId) {
       if (isAdvance && invoice.paymentStatus === "PAID") {
         this.notifyCustomerUser(
           customerId,
-          "Advance Payment Received — Project Ready to Start",
-          `Your advance payment was verified. Remaining balance: ${remainingLabel}.`,
+          "Advance Payment Received",
+          "Your payment has been verified successfully. Your project is now ready to start.",
           payment.id,
           actor.userId,
         );
@@ -1481,6 +1488,29 @@ export class PaymentsService {
         PAYMENTS_ERROR_CODES.FORBIDDEN,
       );
     }
+  }
+
+  private async isFirstInstallment(invoiceId: string): Promise<boolean> {
+    const item = await prisma.paymentScheduleItem.findFirst({
+      where: { invoice: { id: invoiceId } },
+      select: { sortOrder: true, kind: true },
+    });
+    return item?.sortOrder === 0 || item?.kind === "ADVANCE";
+  }
+
+  private async startProjectIfAdvanceSettled(invoice: {
+    id: string;
+    projectId: string | null;
+    invoiceKind: string;
+    paymentStatus: string;
+  }): Promise<void> {
+    if (invoice.paymentStatus !== "PAID" || !invoice.projectId) return;
+    const first = await this.isFirstInstallment(invoice.id);
+    if (!first && invoice.invoiceKind !== "ADVANCE") return;
+    await prisma.project.updateMany({
+      where: { id: invoice.projectId, status: "NOT_STARTED" },
+      data: { status: "IN_PROGRESS" },
+    });
   }
 
   private notifyAdmins(

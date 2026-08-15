@@ -38,6 +38,7 @@ import {
   PROJECT_PRIORITY_LABELS,
   PROJECT_STATUS_LABELS,
 } from "../types/projects.types";
+import { ClientWorkspaceGate } from "@/features/quotes/components/client-workspace-gate";
 import { DeleteProjectDialog } from "./delete-project-dialog";
 import { ProjectDetailsDialog } from "./project-details-dialog";
 import { ProjectFormDialog } from "./project-form-dialog";
@@ -46,6 +47,14 @@ import { ProjectsTable } from "./projects-table";
 const selectClassName = FORM_SELECT_CLASS;
 
 export function ProjectsPageContent() {
+  return (
+    <ClientWorkspaceGate>
+      <ProjectsPageBody />
+    </ClientWorkspaceGate>
+  );
+}
+
+function ProjectsPageBody() {
   const canWrite = useHasPermission(PERMISSIONS.PROJECTS_WRITE);
   const canDelete = useHasPermission(PERMISSIONS.PROJECTS_DELETE);
 

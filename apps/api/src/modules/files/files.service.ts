@@ -16,6 +16,7 @@ import type {
   FileVersionDto,
 } from "@enterprise/shared";
 import { UserRole } from "@enterprise/shared";
+import { findClientUnlockedProjectIds } from "../quotes/commercial-access.js";
 import { readFile, unlink } from "node:fs/promises";
 
 import { FILES_AUDIT_ACTIONS, logFilesAuditEvent } from "./files.audit.js";
@@ -81,10 +82,15 @@ export class FilesService {
           OR: [{ createdById: actor.userId }],
         };
       }
+      const unlockedProjectIds = await findClientUnlockedProjectIds(
+        actor.companyId,
+      );
       return {
         OR: [
           { createdById: actor.userId },
-          { clientId: actor.companyId },
+          ...(unlockedProjectIds.length
+            ? [{ projectId: { in: unlockedProjectIds } }]
+            : []),
           {
             shares: {
               some: {

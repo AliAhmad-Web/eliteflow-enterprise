@@ -17,8 +17,9 @@ import {
   projectsRepository,
   type ProjectAccessScope,
 } from "./projects.repository.js";
-import { toProjectDto } from "./projects.types.js";
+import { findClientUnlockedProjectIds } from "../quotes/commercial-access.js";
 import { attachmentSecurityService } from "../files/attachment-security.service.js";
+import { toProjectDto } from "./projects.types.js";
 
 export interface ProjectActor {
   userId: string;
@@ -226,7 +227,8 @@ export class ProjectsService {
 
     if (actor.role === UserRole.CLIENT) {
       const companyId = await projectsRepository.getUserCompanyId(actor.userId);
-      return { all: false, clientCompanyId: companyId };
+      const unlockedProjectIds = await findClientUnlockedProjectIds(companyId);
+      return { all: false, clientCompanyId: companyId, unlockedProjectIds };
     }
 
     return { all: false };

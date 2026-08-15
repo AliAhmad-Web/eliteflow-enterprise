@@ -43,6 +43,7 @@ import {
 } from "@/features/notifications/types/notifications.types";
 import { useProjectStats, useProjects } from "@/features/projects/hooks/use-projects";
 import { CustomerCommercialCard } from "@/features/quotes/components/customer-commercial-card";
+import { useClientWorkspaceAccess } from "@/features/quotes/hooks/use-client-workspace-access";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { useTaskStats, useTasks } from "@/features/tasks/hooks/use-tasks";
 import { staggerContainer } from "@/lib/motion";
@@ -233,6 +234,7 @@ function ClientLinkedDashboard({
   firstName: string;
   companyName: string | null;
 }) {
+  const workspace = useClientWorkspaceAccess();
   const canReadNotifications = useHasPermission(PERMISSIONS.NOTIFICATIONS_READ);
 
   const projectsQuery = useProjects({
@@ -422,6 +424,25 @@ function ClientLinkedDashboard({
     recentInvoices.length > 0 ||
     tasks.length > 0 ||
     activityItems.length > 0;
+
+  if (!workspace.isLoading && !workspace.unlocked) {
+    return (
+      <motion.div
+        className="space-y-6"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <RoleDashboardHeader
+          badge="Client Portal"
+          title={`Welcome, ${firstName}`}
+          subtitle="Your deal is approved. Complete the required advance payment so EliteFlow can start the project."
+        />
+        <ClientRequestIntakeCard />
+        <CustomerCommercialCard />
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

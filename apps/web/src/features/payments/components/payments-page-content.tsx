@@ -44,7 +44,9 @@ export function PaymentsPageContent() {
   const canConfigure = useHasPermission(PERMISSIONS.PAYMENTS_CONFIGURE) && isAdmin;
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(useDeferredValue(search.trim()), 300);
-  const [status, setStatus] = useState<PaymentExecutionStatusValue | "ALL">("ALL");
+  const [status, setStatus] = useState<PaymentExecutionStatusValue | "ALL">(
+    isAdmin ? "PENDING_VERIFICATION" : "ALL",
+  );
   const [page, setPage] = useState(1);
 
   const query: ListPaymentsQueryInput = useMemo(

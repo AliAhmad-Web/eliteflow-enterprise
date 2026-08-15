@@ -298,6 +298,18 @@ export const quoteSchema = z.object({
   paidAmount: z.number(),
   remainingAmount: z.number(),
   overallPaymentStatus: z.enum(["PAID", "PARTIALLY_PAID", "PENDING"]),
+  commercialStage: z
+    .enum([
+      "DEAL_APPROVED",
+      "ADVANCE_REQUIRED",
+      "PAYMENT_PROOF_SUBMITTED",
+      "PENDING_VERIFICATION",
+      "PAYMENT_VERIFIED",
+      "PROJECT_STARTED",
+    ])
+    .nullable(),
+  workspaceUnlocked: z.boolean(),
+  projectStatus: z.string().nullable(),
   issueDate: z.string(),
   expiryDate: z.string(),
   sentAt: z.string().nullable(),

@@ -16,6 +16,14 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { paymentDetailPath } from "@/constants/routes";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
@@ -37,7 +45,13 @@ function formatMoney(value: number, currency: string) {
   }).format(value);
 }
 
-export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
+export function InvoicePayPanel({
+  invoice,
+  title = "Pay invoice",
+}: {
+  invoice: Invoice;
+  title?: string;
+}) {
   const canPay = useHasPermission(PERMISSIONS.PAYMENTS_PAY);
   const methodsQuery = usePaymentMethods();
   const historyQuery = usePayments({
@@ -67,6 +81,8 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
   const [notes, setNotes] = useState("");
   const [proofFileId, setProofFileId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [proofOpen, setProofOpen] = useState(false);
+  const [proofFileName, setProofFileName] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const selected = methods.find((item) => item.method === method);
@@ -93,7 +109,10 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
         tags: ["payment-proof"],
       });
       const id = uploaded[0]?.id;
-      if (id) setProofFileId(id);
+      if (id) {
+        setProofFileId(id);
+        setProofFileName(file.name);
+      }
     } finally {
       setUploading(false);
     }
@@ -112,6 +131,7 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
         proofFileId: proofFileId ?? undefined,
       });
       setMessage("Bank transfer submitted. EliteFlow will verify before the invoice is marked paid.");
+      setProofOpen(false);
       return;
     }
     await walletMutation.mutateAsync({
@@ -130,6 +150,7 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
           ? "EasyPaisa QR payment submitted. Admin will verify the Transaction ID before the invoice is marked paid."
           : "Payment submitted for verification. A success screen is not enough — admin confirmation is required.",
     );
+    setProofOpen(false);
   }
 
   if (!canPay) return null;
@@ -142,7 +163,7 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
   return (
     <Card className="border-primary/20 bg-primary/5">
       <CardHeader>
-        <CardTitle className="text-base">Pay invoice</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="grid gap-2 sm:grid-cols-3">
@@ -284,43 +305,14 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
 
             {selected ? (
               <div className="grid gap-3">
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  placeholder="Amount paid"
-                />
-                <Input
-                  value={reference}
-                  onChange={(event) => setReference(event.target.value)}
-                  placeholder={
-                    method === "JAZZCASH"
-                      ? "JazzCash transaction / reference ID"
-                      : method === "EASYPAISA"
-                        ? "EasyPaisa Transaction ID / Reference ID"
-                        : "Transaction / reference number"
-                  }
-                />
-                <Input
-                  type="date"
-                  value={paidAt}
-                  onChange={(event) => setPaidAt(event.target.value)}
-                />
-                <Input
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder="Optional notes"
-                />
-                <Input
-                  type="file"
-                  accept="image/*,.pdf"
-                  onChange={(event) => void onProofChange(event.target.files?.[0] ?? null)}
-                />
-                <Button type="button" disabled={pending || !reference} onClick={() => void submitManual()}>
-                  Submit for verification
+                <Button type="button" onClick={() => setProofOpen(true)}>
+                  Submit Payment Proof
                 </Button>
+                <p className="text-xs text-muted-foreground">
+                  Pay using the instructions above, then submit your transaction
+                  ID and screenshot. Upload only starts verification — it does
+                  not mark the invoice paid.
+                </p>
               </div>
             ) : null}
           </>
@@ -337,6 +329,76 @@ export function InvoicePayPanel({ invoice }: { invoice: Invoice }) {
           </p>
         ) : null}
       </CardContent>
+      <Dialog open={proofOpen} onOpenChange={setProofOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Submit Payment Proof</DialogTitle>
+            <DialogDescription>
+              Enter the transaction details and upload a screenshot. EliteFlow
+              verifies the payment before the invoice is marked paid.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 text-sm">
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">Payment method</p>
+              <p className="font-medium">
+                {method ? PAYMENT_METHOD_LABELS[method] : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-muted-foreground">
+                Required advance amount
+              </p>
+              <p className="font-medium">
+                {formatMoney(remaining || invoice.total, invoice.currency)}
+              </p>
+            </div>
+            <label className="grid gap-1">
+              <span>Amount paid</span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span>Transaction / Reference ID</span>
+              <Input
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+                placeholder="Required"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span>Upload Payment Screenshot</span>
+              <Input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(event) =>
+                  void onProofChange(event.target.files?.[0] ?? null)
+                }
+              />
+              {proofFileName ? (
+                <span className="text-xs text-muted-foreground">{proofFileName}</span>
+              ) : null}
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProofOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={pending || !reference.trim() || !proofFileId}
+              onClick={() => void submitManual()}
+            >
+              Submit Proof
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

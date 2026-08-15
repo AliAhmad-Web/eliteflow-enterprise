@@ -20,6 +20,7 @@ const listInclude = {
       total: true,
       paidAmount: true,
       paymentStatus: true,
+      invoiceKind: true,
     },
   },
   client: { select: { id: true, companyName: true } },

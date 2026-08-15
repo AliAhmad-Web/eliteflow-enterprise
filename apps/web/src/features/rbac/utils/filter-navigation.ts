@@ -14,13 +14,19 @@ import type { NavigationItem, NavigationSection } from "@/config/navigation.conf
 export function filterNavigationByAccess(
   sections: NavigationSection[],
   subject: PermissionSubject | null,
+  options?: { clientWorkspaceUnlocked?: boolean },
 ): NavigationSection[] {
+  const unlocked = options?.clientWorkspaceUnlocked ?? true;
+  const isClient = subject?.role === "CLIENT";
   return sections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) =>
-        canAccessNavItem(item, subject),
-      ),
+      items: section.items.filter((item) => {
+        if (isClient && item.requiresClientWorkspace && !unlocked) {
+          return false;
+        }
+        return canAccessNavItem(item, subject);
+      }),
     }))
     .filter((section) => section.items.length > 0);
 }

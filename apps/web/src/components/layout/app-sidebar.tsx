@@ -18,6 +18,7 @@ import { ROUTES } from "@/constants/routes";
 import { filterNavigationByCommunicationFlags } from "@/features/communication/utils/filter-communication-nav";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
 import { filterNavigationByAccess } from "@/features/rbac/utils/filter-navigation";
+import { useClientWorkspaceAccess } from "@/features/quotes/hooks/use-client-workspace-access";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui.store";
@@ -44,13 +45,16 @@ function AppSidebarComponent({ className }: AppSidebarProps) {
   );
   const { isLgUp } = useBreakpoint();
   const { subject, role } = usePermissions();
+  const { unlocked } = useClientWorkspaceAccess();
 
   const sections = useMemo(
     () =>
       filterNavigationByCommunicationFlags(
-        filterNavigationByAccess(MAIN_NAVIGATION, subject),
+        filterNavigationByAccess(MAIN_NAVIGATION, subject, {
+          clientWorkspaceUnlocked: unlocked,
+        }),
       ),
-    [subject],
+    [subject, unlocked],
   );
 
   const homeHref =

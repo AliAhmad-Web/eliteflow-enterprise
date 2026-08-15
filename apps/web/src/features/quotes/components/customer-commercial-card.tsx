@@ -40,6 +40,36 @@ function formatMoney(value: number, currency: string) {
   }).format(value);
 }
 
+const STEPS = [
+  "Deal approved",
+  "Advance payment required",
+  "Pay advance",
+  "Submit payment proof",
+  "Waiting for verification",
+  "Payment verified",
+  "Project started",
+  "Dashboard unlocked",
+] as const;
+
+function stepIndex(quote: QuoteDto): number {
+  switch (quote.commercialStage) {
+    case "DEAL_APPROVED":
+      return 0;
+    case "ADVANCE_REQUIRED":
+      return 1;
+    case "PAYMENT_PROOF_SUBMITTED":
+      return 3;
+    case "PENDING_VERIFICATION":
+      return 4;
+    case "PAYMENT_VERIFIED":
+      return 5;
+    case "PROJECT_STARTED":
+      return 7;
+    default:
+      return quote.status === "APPROVED" ? 1 : 0;
+  }
+}
+
 function pickActiveQuote(items: QuoteDto[] | undefined): QuoteDto | null {
   if (!items?.length) return null;
   return (
@@ -69,27 +99,24 @@ export function CustomerCommercialCard() {
     quote?.paymentSchedule.find((item) => item.kind === "ADVANCE")?.invoiceId ??
     quote?.paymentSchedule[0]?.invoiceId ??
     null;
-  const invoiceQuery = useInvoice(showAdvance || quote?.status === "APPROVED" ? advanceInvoiceId : null);
+  const invoiceQuery = useInvoice(
+    showAdvance || quote?.status === "APPROVED" ? advanceInvoiceId : null,
+  );
 
   useEffect(() => {
-    if (quote?.status === "SENT") {
-      setModalOpen(true);
-    }
-    if (quote?.status === "APPROVED") {
-      setShowAdvance(true);
-    }
+    if (quote?.status === "SENT") setModalOpen(true);
+    if (quote?.status === "APPROVED") setShowAdvance(true);
   }, [quote?.id, quote?.status]);
 
   const selectableModels = useMemo(
-    () => (quote?.allowedPaymentModels ?? []).filter((model) => model !== "CUSTOM" && model !== "MILESTONE"),
+    () =>
+      (quote?.allowedPaymentModels ?? []).filter(
+        (model) => model !== "CUSTOM" && model !== "MILESTONE",
+      ),
     [quote?.allowedPaymentModels],
   );
 
-  if (!canRead) return null;
-
-  if (quotesQuery.isLoading) return null;
-
-  if (!quote) return null;
+  if (!canRead || quotesQuery.isLoading || !quote) return null;
 
   const busy = approveMutation.isPending || selectModelMutation.isPending;
   const actionError =
@@ -98,12 +125,13 @@ export function CustomerCommercialCard() {
       : selectModelMutation.error instanceof ApiClientError
         ? selectModelMutation.error.message
         : null;
-  const advancePaid =
-    quote.paymentSchedule.some(
-      (item) =>
-        (item.kind === "ADVANCE" || quote.paymentSchedule.length === 1) &&
-        item.paymentStatus === "PAID",
-    ) || quote.overallPaymentStatus === "PAID";
+  const activeStep = stepIndex(quote);
+  const pendingVerification =
+    quote.commercialStage === "PENDING_VERIFICATION" ||
+    quote.commercialStage === "PAYMENT_PROOF_SUBMITTED";
+  const verified =
+    quote.commercialStage === "PAYMENT_VERIFIED" ||
+    quote.commercialStage === "PROJECT_STARTED";
 
   async function acceptAndStart() {
     if (!quote) return;
@@ -117,10 +145,27 @@ export function CustomerCommercialCard() {
       <Card className="border-border/50 shadow-(--shadow-sm)">
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold tracking-tight">
-            Commercial summary
+            {quote.commercialStage === "ADVANCE_REQUIRED"
+              ? "Advance Payment Required"
+              : "Commercial summary"}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="space-y-4 text-sm">
+          <ol className="grid gap-1 text-xs">
+            {STEPS.map((label, index) => (
+              <li
+                key={label}
+                className={
+                  index <= activeStep
+                    ? "font-medium text-foreground"
+                    : "text-muted-foreground"
+                }
+              >
+                {index + 1}. {label}
+              </li>
+            ))}
+          </ol>
+
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-muted-foreground">Current project</p>
@@ -171,40 +216,26 @@ export function CustomerCommercialCard() {
             <p className="font-medium">{PAYMENT_MODEL_LABELS[quote.paymentModel]}</p>
           </div>
           {quote.status === "SENT" && selectableModels.length > 1 ? (
-            <div className="space-y-2">
-              <p className="text-muted-foreground">Available payment options</p>
-              <select
-                className={FORM_SELECT_CLASS}
-                value={quote.paymentModel}
-                disabled={busy}
-                onChange={(event) =>
-                  void selectModelMutation.mutateAsync({
-                    id: quote.id,
-                    input: {
-                      paymentModel: event.target.value as PaymentModelValue,
-                    },
-                  })
-                }
-              >
-                {selectableModels.map((model) => (
-                  <option key={model} value={model}>
-                    {PAYMENT_MODEL_LABELS[model]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              className={FORM_SELECT_CLASS}
+              value={quote.paymentModel}
+              disabled={busy}
+              onChange={(event) =>
+                void selectModelMutation.mutateAsync({
+                  id: quote.id,
+                  input: {
+                    paymentModel: event.target.value as PaymentModelValue,
+                  },
+                })
+              }
+            >
+              {selectableModels.map((model) => (
+                <option key={model} value={model}>
+                  {PAYMENT_MODEL_LABELS[model]}
+                </option>
+              ))}
+            </select>
           ) : null}
-          <ul className="space-y-1">
-            {quote.paymentSchedule.map((item) => (
-              <li key={item.id} className="flex justify-between gap-3">
-                <span>{item.label}</span>
-                <span className="tabular-nums">
-                  {formatMoney(item.amount, quote.currency)}
-                  {item.paymentStatus ? ` · ${item.paymentStatus}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
           {actionError ? (
             <p className="text-destructive" role="alert">
               {actionError}
@@ -215,15 +246,28 @@ export function CustomerCommercialCard() {
               Accept & Start Project
             </Button>
           ) : null}
-          {advancePaid ? (
+          {pendingVerification ? (
+            <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+              Payment proof submitted. Waiting for EliteFlow verification. Your
+              project dashboard stays locked until the advance is verified.
+            </p>
+          ) : null}
+          {verified ? (
             <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-800 dark:text-emerald-300">
-              Advance Payment Received — Project Ready to Start
+              <p className="font-medium">Advance Payment Received</p>
+              <p>
+                Your payment has been verified successfully. Your project is now
+                ready to start.
+              </p>
             </div>
           ) : null}
-          {showAdvance && invoiceQuery.data && !advancePaid ? (
+          {showAdvance && invoiceQuery.data && !verified ? (
             <div className="space-y-2">
-              <p className="font-medium">Advance Payment</p>
-              <InvoicePayPanel invoice={invoiceQuery.data} />
+              <p className="font-medium">Pay Advance</p>
+              <InvoicePayPanel
+                invoice={invoiceQuery.data}
+                title="Pay Advance"
+              />
             </div>
           ) : null}
           <Link
@@ -255,14 +299,6 @@ export function CustomerCommercialCard() {
               {formatMoney(quote.dealAmount ?? quote.total, quote.currency)}
             </span>
           </p>
-          {quote.requestedBudget != null &&
-          quote.requestedBudget !== quote.total ? (
-            <p className="text-xs text-muted-foreground">
-              Your original request of{" "}
-              {formatMoney(quote.requestedBudget, quote.currency)} is historical
-              only.
-            </p>
-          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Review later
