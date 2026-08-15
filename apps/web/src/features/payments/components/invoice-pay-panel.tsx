@@ -306,7 +306,7 @@ export function InvoicePayPanel({
             {selected ? (
               <div className="grid gap-3">
                 <Button type="button" onClick={() => setProofOpen(true)}>
-                  Submit Payment Proof
+                  Enter Transaction ID & Screenshot
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   Pay using the instructions above, then submit your transaction
@@ -332,7 +332,7 @@ export function InvoicePayPanel({
       <Dialog open={proofOpen} onOpenChange={setProofOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Submit Payment Proof</DialogTitle>
+            <DialogTitle>Submit Payment</DialogTitle>
             <DialogDescription>
               Enter the transaction details and upload a screenshot. EliteFlow
               verifies the payment before the invoice is marked paid.
@@ -394,7 +394,7 @@ export function InvoicePayPanel({
               disabled={pending || !reference.trim() || !proofFileId}
               onClick={() => void submitManual()}
             >
-              Submit Proof
+              Submit Payment
             </Button>
           </DialogFooter>
         </DialogContent>

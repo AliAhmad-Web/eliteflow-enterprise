@@ -31,6 +31,7 @@ import {
   PROJECT_AUDIT_ACTIONS,
 } from "../projects/projects.audit.js";
 import { projectsService } from "../projects/projects.service.js";
+import { quotesService } from "../quotes/quotes.service.js";
 import { tasksService } from "../tasks/tasks.service.js";
 import {
   CUSTOMER_REQUEST_AUDIT_ACTIONS,
@@ -694,9 +695,32 @@ export class CustomerRequestsService {
       const converted = await this.convert(id, convertInput, actor, {
         skipNotify: true,
       });
+      if (
+        converted.type === "NEW_PROJECT" &&
+        converted.convertedProjectId &&
+        converted.agreedAmount != null
+      ) {
+        try {
+          await quotesService.issueCustomerAdvanceTerms(
+            {
+              id: converted.id,
+              title: converted.title,
+              convertedProjectId: converted.convertedProjectId,
+              agreedAmount: converted.agreedAmount,
+              currency: converted.currency,
+            },
+            actor,
+          );
+        } catch (error) {
+          console.error(
+            "[customer-requests] failed to issue advance payment terms",
+            error,
+          );
+        }
+      }
       this.notifyCreator(converted, {
-        title: "Project approved and accepted",
-        body: `Your request "${converted.title}" was approved. Final agreed deal amount: ${converted.currency} ${Number(converted.agreedAmount ?? converted.commercialAmount ?? 0).toFixed(2)}. Your original requested budget stays historical only. EliteFlow will send payment terms next — then you can accept and start the project.`,
+        title: "Project Approved — Advance Payment Required",
+        body: `Your request "${converted.title}" was approved. Final agreed deal amount: ${converted.currency} ${Number(converted.agreedAmount ?? converted.commercialAmount ?? 0).toFixed(2)}. Pay the required advance to start the project.`,
       });
       return converted;
     } catch (error) {

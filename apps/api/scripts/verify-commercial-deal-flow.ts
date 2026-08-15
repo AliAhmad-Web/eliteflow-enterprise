@@ -44,12 +44,6 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function plusDays(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 async function waitForNotification(title: string, entityId?: string) {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const row = await prisma.notification.findFirst({
@@ -235,24 +229,21 @@ async function main() {
   });
   assert.equal(Number(project.budget), 1000);
 
-  const quote = await quotesService.create(
-    {
-      customerRequestId: request.id,
-      title: approvedRequest.title,
-      issueDate: today(),
-      expiryDate: plusDays(14),
-      currency: "USD",
-      dealAmount: "1000",
-      paymentModel: "SPLIT_30_70",
-      allowedPaymentModels: ["SPLIT_30_70", "SPLIT_35_65", "SPLIT_40_60"],
-    },
-    admin,
+  const listedQuotes = await quotesService.list(
+    { search: "", sortBy: "createdAt", sortOrder: "desc", page: 1, limit: 10 },
+    client,
   );
+  const quote = listedQuotes.items.find(
+    (item) => item.customerRequestId === request.id,
+  );
+  assert.ok(quote, "admin approve must auto-issue customer advance terms");
+  assert.equal(quote.status, "SENT");
   assert.equal(quote.total, 1000);
   assert.equal(quote.requestedBudget, 500);
   assert.equal(quote.advanceRequired, 300);
+  assert.equal(quote.commercialStage, "ADVANCE_REQUIRED");
+  assert.equal(quote.workspaceUnlocked, false);
 
-  await quotesService.send(quote.id, admin);
   const accepted = await quotesService.approve(quote.id, client);
   assert.equal(accepted.status, "APPROVED");
   assert.equal(accepted.dealAmount, 1000);
@@ -409,22 +400,16 @@ async function runAdvanceUnlockFlow(admin: {
   assert.equal(approvedRequest.agreedAmount, 1800);
   assert.notEqual(approvedRequest.agreedAmount, approvedRequest.expectedBudget);
 
-  const quote = await quotesService.create(
-    {
-      customerRequestId: request.id,
-      title: approvedRequest.title,
-      issueDate: today(),
-      expiryDate: plusDays(14),
-      currency: "USD",
-      dealAmount: "1800",
-      paymentModel: "SPLIT_30_70",
-      allowedPaymentModels: ["SPLIT_30_70", "SPLIT_35_65", "SPLIT_40_60"],
-    },
-    admin,
+  const listedQuotes = await quotesService.list(
+    { search: "", sortBy: "createdAt", sortOrder: "desc", page: 1, limit: 10 },
+    client,
   );
+  const quote = listedQuotes.items.find(
+    (item) => item.customerRequestId === request.id,
+  );
+  assert.ok(quote, "admin approve must auto-issue customer advance terms");
   assert.equal(quote.total, 1800);
   assert.equal(quote.advanceRequired, 540);
-  await quotesService.send(quote.id, admin);
   const sent = await quotesService.getById(quote.id, client);
   assert.equal(sent.commercialStage, "ADVANCE_REQUIRED");
   assert.equal(sent.advanceRequired, 540);

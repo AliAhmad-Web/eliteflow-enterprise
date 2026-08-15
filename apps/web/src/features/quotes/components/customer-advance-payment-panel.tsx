@@ -91,14 +91,15 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
   return (
     <div className="space-y-4 text-sm">
       <div>
-        <p className="text-base font-semibold">Project Approved & Accepted</p>
-        <p className="mt-1 text-base font-semibold">Advance Payment Required</p>
+        <p className="text-base font-semibold">
+          Project Approved — Advance Payment Required
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <p className="text-xs uppercase text-muted-foreground">
-            Final agreed deal
+            Final Deal Amount
           </p>
           <p className="text-lg font-semibold">
             {formatMoney(current.dealAmount ?? current.total, current.currency)}
@@ -106,7 +107,7 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
         </div>
         <div>
           <p className="text-xs uppercase text-muted-foreground">
-            Required advance
+            Advance Payment Required
           </p>
           <p className="text-lg font-semibold">
             {formatMoney(current.advanceRequired, current.currency)}
@@ -119,7 +120,9 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
           </p>
         </div>
         <div>
-          <p className="text-xs uppercase text-muted-foreground">Remaining</p>
+          <p className="text-xs uppercase text-muted-foreground">
+            Remaining Balance
+          </p>
           <p className="font-medium">
             {formatMoney(current.remainingAmount, current.currency)}
           </p>
@@ -173,10 +176,7 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
             Paid {formatMoney(current.paidAmount, current.currency)}. Remaining{" "}
             {formatMoney(current.remainingAmount, current.currency)}.
           </p>
-          <p>
-            Your payment has been verified successfully. Your project is now
-            ready to start. Your project dashboard is unlocked.
-          </p>
+          <p>Project Ready to Start</p>
         </div>
       ) : null}
 

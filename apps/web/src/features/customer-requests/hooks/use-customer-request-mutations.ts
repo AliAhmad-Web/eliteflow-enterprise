@@ -12,6 +12,8 @@ import type {
   UpdateCustomerRequestInput,
 } from "@enterprise/shared";
 
+import { QUOTES_QUERY_KEYS } from "@/features/quotes/types/quotes.types";
+
 import { customerRequestsService } from "../services/customer-requests.service";
 import { CUSTOMER_REQUESTS_QUERY_KEYS } from "../types/query-keys";
 
@@ -146,6 +148,7 @@ export function useApproveCustomerRequest() {
     }) => customerRequestsService.approve(id, input),
     onSuccess: async (_data, variables) => {
       await invalidateDetail(queryClient, variables.id);
+      await queryClient.invalidateQueries({ queryKey: QUOTES_QUERY_KEYS.all });
     },
   });
 }

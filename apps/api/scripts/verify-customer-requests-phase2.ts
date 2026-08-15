@@ -49,6 +49,39 @@ async function cleanup() {
     },
     select: { id: true, convertedProjectId: true, convertedTaskId: true },
   });
+  const requestIds = requests.map((r) => r.id);
+  const quotes = await prisma.quote.findMany({
+    where: {
+      OR: [
+        { customerRequestId: { in: requestIds } },
+        { clientId: { in: companyIds } },
+      ],
+    },
+    select: { id: true, projectId: true },
+  });
+  const quoteIds = quotes.map((q) => q.id);
+  if (quoteIds.length) {
+    const quotePayments = await prisma.payment.findMany({
+      where: { quoteId: { in: quoteIds } },
+      select: { id: true },
+    });
+    const paymentIds = quotePayments.map((item) => item.id);
+    if (paymentIds.length) {
+      await prisma.paymentWebhookEvent.deleteMany({
+        where: { paymentId: { in: paymentIds } },
+      });
+      await prisma.paymentRefund.deleteMany({
+        where: { paymentId: { in: paymentIds } },
+      });
+      await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
+    }
+    await prisma.invoice.deleteMany({ where: { quoteId: { in: quoteIds } } });
+    await prisma.paymentScheduleItem.deleteMany({
+      where: { quoteId: { in: quoteIds } },
+    });
+    await prisma.quoteItem.deleteMany({ where: { quoteId: { in: quoteIds } } });
+    await prisma.quote.deleteMany({ where: { id: { in: quoteIds } } });
+  }
 
   const projectIds = [
     ...new Set(

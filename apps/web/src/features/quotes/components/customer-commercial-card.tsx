@@ -39,11 +39,19 @@ export function CustomerCommercialCard({
     { refetchInterval: 8_000 },
   );
 
-  if (!canRead || quotesQuery.isLoading) return null;
+  if (!canRead) return null;
   const quote = pickActiveQuote(quotesQuery.data?.items);
-  if (!quote || (quote.status !== "SENT" && quote.status !== "APPROVED")) {
-    return null;
+  const ready =
+    quote != null && (quote.status === "SENT" || quote.status === "APPROVED");
+
+  if (quotesQuery.isLoading || (!ready && customerRequestId && quotesQuery.isFetching)) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Preparing advance payment terms…
+      </p>
+    );
   }
+  if (!ready || !quote) return null;
 
   return (
     <Card className="border-border/50 shadow-(--shadow-sm)">

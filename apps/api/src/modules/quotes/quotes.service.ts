@@ -298,8 +298,8 @@ export class QuotesService {
 
     const amount = `${updated.currency} ${Number(updated.total).toFixed(2)}`;
     this.notifyCustomer(updated, {
-      title: "Your project has been approved",
-      body: `Your project has been approved. We are ready to start your project. Final agreed deal amount: ${amount}. Please accept and start the project to continue with the advance payment.`,
+      title: "Project Approved — Advance Payment Required",
+      body: `Your project has been approved. Final agreed deal amount: ${amount}. Pay the required advance to start the project.`,
     });
 
     return toQuoteDto(updated);
@@ -504,6 +504,67 @@ export class QuotesService {
     });
 
     return toQuoteDto(updated);
+  }
+
+  /**
+   * After Admin confirms the final deal, open the standard customer
+   * advance-payment terms automatically. No separate quote/advance UI.
+   */
+  async issueCustomerAdvanceTerms(
+    request: {
+      id: string;
+      title: string;
+      convertedProjectId: string | null;
+      agreedAmount: unknown;
+      currency: string;
+    },
+    actor: QuoteActor,
+  ): Promise<QuoteDto | null> {
+    this.assertIsAdmin(actor);
+    const dealAmount = Number(request.agreedAmount);
+    if (!request.convertedProjectId || !Number.isFinite(dealAmount) || dealAmount <= 0) {
+      return null;
+    }
+
+    const existing = await prisma.quote.findFirst({
+      where: {
+        customerRequestId: request.id,
+        deletedAt: null,
+        status: { in: ["DRAFT", "SENT", "APPROVED"] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, status: true },
+    });
+    if (existing) {
+      if (existing.status === "DRAFT") {
+        return this.send(existing.id, actor);
+      }
+      return this.getById(existing.id, actor);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 14);
+    const created = await this.create(
+      {
+        customerRequestId: request.id,
+        title: request.title,
+        issueDate: today,
+        expiryDate: expiry.toISOString().slice(0, 10),
+        currency: request.currency || "USD",
+        dealAmount: String(dealAmount),
+        taxRate: 0,
+        discountAmount: "0",
+        paymentModel: "SPLIT_30_70",
+        allowedPaymentModels: [
+          "SPLIT_30_70",
+          "SPLIT_35_65",
+          "SPLIT_40_60",
+        ],
+      },
+      actor,
+    );
+    return this.send(created.id, actor);
   }
 
   async generateInvoices(

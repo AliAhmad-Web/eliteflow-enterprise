@@ -17,7 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ROUTES,
-  quoteNewFromRequestPath,
   taskDetailPath,
 } from "@/constants/routes";
 import {
@@ -463,7 +462,7 @@ export function StaffRequestDetailsPageContent() {
                             }),
                           continuation
                             ? "Change request approved and linked to the existing project."
-                            : "Project approved and accepted. Customer workspace is now active.",
+                            : "Project approved. The customer can now pay the required advance on their request page.",
                         )
                       }
                     >
@@ -732,22 +731,6 @@ export function StaffRequestDetailsPageContent() {
                   >
                     View project
                   </Link>
-                </div>
-              ) : null}
-              {(request.status === "APPROVED" ||
-                request.status === "CONVERTED") &&
-              request.convertedProjectId &&
-              !isCustomerRequestContinuationType(request.type) ? (
-                <div className="min-w-0 sm:col-span-2">
-                  <Button asChild>
-                    <Link href={quoteNewFromRequestPath(request.id)}>
-                      Create quote
-                    </Link>
-                  </Button>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Customer and project are filled in from this request. Set
-                    the agreed deal amount and payment model next.
-                  </p>
                 </div>
               ) : null}
               {request.convertedTaskId ? (

@@ -96,14 +96,17 @@ export function RequestDetailsPageContent() {
   const queryClient = useQueryClient();
 
   const requestQuery = useCustomerRequest(requestId);
-  const quotesQuery = useQuotes({
-    search: "",
-    customerRequestId: requestId,
-    sortBy: "createdAt",
-    sortOrder: "desc",
-    page: 1,
-    limit: 10,
-  });
+  const quotesQuery = useQuotes(
+    {
+      search: "",
+      customerRequestId: requestId,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      page: 1,
+      limit: 10,
+    },
+    { refetchInterval: 8_000 },
+  );
   const projectsQuery = useProjects({
     search: "",
     sortBy: "name",
@@ -310,7 +313,7 @@ export function RequestDetailsPageContent() {
             <CardTitle className="text-base">
               {isCustomerRequestContinuationType(request.type)
                 ? "Change request approved"
-                : "Project approved and accepted"}
+                : "Project Approved — Advance Payment Required"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
