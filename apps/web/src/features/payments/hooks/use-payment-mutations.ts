@@ -14,6 +14,8 @@ import type {
 } from "@enterprise/shared";
 
 import { INVOICES_QUERY_KEYS } from "@/features/invoices/types/invoices.types";
+import { PROJECTS_QUERY_KEYS } from "@/features/projects/types/projects.types";
+import { QUOTES_QUERY_KEYS } from "@/features/quotes/types/quotes.types";
 
 import { paymentsService } from "../services/payments.service";
 import { PAYMENTS_QUERY_KEYS } from "../types/payments.types";
@@ -24,6 +26,8 @@ async function invalidatePayments(
 ) {
   await queryClient.invalidateQueries({ queryKey: PAYMENTS_QUERY_KEYS.all });
   await queryClient.invalidateQueries({ queryKey: INVOICES_QUERY_KEYS.all });
+  await queryClient.invalidateQueries({ queryKey: QUOTES_QUERY_KEYS.all });
+  await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEYS.all });
   if (id) {
     await queryClient.invalidateQueries({
       queryKey: PAYMENTS_QUERY_KEYS.detail(id),

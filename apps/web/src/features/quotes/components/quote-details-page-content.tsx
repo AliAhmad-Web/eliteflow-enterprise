@@ -3,7 +3,6 @@
 import {
   PAYMENT_MODEL_LABELS,
   PERMISSIONS,
-  type PaymentModelValue,
 } from "@enterprise/shared";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -15,19 +14,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { invoiceDetailPath, ROUTES } from "@/constants/routes";
 import { useHasPermission, useRole } from "@/features/rbac/hooks/use-permissions";
-import { useInvoice } from "@/features/invoices/hooks/use-invoices";
-import { InvoicePayPanel } from "@/features/payments/components/invoice-pay-panel";
 import { ApiClientError } from "@/services/api/api-error";
 
 import {
-  useApproveQuote,
   useCancelQuote,
   useGenerateQuoteInvoices,
   useRejectQuote,
-  useSelectQuotePaymentModel,
   useSendQuote,
 } from "../hooks/use-quote-mutations";
 import { useQuote } from "../hooks/use-quotes";
+import { CustomerAdvancePaymentPanel } from "./customer-advance-payment-panel";
 import { PaymentScheduleTable } from "./payment-schedule-table";
 import { QuoteStatusBadge } from "./quote-status-badge";
 
@@ -50,29 +46,18 @@ export function QuoteDetailsPageContent() {
 
   const quoteQuery = useQuote(params.id);
   const sendMutation = useSendQuote();
-  const approveMutation = useApproveQuote();
   const rejectMutation = useRejectQuote();
   const cancelMutation = useCancelQuote();
   const generateMutation = useGenerateQuoteInvoices();
-  const selectModelMutation = useSelectQuotePaymentModel();
   const [rejectReason, setRejectReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
   const quote = quoteQuery.data;
-  const advanceInvoiceId =
-    quote?.paymentSchedule.find((item) => item.kind === "ADVANCE")?.invoiceId ??
-    quote?.paymentSchedule[0]?.invoiceId ??
-    null;
-  const invoiceQuery = useInvoice(
-    isClient && quote?.status === "APPROVED" ? advanceInvoiceId : null,
-  );
   const busy =
     sendMutation.isPending ||
-    approveMutation.isPending ||
     rejectMutation.isPending ||
     cancelMutation.isPending ||
-    generateMutation.isPending ||
-    selectModelMutation.isPending;
+    generateMutation.isPending;
 
   if (quoteQuery.isLoading) {
     return <LoadingState label="Loading quote" />;
@@ -89,17 +74,13 @@ export function QuoteDetailsPageContent() {
   const actionError =
     sendMutation.error instanceof ApiClientError
       ? sendMutation.error.message
-      : approveMutation.error instanceof ApiClientError
-        ? approveMutation.error.message
-        : rejectMutation.error instanceof ApiClientError
-          ? rejectMutation.error.message
-          : cancelMutation.error instanceof ApiClientError
-            ? cancelMutation.error.message
-            : generateMutation.error instanceof ApiClientError
-              ? generateMutation.error.message
-              : selectModelMutation.error instanceof ApiClientError
-                ? selectModelMutation.error.message
-                : null;
+      : rejectMutation.error instanceof ApiClientError
+        ? rejectMutation.error.message
+        : cancelMutation.error instanceof ApiClientError
+          ? cancelMutation.error.message
+          : generateMutation.error instanceof ApiClientError
+            ? generateMutation.error.message
+            : null;
 
   return (
     <div className="space-y-6">
@@ -229,44 +210,13 @@ export function QuoteDetailsPageContent() {
                 </Button>
               ) : null}
 
+              {isClient &&
+              (quote.status === "SENT" || quote.status === "APPROVED") ? (
+                <CustomerAdvancePaymentPanel quote={quote} />
+              ) : null}
+
               {canApprove && quote.status === "SENT" ? (
                 <div className="space-y-2">
-                  {(quote.allowedPaymentModels ?? []).filter(
-                    (model) => model !== "CUSTOM" && model !== "MILESTONE",
-                  ).length > 1 ? (
-                    <select
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      value={quote.paymentModel}
-                      disabled={busy}
-                      onChange={(event) =>
-                        void selectModelMutation.mutateAsync({
-                          id: quote.id,
-                          input: {
-                            paymentModel: event.target
-                              .value as PaymentModelValue,
-                          },
-                        })
-                      }
-                    >
-                      {quote.allowedPaymentModels.map((model) => (
-                        <option key={model} value={model}>
-                          {PAYMENT_MODEL_LABELS[model]}
-                        </option>
-                      ))}
-                    </select>
-                  ) : null}
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void approveMutation.mutateAsync(quote.id).then(() => {
-                        setMessage(
-                          "Project accepted. Complete the advance payment to start.",
-                        );
-                      })
-                    }
-                  >
-                    Accept & Start Project
-                  </Button>
                   <textarea
                     className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     placeholder="Rejection reason"
@@ -301,24 +251,6 @@ export function QuoteDetailsPageContent() {
                 >
                   Generate invoice(s)
                 </Button>
-              ) : null}
-
-              {isClient &&
-              quote.status === "APPROVED" &&
-              invoiceQuery.data &&
-              quote.overallPaymentStatus !== "PAID" ? (
-                <InvoicePayPanel invoice={invoiceQuery.data} />
-              ) : null}
-
-              {isClient &&
-              quote.status === "APPROVED" &&
-              quote.paymentSchedule.some(
-                (item) =>
-                  item.kind === "ADVANCE" && item.paymentStatus === "PAID",
-              ) ? (
-                <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-700 dark:text-emerald-400">
-                  Advance Payment Received — Project Ready to Start
-                </p>
               ) : null}
 
               {canWrite &&

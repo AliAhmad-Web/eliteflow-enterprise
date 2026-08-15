@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ROUTES, continuationRequestNewPath, quoteDetailPath, taskDetailPath } from "@/constants/routes";
 import { AUTH_QUERY_KEYS } from "@/features/auth/types/auth.types";
 import { useProjects } from "@/features/projects/hooks/use-projects";
+import { CustomerCommercialCard } from "@/features/quotes/components/customer-commercial-card";
 import { QuoteStatusBadge } from "@/features/quotes/components/quote-status-badge";
 import { useQuotes } from "@/features/quotes/hooks/use-quotes";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
@@ -316,7 +317,7 @@ export function RequestDetailsPageContent() {
             <p className="text-sm text-foreground/90">
               {isCustomerRequestContinuationType(request.type)
                 ? `EliteFlow approved this ${CUSTOMER_REQUEST_TYPE_LABELS[request.type].toLowerCase()} against ${request.targetProjectName ?? "your project"}. This is not financial or invoice approval.`
-                : "EliteFlow accepted this request. Your workspace is unlocked. The agreed budget, requirements, deadline, files, and clarification history stay on this page."}
+                : "EliteFlow accepted this request. Complete the required advance payment below to start the project. The project dashboard stays locked until that payment is verified."}
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailItem
@@ -352,12 +353,15 @@ export function RequestDetailsPageContent() {
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                 <li>Review the accepted scope and files on this request.</li>
-                <li>Open your dashboard for projects, tasks, and invoices.</li>
-                {request.convertedProjectId ? (
-                  <li>Follow the accepted project for delivery progress.</li>
-                ) : null}
+                <li>
+                  Pay the required advance and submit payment proof. EliteFlow
+                  verifies the payment before the project starts.
+                </li>
               </ul>
             </div>
+            {!isCustomerRequestContinuationType(request.type) ? (
+              <CustomerCommercialCard customerRequestId={request.id} />
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <Button asChild>
                 <Link href={ROUTES.PORTAL}>

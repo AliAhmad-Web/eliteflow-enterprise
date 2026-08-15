@@ -9,11 +9,11 @@ export function ClientWorkspaceLockedState() {
   return (
     <div className="space-y-6">
       <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm">
-        <p className="font-medium">Advance payment required</p>
+        <p className="font-medium">Project Approved & Accepted</p>
+        <p className="mt-1 font-medium">Advance Payment Required</p>
         <p className="text-muted-foreground">
-          Your project workspace stays locked until EliteFlow verifies the
-          required advance payment. You can pay the advance and submit payment
-          proof below.
+          Pay the required advance below. Your project workspace stays locked
+          until EliteFlow verifies the payment.
         </p>
       </div>
       <CustomerCommercialCard />

@@ -247,31 +247,28 @@ export function quoteCommercialStage(input: {
     first?.paymentStatus === "PENDING" ||
     first?.paymentStatus === "PARTIALLY_PAID";
 
-  if (input.status === "SENT") {
-    return { commercialStage: "DEAL_APPROVED", workspaceUnlocked: false };
+  if (input.status === "SENT" || input.status === "APPROVED") {
+    if (firstPaid) {
+      const started =
+        input.projectStatus === "IN_PROGRESS" ||
+        input.projectStatus === "COMPLETED";
+      return {
+        commercialStage: started ? "PROJECT_STARTED" : "PAYMENT_VERIFIED",
+        workspaceUnlocked: firstPaid,
+      };
+    }
+    if (firstPending) {
+      return {
+        commercialStage:
+          first?.paymentStatus === "PARTIALLY_PAID"
+            ? "PENDING_VERIFICATION"
+            : "PAYMENT_PROOF_SUBMITTED",
+        workspaceUnlocked: false,
+      };
+    }
+    return { commercialStage: "ADVANCE_REQUIRED", workspaceUnlocked: false };
   }
-  if (input.status !== "APPROVED") {
-    return { commercialStage: null, workspaceUnlocked: false };
-  }
-  if (firstPaid) {
-    const started =
-      input.projectStatus === "IN_PROGRESS" ||
-      input.projectStatus === "COMPLETED";
-    return {
-      commercialStage: started ? "PROJECT_STARTED" : "PAYMENT_VERIFIED",
-      workspaceUnlocked: true,
-    };
-  }
-  if (firstPending) {
-    return {
-      commercialStage:
-        first?.paymentStatus === "PARTIALLY_PAID"
-          ? "PENDING_VERIFICATION"
-          : "PAYMENT_PROOF_SUBMITTED",
-      workspaceUnlocked: false,
-    };
-  }
-  return { commercialStage: "ADVANCE_REQUIRED", workspaceUnlocked: false };
+  return { commercialStage: null, workspaceUnlocked: false };
 }
 
 export const PAYMENT_SCHEDULE_KIND_LABELS: Record<

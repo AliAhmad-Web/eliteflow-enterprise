@@ -231,8 +231,12 @@ export function PaymentDetailsPageContent() {
                   })
                 }
               >
-                Confirm Payment Received
+                Verify Payment
               </Button>
+              <p className="text-xs text-muted-foreground">
+                Confirm Payment Received after you have checked the actual
+                bank or wallet account.
+              </p>
               <Input
                 value={rejectReason}
                 onChange={(event) => setRejectReason(event.target.value)}

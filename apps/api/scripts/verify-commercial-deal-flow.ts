@@ -426,7 +426,8 @@ async function runAdvanceUnlockFlow(admin: {
   assert.equal(quote.advanceRequired, 540);
   await quotesService.send(quote.id, admin);
   const sent = await quotesService.getById(quote.id, client);
-  assert.equal(sent.commercialStage, "DEAL_APPROVED");
+  assert.equal(sent.commercialStage, "ADVANCE_REQUIRED");
+  assert.equal(sent.advanceRequired, 540);
   assert.equal(sent.workspaceUnlocked, false);
 
   const accepted = await quotesService.approve(quote.id, client);

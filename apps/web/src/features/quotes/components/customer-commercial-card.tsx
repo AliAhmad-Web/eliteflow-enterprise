@@ -1,74 +1,15 @@
 "use client";
 
-import {
-  PAYMENT_MODEL_LABELS,
-  PERMISSIONS,
-  type PaymentModelValue,
-  type QuoteDto,
-} from "@enterprise/shared";
+import { PERMISSIONS, type QuoteDto } from "@enterprise/shared";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ROUTES, quoteDetailPath } from "@/constants/routes";
-import { useInvoice } from "@/features/invoices/hooks/use-invoices";
-import { InvoicePayPanel } from "@/features/payments/components/invoice-pay-panel";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
-import { FORM_SELECT_CLASS } from "@/lib/form-styles";
-import { ApiClientError } from "@/services/api/api-error";
 
-import {
-  useApproveQuote,
-  useSelectQuotePaymentModel,
-} from "../hooks/use-quote-mutations";
 import { useQuotes } from "../hooks/use-quotes";
+import { CustomerAdvancePaymentPanel } from "./customer-advance-payment-panel";
 import { QuoteStatusBadge } from "./quote-status-badge";
-
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
-}
-
-const STEPS = [
-  "Deal approved",
-  "Advance payment required",
-  "Pay advance",
-  "Submit payment proof",
-  "Waiting for verification",
-  "Payment verified",
-  "Project started",
-  "Dashboard unlocked",
-] as const;
-
-function stepIndex(quote: QuoteDto): number {
-  switch (quote.commercialStage) {
-    case "DEAL_APPROVED":
-      return 0;
-    case "ADVANCE_REQUIRED":
-      return 1;
-    case "PAYMENT_PROOF_SUBMITTED":
-      return 3;
-    case "PENDING_VERIFICATION":
-      return 4;
-    case "PAYMENT_VERIFIED":
-      return 5;
-    case "PROJECT_STARTED":
-      return 7;
-    default:
-      return quote.status === "APPROVED" ? 1 : 0;
-  }
-}
 
 function pickActiveQuote(items: QuoteDto[] | undefined): QuoteDto | null {
   if (!items?.length) return null;
@@ -80,196 +21,43 @@ function pickActiveQuote(items: QuoteDto[] | undefined): QuoteDto | null {
   );
 }
 
-export function CustomerCommercialCard() {
+export function CustomerCommercialCard({
+  customerRequestId,
+}: {
+  customerRequestId?: string;
+}) {
   const canRead = useHasPermission(PERMISSIONS.QUOTES_READ);
-  const quotesQuery = useQuotes({
-    search: "",
-    sortBy: "createdAt",
-    sortOrder: "desc",
-    page: 1,
-    limit: 10,
-  });
-  const approveMutation = useApproveQuote();
-  const selectModelMutation = useSelectQuotePaymentModel();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [showAdvance, setShowAdvance] = useState(false);
+  const quotesQuery = useQuotes(
+    {
+      search: "",
+      ...(customerRequestId ? { customerRequestId } : {}),
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      page: 1,
+      limit: 10,
+    },
+    { refetchInterval: 8_000 },
+  );
 
+  if (!canRead || quotesQuery.isLoading) return null;
   const quote = pickActiveQuote(quotesQuery.data?.items);
-  const advanceInvoiceId =
-    quote?.paymentSchedule.find((item) => item.kind === "ADVANCE")?.invoiceId ??
-    quote?.paymentSchedule[0]?.invoiceId ??
-    null;
-  const invoiceQuery = useInvoice(
-    showAdvance || quote?.status === "APPROVED" ? advanceInvoiceId : null,
-  );
-
-  useEffect(() => {
-    if (quote?.status === "SENT") setModalOpen(true);
-    if (quote?.status === "APPROVED") setShowAdvance(true);
-  }, [quote?.id, quote?.status]);
-
-  const selectableModels = useMemo(
-    () =>
-      (quote?.allowedPaymentModels ?? []).filter(
-        (model) => model !== "CUSTOM" && model !== "MILESTONE",
-      ),
-    [quote?.allowedPaymentModels],
-  );
-
-  if (!canRead || quotesQuery.isLoading || !quote) return null;
-
-  const busy = approveMutation.isPending || selectModelMutation.isPending;
-  const actionError =
-    approveMutation.error instanceof ApiClientError
-      ? approveMutation.error.message
-      : selectModelMutation.error instanceof ApiClientError
-        ? selectModelMutation.error.message
-        : null;
-  const activeStep = stepIndex(quote);
-  const pendingVerification =
-    quote.commercialStage === "PENDING_VERIFICATION" ||
-    quote.commercialStage === "PAYMENT_PROOF_SUBMITTED";
-  const verified =
-    quote.commercialStage === "PAYMENT_VERIFIED" ||
-    quote.commercialStage === "PROJECT_STARTED";
-
-  async function acceptAndStart() {
-    if (!quote) return;
-    await approveMutation.mutateAsync(quote.id);
-    setModalOpen(false);
-    setShowAdvance(true);
+  if (!quote || (quote.status !== "SENT" && quote.status !== "APPROVED")) {
+    return null;
   }
 
   return (
-    <>
-      <Card className="border-border/50 shadow-(--shadow-sm)">
-        <CardHeader className="pb-3">
+    <Card className="border-border/50 shadow-(--shadow-sm)">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
           <CardTitle className="text-base font-semibold tracking-tight">
-            {quote.commercialStage === "ADVANCE_REQUIRED"
-              ? "Advance Payment Required"
-              : "Commercial summary"}
+            {quote.projectName}
           </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <ol className="grid gap-1 text-xs">
-            {STEPS.map((label, index) => (
-              <li
-                key={label}
-                className={
-                  index <= activeStep
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground"
-                }
-              >
-                {index + 1}. {label}
-              </li>
-            ))}
-          </ol>
-
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-muted-foreground">Current project</p>
-              <p className="font-medium">{quote.projectName}</p>
-            </div>
-            <QuoteStatusBadge status={quote.status} />
-          </div>
-          <div>
-            <p className="text-muted-foreground">Total Deal</p>
-            <p className="text-lg font-semibold">
-              {formatMoney(quote.dealAmount ?? quote.total, quote.currency)}
-            </p>
-            {quote.requestedBudget != null &&
-            quote.requestedBudget !== quote.total ? (
-              <p className="text-xs text-muted-foreground">
-                Original requested budget{" "}
-                {formatMoney(quote.requestedBudget, quote.currency)} is
-                historical only.
-              </p>
-            ) : null}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <p className="text-muted-foreground">Advance Required</p>
-              <p className="font-medium">
-                {formatMoney(quote.advanceRequired, quote.currency)}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Paid</p>
-              <p className="font-medium">
-                {formatMoney(quote.paidAmount, quote.currency)}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Remaining</p>
-              <p className="font-medium">
-                {formatMoney(quote.remainingAmount, quote.currency)}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Payment Status</p>
-              <p className="font-medium">{quote.overallPaymentStatus}</p>
-            </div>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Payment model</p>
-            <p className="font-medium">{PAYMENT_MODEL_LABELS[quote.paymentModel]}</p>
-          </div>
-          {quote.status === "SENT" && selectableModels.length > 1 ? (
-            <select
-              className={FORM_SELECT_CLASS}
-              value={quote.paymentModel}
-              disabled={busy}
-              onChange={(event) =>
-                void selectModelMutation.mutateAsync({
-                  id: quote.id,
-                  input: {
-                    paymentModel: event.target.value as PaymentModelValue,
-                  },
-                })
-              }
-            >
-              {selectableModels.map((model) => (
-                <option key={model} value={model}>
-                  {PAYMENT_MODEL_LABELS[model]}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          {actionError ? (
-            <p className="text-destructive" role="alert">
-              {actionError}
-            </p>
-          ) : null}
-          {quote.status === "SENT" ? (
-            <Button disabled={busy} onClick={() => void acceptAndStart()}>
-              Accept & Start Project
-            </Button>
-          ) : null}
-          {pendingVerification ? (
-            <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-              Payment proof submitted. Waiting for EliteFlow verification. Your
-              project dashboard stays locked until the advance is verified.
-            </p>
-          ) : null}
-          {verified ? (
-            <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-800 dark:text-emerald-300">
-              <p className="font-medium">Advance Payment Received</p>
-              <p>
-                Your payment has been verified successfully. Your project is now
-                ready to start.
-              </p>
-            </div>
-          ) : null}
-          {showAdvance && invoiceQuery.data && !verified ? (
-            <div className="space-y-2">
-              <p className="font-medium">Pay Advance</p>
-              <InvoicePayPanel
-                invoice={invoiceQuery.data}
-                title="Pay Advance"
-              />
-            </div>
-          ) : null}
+          <QuoteStatusBadge status={quote.status} />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <CustomerAdvancePaymentPanel quote={quote} />
+        <div>
           <Link
             href={quoteDetailPath(quote.id)}
             className="inline-flex text-sm font-medium text-primary hover:underline"
@@ -282,33 +70,8 @@ export function CustomerCommercialCard() {
           >
             View invoices
           </Link>
-        </CardContent>
-      </Card>
-
-      <Dialog open={modalOpen && quote.status === "SENT"} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Your project has been approved</DialogTitle>
-            <DialogDescription>
-              We are ready to start your project.
-            </DialogDescription>
-          </DialogHeader>
-          <p className="text-sm">
-            Final agreed deal amount:{" "}
-            <span className="font-semibold">
-              {formatMoney(quote.dealAmount ?? quote.total, quote.currency)}
-            </span>
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Review later
-            </Button>
-            <Button disabled={busy} onClick={() => void acceptAndStart()}>
-              Accept & Start Project
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

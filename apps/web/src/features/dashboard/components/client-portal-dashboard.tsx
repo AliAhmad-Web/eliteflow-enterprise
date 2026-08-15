@@ -436,7 +436,7 @@ function ClientLinkedDashboard({
         <RoleDashboardHeader
           badge="Client Portal"
           title={`Welcome, ${firstName}`}
-          subtitle="Your deal is approved. Complete the required advance payment so EliteFlow can start the project."
+          subtitle="Your deal is approved. Pay the required advance on this page — the project dashboard stays locked until EliteFlow verifies the payment."
         />
         <ClientRequestIntakeCard />
         <CustomerCommercialCard />

@@ -23,11 +23,15 @@ export function useInvoiceStats() {
   });
 }
 
-export function useInvoice(id: string | null) {
+export function useInvoice(
+  id: string | null,
+  options?: { refetchInterval?: number },
+) {
   return useQuery({
     queryKey: INVOICES_QUERY_KEYS.detail(id ?? "none"),
     queryFn: () => invoicesService.getById(id!),
     enabled: Boolean(id),
-    staleTime: 30_000,
+    staleTime: 15_000,
+    refetchInterval: options?.refetchInterval,
   });
 }
