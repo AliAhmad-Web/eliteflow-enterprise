@@ -16,6 +16,8 @@ export const PAYMENT_MODELS = [
   "UPFRONT_100",
   "SPLIT_50_50",
   "SPLIT_30_70",
+  "SPLIT_35_65",
+  "SPLIT_40_60",
   "MILESTONE",
   "CUSTOM",
 ] as const;
@@ -134,6 +136,7 @@ export const createQuoteSchema = z
     dealAmount: moneyStringSchema("Deal amount").optional(),
     items: z.array(quoteItemInputSchema).optional(),
     paymentModel: paymentModelSchema,
+    allowedPaymentModels: z.array(paymentModelSchema).optional(),
     schedule: z.array(paymentScheduleInputSchema).optional(),
   })
   .refine(
@@ -177,6 +180,7 @@ export const updateQuoteSchema = z
     dealAmount: moneyStringSchema("Deal amount").optional(),
     items: z.array(quoteItemInputSchema).optional(),
     paymentModel: paymentModelSchema.optional(),
+    allowedPaymentModels: z.array(paymentModelSchema).optional(),
     schedule: z.array(paymentScheduleInputSchema).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
@@ -200,6 +204,14 @@ export const rejectQuoteSchema = z.object({
 });
 
 export type RejectQuoteInput = z.infer<typeof rejectQuoteSchema>;
+
+export const selectQuotePaymentModelSchema = z.object({
+  paymentModel: paymentModelSchema,
+});
+
+export type SelectQuotePaymentModelInput = z.infer<
+  typeof selectQuotePaymentModelSchema
+>;
 
 export const generateQuoteInvoicesSchema = z
   .object({
@@ -256,6 +268,7 @@ export const paymentScheduleItemSchema = z.object({
   invoiceNumber: z.string().nullable(),
   invoiceStatus: z.string().nullable(),
   paymentStatus: z.string().nullable(),
+  paidAmount: z.number().nullable(),
 });
 
 export const quoteSchema = z.object({
@@ -273,12 +286,18 @@ export const quoteSchema = z.object({
   projectName: z.string(),
   status: quoteStatusSchema,
   paymentModel: paymentModelSchema,
+  allowedPaymentModels: z.array(paymentModelSchema),
   currency: z.string(),
   taxRate: z.number(),
   discountAmount: z.number(),
   subtotal: z.number(),
   taxAmount: z.number(),
   total: z.number(),
+  dealAmount: z.number(),
+  advanceRequired: z.number(),
+  paidAmount: z.number(),
+  remainingAmount: z.number(),
+  overallPaymentStatus: z.enum(["PAID", "PARTIALLY_PAID", "PENDING"]),
   issueDate: z.string(),
   expiryDate: z.string(),
   sentAt: z.string().nullable(),

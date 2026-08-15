@@ -3,6 +3,7 @@
 import {
   PAYMENT_MODEL_LABELS,
   PERMISSIONS,
+  type PaymentModelValue,
 } from "@enterprise/shared";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -14,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { invoiceDetailPath, ROUTES } from "@/constants/routes";
 import { useHasPermission, useRole } from "@/features/rbac/hooks/use-permissions";
+import { useInvoice } from "@/features/invoices/hooks/use-invoices";
+import { InvoicePayPanel } from "@/features/payments/components/invoice-pay-panel";
 import { ApiClientError } from "@/services/api/api-error";
 
 import {
@@ -21,6 +24,7 @@ import {
   useCancelQuote,
   useGenerateQuoteInvoices,
   useRejectQuote,
+  useSelectQuotePaymentModel,
   useSendQuote,
 } from "../hooks/use-quote-mutations";
 import { useQuote } from "../hooks/use-quotes";
@@ -50,16 +54,25 @@ export function QuoteDetailsPageContent() {
   const rejectMutation = useRejectQuote();
   const cancelMutation = useCancelQuote();
   const generateMutation = useGenerateQuoteInvoices();
+  const selectModelMutation = useSelectQuotePaymentModel();
   const [rejectReason, setRejectReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
   const quote = quoteQuery.data;
+  const advanceInvoiceId =
+    quote?.paymentSchedule.find((item) => item.kind === "ADVANCE")?.invoiceId ??
+    quote?.paymentSchedule[0]?.invoiceId ??
+    null;
+  const invoiceQuery = useInvoice(
+    isClient && quote?.status === "APPROVED" ? advanceInvoiceId : null,
+  );
   const busy =
     sendMutation.isPending ||
     approveMutation.isPending ||
     rejectMutation.isPending ||
     cancelMutation.isPending ||
-    generateMutation.isPending;
+    generateMutation.isPending ||
+    selectModelMutation.isPending;
 
   if (quoteQuery.isLoading) {
     return <LoadingState label="Loading quote" />;
@@ -84,7 +97,9 @@ export function QuoteDetailsPageContent() {
             ? cancelMutation.error.message
             : generateMutation.error instanceof ApiClientError
               ? generateMutation.error.message
-              : null;
+              : selectModelMutation.error instanceof ApiClientError
+                ? selectModelMutation.error.message
+                : null;
 
   return (
     <div className="space-y-6">
@@ -104,8 +119,25 @@ export function QuoteDetailsPageContent() {
               <div>
                 <p className="text-muted-foreground">Agreed deal amount</p>
                 <p className="text-lg font-semibold">
-                  {formatMoney(quote.total, quote.currency)}
+                  {formatMoney(quote.dealAmount ?? quote.total, quote.currency)}
                 </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Advance required</p>
+                <p className="font-medium">
+                  {formatMoney(quote.advanceRequired, quote.currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Paid / remaining</p>
+                <p className="font-medium">
+                  {formatMoney(quote.paidAmount, quote.currency)} /{" "}
+                  {formatMoney(quote.remainingAmount, quote.currency)}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Payment status</p>
+                <p className="font-medium">{quote.overallPaymentStatus}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Payment model</p>
@@ -169,8 +201,9 @@ export function QuoteDetailsPageContent() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                Request / project → quote → customer approval → invoices. Quote
-                approval is not a payment.
+                Admin confirms the final deal, the customer accepts and starts
+                the project, then pays the configured advance. The original
+                requested budget never overwrites the agreed deal.
               </p>
               {message ? (
                 <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-700 dark:text-emerald-400">
@@ -198,15 +231,41 @@ export function QuoteDetailsPageContent() {
 
               {canApprove && quote.status === "SENT" ? (
                 <div className="space-y-2">
+                  {(quote.allowedPaymentModels ?? []).filter(
+                    (model) => model !== "CUSTOM" && model !== "MILESTONE",
+                  ).length > 1 ? (
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={quote.paymentModel}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void selectModelMutation.mutateAsync({
+                          id: quote.id,
+                          input: {
+                            paymentModel: event.target
+                              .value as PaymentModelValue,
+                          },
+                        })
+                      }
+                    >
+                      {quote.allowedPaymentModels.map((model) => (
+                        <option key={model} value={model}>
+                          {PAYMENT_MODEL_LABELS[model]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
                   <Button
                     disabled={busy}
                     onClick={() =>
                       void approveMutation.mutateAsync(quote.id).then(() => {
-                        setMessage("Quote approved. EliteFlow can now generate invoices.");
+                        setMessage(
+                          "Project accepted. Complete the advance payment to start.",
+                        );
                       })
                     }
                   >
-                    Approve quote
+                    Accept & Start Project
                   </Button>
                   <textarea
                     className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -242,6 +301,24 @@ export function QuoteDetailsPageContent() {
                 >
                   Generate invoice(s)
                 </Button>
+              ) : null}
+
+              {isClient &&
+              quote.status === "APPROVED" &&
+              invoiceQuery.data &&
+              quote.overallPaymentStatus !== "PAID" ? (
+                <InvoicePayPanel invoice={invoiceQuery.data} />
+              ) : null}
+
+              {isClient &&
+              quote.status === "APPROVED" &&
+              quote.paymentSchedule.some(
+                (item) =>
+                  item.kind === "ADVANCE" && item.paymentStatus === "PAID",
+              ) ? (
+                <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-700 dark:text-emerald-400">
+                  Advance Payment Received — Project Ready to Start
+                </p>
               ) : null}
 
               {canWrite &&

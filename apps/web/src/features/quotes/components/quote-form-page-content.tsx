@@ -63,6 +63,9 @@ export function QuoteFormPageContent() {
   const [dealAmount, setDealAmount] = useState("");
   const [paymentModel, setPaymentModel] =
     useState<PaymentModelValue>("SPLIT_30_70");
+  const [allowedPaymentModels, setAllowedPaymentModels] = useState<
+    PaymentModelValue[]
+  >(["SPLIT_30_70", "SPLIT_35_65", "SPLIT_40_60"]);
   const [issueDate, setIssueDate] = useState(today());
   const [expiryDate, setExpiryDate] = useState(plusDays(14));
   const [customRows, setCustomRows] = useState<PaymentScheduleInput[]>([
@@ -126,6 +129,9 @@ export function QuoteFormPageContent() {
       discountAmount: "",
       dealAmount,
       paymentModel,
+      allowedPaymentModels: needsCustom
+        ? [paymentModel]
+        : Array.from(new Set([paymentModel, ...allowedPaymentModels])),
       schedule: needsCustom ? customRows : undefined,
     };
     const created = await createMutation.mutateAsync(payload);
@@ -237,6 +243,45 @@ export function QuoteFormPageContent() {
                 ))}
               </select>
             </div>
+            {!needsCustom ? (
+              <div className="space-y-2">
+                <Label>Customer-selectable advance options</Label>
+                <p className="text-xs text-muted-foreground">
+                  The customer can only choose from options you enable. They
+                  cannot change the agreed deal amount.
+                </p>
+                {PAYMENT_MODEL_OPTIONS.filter(
+                  (option) =>
+                    option.value !== "CUSTOM" && option.value !== "MILESTONE",
+                ).map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        option.value === paymentModel ||
+                        allowedPaymentModels.includes(option.value)
+                      }
+                      disabled={option.value === paymentModel}
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          setAllowedPaymentModels((current) =>
+                            Array.from(new Set([...current, option.value])),
+                          );
+                        } else {
+                          setAllowedPaymentModels((current) =>
+                            current.filter((item) => item !== option.value),
+                          );
+                        }
+                      }}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            ) : null}
             {needsCustom ? (
               <div className="space-y-3">
                 <Label>Custom / milestone schedule</Label>

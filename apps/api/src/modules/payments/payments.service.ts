@@ -271,6 +271,13 @@ export class PaymentsService {
       created.id,
       actor.userId,
     );
+    this.notifyCustomerUser(
+      actor.userId,
+      "Payment submitted",
+      `Your payment ${paymentNumber} for ${invoice.invoiceNumber} was submitted and is pending verification.`,
+      created.id,
+      actor.userId,
+    );
     return toPaymentDto(created);
   }
 
@@ -320,6 +327,13 @@ export class PaymentsService {
     this.notifyAdmins(
       `${input.method} payment submitted`,
       `${actor.email} submitted ${paymentNumber} for ${invoice.invoiceNumber}`,
+      created.id,
+      actor.userId,
+    );
+    this.notifyCustomerUser(
+      actor.userId,
+      "Payment submitted",
+      `Your payment ${paymentNumber} for ${invoice.invoiceNumber} was submitted and is pending verification.`,
       created.id,
       actor.userId,
     );
@@ -429,6 +443,39 @@ export class PaymentsService {
         metadata: { paymentId: id },
       });
     }
+    const remaining = roundMoney(
+      Math.max(0, Number(invoice.total) - Number(invoice.paidAmount)),
+    );
+    const remainingLabel = `${invoice.currency} ${remaining.toFixed(2)}`;
+    const isAdvance = invoice.invoiceKind === "ADVANCE";
+    const customerId = payment.submittedById;
+    if (customerId) {
+      if (isAdvance && invoice.paymentStatus === "PAID") {
+        this.notifyCustomerUser(
+          customerId,
+          "Advance Payment Received — Project Ready to Start",
+          `Your advance payment was verified. Remaining balance: ${remainingLabel}.`,
+          payment.id,
+          actor.userId,
+        );
+      } else {
+        this.notifyCustomerUser(
+          customerId,
+          "Payment verified",
+          `Your payment was verified. Remaining balance: ${remainingLabel}.`,
+          payment.id,
+          actor.userId,
+        );
+      }
+    }
+    this.notifyAdmins(
+      isAdvance && invoice.paymentStatus === "PAID"
+        ? "Advance payment received"
+        : "Payment verified",
+      `Payment ${payment.paymentNumber} verified. Remaining on invoice ${invoice.invoiceNumber}: ${remainingLabel}.`,
+      payment.id,
+      actor.userId,
+    );
     return toPaymentDto(updated);
   }
 
@@ -462,6 +509,21 @@ export class PaymentsService {
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
+    if (payment.submittedById) {
+      this.notifyCustomerUser(
+        payment.submittedById,
+        "Payment rejected",
+        `Your payment ${payment.paymentNumber} was rejected: ${input.reason.trim().substring(0, 180)}`,
+        payment.id,
+        actor.userId,
+      );
+    }
+    this.notifyAdmins(
+      "Payment rejected",
+      `Payment ${payment.paymentNumber} was rejected.`,
+      payment.id,
+      actor.userId,
+    );
     return toPaymentDto(updated);
   }
 
@@ -1436,6 +1498,26 @@ export class PaymentsService {
       entityType: "Payment",
       entityId: paymentId,
       audience: { type: "ROLE", roleCode: "ADMIN" },
+      createdById: actorId,
+    });
+  }
+
+  private notifyCustomerUser(
+    userId: string,
+    title: string,
+    body: string,
+    paymentId: string,
+    actorId: string,
+  ): void {
+    void notificationDispatcher.notify({
+      title,
+      body,
+      category: NotificationCategory.INVOICE,
+      priority: NotificationPriority.HIGH,
+      linkUrl: `/payments/${paymentId}`,
+      entityType: "Payment",
+      entityId: paymentId,
+      audience: { type: "INDIVIDUAL", userId },
       createdById: actorId,
     });
   }

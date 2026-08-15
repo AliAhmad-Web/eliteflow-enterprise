@@ -222,6 +222,20 @@ async function main() {
   assert.equal(split[0]?.amount, 300);
   assert.equal(split[1]?.amount, 700);
 
+  const split35 = calculatePaymentSchedule({
+    dealAmount: 1000,
+    paymentModel: "SPLIT_35_65",
+  });
+  assert.equal(split35[0]?.amount, 350);
+  assert.equal(split35[1]?.amount, 650);
+
+  const split40 = calculatePaymentSchedule({
+    dealAmount: 1000,
+    paymentModel: "SPLIT_40_60",
+  });
+  assert.equal(split40[0]?.amount, 400);
+  assert.equal(split40[1]?.amount, 600);
+
   const custom = calculatePaymentSchedule({
     dealAmount: 1000,
     paymentModel: "CUSTOM",
@@ -249,7 +263,7 @@ async function main() {
       description: "Portal build",
       requirements: "Auth and billing",
       preferredDeadline: "2030-01-15",
-      expectedBudget: "550",
+      expectedBudget: "500",
       currency: "USD",
       priority: "HIGH",
       additionalNotes: null,
@@ -265,11 +279,11 @@ async function main() {
   );
   const approved = await customerRequestsService.approve(
     draft.id,
-    { agreedAmount: "800", staffNotes: "Accepted" },
+    { agreedAmount: "1000", staffNotes: "Accepted" },
     admin,
   );
-  assert.equal(approved.expectedBudget, 550);
-  assert.equal(approved.agreedAmount, 800);
+  assert.equal(approved.expectedBudget, 500);
+  assert.equal(approved.agreedAmount, 1000);
   assert.ok(approved.convertedProjectId, "approval should convert to a project");
   const projectId = approved.convertedProjectId!;
 
@@ -282,12 +296,13 @@ async function main() {
       currency: "USD",
       dealAmount: "1000",
       paymentModel: "SPLIT_30_70",
+      allowedPaymentModels: ["SPLIT_30_70", "SPLIT_35_65", "SPLIT_40_60"],
     },
     admin,
   );
   assert.equal(quote.projectId, projectId);
   assert.equal(quote.total, 1000);
-  assert.equal(quote.requestedBudget, 550);
+  assert.equal(quote.requestedBudget, 500);
   assert.equal(quote.status, "DRAFT");
   assert.equal(quote.paymentSchedule.length, 2);
   assert.equal(quote.paymentSchedule[0]?.amount, 300);
@@ -323,6 +338,36 @@ async function main() {
 
   const sent = await quotesService.send(quote.id, admin);
   assert.equal(sent.status, "SENT");
+  assert.equal(sent.dealAmount, 1000);
+
+  const forty = await quotesService.selectPaymentModel(
+    quote.id,
+    { paymentModel: "SPLIT_40_60" },
+    clientA,
+  );
+  assert.equal(forty.paymentModel, "SPLIT_40_60");
+  assert.equal(forty.total, 1000);
+  assert.equal(forty.advanceRequired, 400);
+  assert.equal(forty.paymentSchedule[0]?.amount, 400);
+  assert.equal(forty.paymentSchedule[1]?.amount, 600);
+
+  await expectError(
+    () =>
+      quotesService.selectPaymentModel(
+        quote.id,
+        { paymentModel: "SPLIT_40_60" },
+        clientB,
+      ),
+    QUOTES_ERROR_CODES.NOT_FOUND,
+    "client B cannot change payment model",
+  );
+
+  const restored = await quotesService.selectPaymentModel(
+    quote.id,
+    { paymentModel: "SPLIT_30_70" },
+    clientA,
+  );
+  assert.equal(restored.advanceRequired, 300);
 
   await expectError(
     () => quotesService.approve(quote.id, clientB),
@@ -338,9 +383,17 @@ async function main() {
   const accepted = await quotesService.approve(quote.id, clientA);
   assert.equal(accepted.status, "APPROVED");
   assert.equal(accepted.total, 1000);
+  assert.equal(accepted.dealAmount, 1000);
+  assert.equal(accepted.advanceRequired, 300);
+  assert.equal(accepted.paidAmount, 0);
+  assert.equal(accepted.remainingAmount, 1000);
+  assert.equal(
+    accepted.paymentSchedule.filter((item) => item.invoiceId).length,
+    2,
+  );
 
   const refreshed = await customerRequestsService.getById(draft.id, admin);
-  assert.equal(refreshed.expectedBudget, 550);
+  assert.equal(refreshed.expectedBudget, 500);
   assert.equal(refreshed.agreedAmount, 1000);
   assert.equal(refreshed.commercialAmount, 1000);
   console.log("[phase3] approval + agreed amount integrity OK");
@@ -369,7 +422,7 @@ async function main() {
   assert.equal(advanceInvoice.invoiceKind, "ADVANCE");
   assert.equal(advanceInvoice.paymentStatus, "UNPAID");
   assert.equal(advanceInvoice.total, 300);
-  assert.equal(advanceInvoice.status, "DRAFT");
+  assert.equal(advanceInvoice.status, "SENT");
 
   const clientAdvance = await invoicesService.getById(
     advance.invoiceId!,

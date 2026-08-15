@@ -641,7 +641,7 @@ async function main() {
     mobileNum: "",
     orderRefNum: easyCancelPay.payment.paymentNumber,
     paymentMethod: "",
-    postBackURL: `${process.env.APP_URL}/api/v1/payments/callbacks/easypaisa`,
+    postBackURL: `${process.env.APP_URL}/api/v1/payments/callbacks/easypaisa?run=${RUN_ID}`,
     storeId: process.env.EASYPAISA_STORE_ID!,
   };
   const easyCancelCb = await paymentsService.handleEasyPaisaCallback({

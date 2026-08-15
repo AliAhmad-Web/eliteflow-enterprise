@@ -696,7 +696,7 @@ export class CustomerRequestsService {
       });
       this.notifyCreator(converted, {
         title: "Project approved and accepted",
-        body: `Your request "${converted.title}" was approved and accepted. Your workspace is now active — you can view the agreed budget, requirements, files, and next steps.`,
+        body: `Your request "${converted.title}" was approved. Final agreed deal amount: ${converted.currency} ${Number(converted.agreedAmount ?? converted.commercialAmount ?? 0).toFixed(2)}. Your original requested budget stays historical only. EliteFlow will send payment terms next — then you can accept and start the project.`,
       });
       return converted;
     } catch (error) {
@@ -833,7 +833,7 @@ export class CustomerRequestsService {
 
     const description = combineConvertDescription(linked);
     const dueDate = dueDateString(linked.preferredDeadline);
-    const budget = budgetString(linked.agreedAmount ?? linked.expectedBudget);
+    const budget = budgetString(linked.agreedAmount);
 
     let convertedProjectId: string | null = projectId;
     let convertedTaskId: string | null = null;

@@ -14,7 +14,10 @@ model Quote {
   customerRequestId String?      @map("customer_request_id") @db.Uuid
   projectId         String       @map("project_id") @db.Uuid
   status            QuoteStatus  @default(DRAFT)
-  paymentModel      PaymentModel @default(UPFRONT_100) @map("payment_model")
+  paymentModel           PaymentModel   @default(UPFRONT_100) @map("payment_model")
+  /// Admin-configured payment models the customer may choose before accepting.
+  /// Always includes paymentModel. Empty means only paymentModel is allowed.
+  allowedPaymentModels   PaymentModel[] @default([]) @map("allowed_payment_models")
   currency          String       @default("USD") @db.VarChar(3)
   taxRate           Decimal      @default(0) @map("tax_rate") @db.Decimal(5, 2)
   discountAmount    Decimal      @default(0) @map("discount_amount") @db.Decimal(14, 2)

@@ -36,6 +36,14 @@ const MODEL_TEMPLATES: Record<
     { kind: "ADVANCE", label: "Advance payment (30%)", percent: 30 },
     { kind: "FINAL", label: "Final payment (70%)", percent: 70 },
   ],
+  SPLIT_35_65: [
+    { kind: "ADVANCE", label: "Advance payment (35%)", percent: 35 },
+    { kind: "FINAL", label: "Final payment (65%)", percent: 65 },
+  ],
+  SPLIT_40_60: [
+    { kind: "ADVANCE", label: "Advance payment (40%)", percent: 40 },
+    { kind: "FINAL", label: "Final payment (60%)", percent: 60 },
+  ],
 };
 
 function allocateAmounts(
@@ -128,9 +136,86 @@ export const PAYMENT_MODEL_LABELS: Record<PaymentModelValue, string> = {
   UPFRONT_100: "100% Upfront",
   SPLIT_50_50: "50% Advance + 50% Final",
   SPLIT_30_70: "30% Advance + 70% Final",
+  SPLIT_35_65: "35% Advance + 65% Final",
+  SPLIT_40_60: "40% Advance + 60% Final",
   MILESTONE: "Milestone based",
   CUSTOM: "Custom payment schedule",
 };
+
+export const CUSTOMER_SELECTABLE_PAYMENT_MODELS: PaymentModelValue[] = [
+  "UPFRONT_100",
+  "SPLIT_50_50",
+  "SPLIT_30_70",
+  "SPLIT_35_65",
+  "SPLIT_40_60",
+];
+
+export function normalizeAllowedPaymentModels(
+  paymentModel: PaymentModelValue,
+  allowed?: PaymentModelValue[] | null,
+): PaymentModelValue[] {
+  const selected = allowed?.filter(Boolean) ?? [];
+  const unique = [...new Set([paymentModel, ...selected])];
+  if (paymentModel === "CUSTOM" || paymentModel === "MILESTONE") {
+    return [paymentModel];
+  }
+  return unique.filter(
+    (model) =>
+      model === paymentModel ||
+      CUSTOMER_SELECTABLE_PAYMENT_MODELS.includes(model),
+  );
+}
+
+export function quoteCommercialSummary(input: {
+  total: number;
+  paymentSchedule: Array<{
+    kind: string;
+    amount: number;
+    paymentStatus?: string | null;
+    paidAmount?: number | null;
+  }>;
+}): {
+  dealAmount: number;
+  advanceRequired: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: "PAID" | "PARTIALLY_PAID" | "PENDING";
+} {
+  const dealAmount = roundMoney(input.total);
+  const advance = input.paymentSchedule.find((item) => item.kind === "ADVANCE");
+  const advanceRequired = roundMoney(
+    advance?.amount ??
+      (input.paymentSchedule.length === 1
+        ? input.paymentSchedule[0]!.amount
+        : 0),
+  );
+  const paidAmount = roundMoney(
+    input.paymentSchedule.reduce((sum, item) => {
+      if (item.paidAmount != null && Number.isFinite(item.paidAmount)) {
+        return sum + item.paidAmount;
+      }
+      if (item.paymentStatus === "PAID") return sum + item.amount;
+      if (item.paymentStatus === "PARTIALLY_PAID") {
+        return sum + (item.paidAmount ?? 0);
+      }
+      return sum;
+    }, 0),
+  );
+  const remainingAmount = roundMoney(Math.max(0, dealAmount - paidAmount));
+  let paymentStatus: "PAID" | "PARTIALLY_PAID" | "PENDING" = "PENDING";
+  if (dealAmount > 0 && paidAmount + 0.009 >= dealAmount) {
+    paymentStatus = "PAID";
+  } else if (paidAmount > 0) {
+    paymentStatus = "PARTIALLY_PAID";
+  }
+  return {
+    dealAmount,
+    advanceRequired,
+    paidAmount,
+    remainingAmount,
+    paymentStatus,
+  };
+}
 
 export const PAYMENT_SCHEDULE_KIND_LABELS: Record<
   PaymentScheduleKindValue,

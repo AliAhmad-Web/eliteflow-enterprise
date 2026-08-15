@@ -7,6 +7,7 @@ import type {
   ListQuotesQueryInput,
   QuoteIdParamsInput,
   RejectQuoteInput,
+  SelectQuotePaymentModelInput,
   UpdateQuoteInput,
 } from "@enterprise/shared";
 
@@ -84,6 +85,17 @@ export class QuotesController {
     const params = req.params as unknown as QuoteIdParamsInput;
     const result = await quotesService.approve(params.id, await getActor(req));
     res.json(successResponse(result, "Quote approved successfully"));
+  }
+
+  async selectPaymentModel(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as QuoteIdParamsInput;
+    const body = req.body as SelectQuotePaymentModelInput;
+    const result = await quotesService.selectPaymentModel(
+      params.id,
+      body,
+      await getActor(req),
+    );
+    res.json(successResponse(result, "Payment option updated"));
   }
 
   async reject(req: Request, res: Response): Promise<void> {

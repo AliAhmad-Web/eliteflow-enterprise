@@ -46,6 +46,8 @@ export const PAYMENT_MODEL_OPTIONS: Array<{
   { value: "UPFRONT_100", label: "100% Upfront" },
   { value: "SPLIT_50_50", label: "50% Advance + 50% Final" },
   { value: "SPLIT_30_70", label: "30% Advance + 70% Final" },
+  { value: "SPLIT_35_65", label: "35% Advance + 65% Final" },
+  { value: "SPLIT_40_60", label: "40% Advance + 60% Final" },
   { value: "MILESTONE", label: "Milestone based" },
   { value: "CUSTOM", label: "Custom payment schedule" },
 ];

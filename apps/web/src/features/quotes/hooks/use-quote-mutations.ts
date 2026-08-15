@@ -5,10 +5,12 @@ import type {
   CreateQuoteInput,
   GenerateQuoteInvoicesInput,
   RejectQuoteInput,
+  SelectQuotePaymentModelInput,
   UpdateQuoteInput,
 } from "@enterprise/shared";
 
 import { INVOICES_QUERY_KEYS } from "@/features/invoices/types/invoices.types";
+import { PAYMENTS_QUERY_KEYS } from "@/features/payments/types/payments.types";
 
 import { quotesService } from "../services/quotes.service";
 import { QUOTES_QUERY_KEYS } from "../types/quotes.types";
@@ -19,6 +21,7 @@ async function invalidateQuotes(
 ) {
   await queryClient.invalidateQueries({ queryKey: QUOTES_QUERY_KEYS.all });
   await queryClient.invalidateQueries({ queryKey: INVOICES_QUERY_KEYS.all });
+  await queryClient.invalidateQueries({ queryKey: PAYMENTS_QUERY_KEYS.all });
   if (id) {
     await queryClient.invalidateQueries({
       queryKey: QUOTES_QUERY_KEYS.detail(id),
@@ -63,6 +66,22 @@ export function useApproveQuote() {
     mutationFn: (id: string) => quotesService.approve(id),
     onSuccess: async (_data, id) => {
       await invalidateQuotes(queryClient, id);
+    },
+  });
+}
+
+export function useSelectQuotePaymentModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+    }: {
+      id: string;
+      input: SelectQuotePaymentModelInput;
+    }) => quotesService.selectPaymentModel(id, input),
+    onSuccess: async (_data, variables) => {
+      await invalidateQuotes(queryClient, variables.id);
     },
   });
 }

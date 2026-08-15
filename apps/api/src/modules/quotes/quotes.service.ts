@@ -7,13 +7,16 @@ import {
   UserRole,
   calculatePaymentSchedule,
   calculateQuoteTotals,
+  normalizeAllowedPaymentModels,
   type CreateQuoteInput,
   type GenerateQuoteInvoicesInput,
   type ListQuotesQueryInput,
+  type PaymentModelValue,
   type QuoteDto,
   type QuoteListResponse,
   type QuoteStatusValue,
   type RejectQuoteInput,
+  type SelectQuotePaymentModelInput,
   type UpdateQuoteInput,
 } from "@enterprise/shared";
 
@@ -112,6 +115,11 @@ export class QuotesService {
       );
     }
 
+    const allowedPaymentModels = normalizeAllowedPaymentModels(
+      input.paymentModel,
+      input.allowedPaymentModels,
+    );
+
     const created = await quotesRepository.create({
       clientId: source.clientId,
       projectId: source.projectId,
@@ -120,6 +128,7 @@ export class QuotesService {
       description: emptyToNull(input.description),
       notes: emptyToNull(input.notes),
       paymentModel: input.paymentModel,
+      allowedPaymentModels,
       currency: input.currency || source.currency,
       taxRate: totals.taxRate,
       discountAmount: totals.discountAmount,
@@ -218,6 +227,10 @@ export class QuotesService {
           : emptyToNull(input.description),
       notes: input.notes === undefined ? undefined : emptyToNull(input.notes),
       paymentModel,
+      allowedPaymentModels: normalizeAllowedPaymentModels(
+        paymentModel,
+        input.allowedPaymentModels ?? existing.allowedPaymentModels,
+      ),
       currency: input.currency,
       taxRate: totals.taxRate,
       discountAmount: totals.discountAmount,
@@ -266,18 +279,27 @@ export class QuotesService {
       updatedById: actor.userId,
     });
 
+    await this.syncFinalDealAmount(updated);
+
     await logQuoteAuditEvent({
       userId: actor.userId,
       action: QUOTE_AUDIT_ACTIONS.SEND,
       resourceId: id,
-      metadata: { quoteNumber: updated.quoteNumber },
+      metadata: {
+        quoteNumber: updated.quoteNumber,
+        total: Number(updated.total),
+        requestedBudget: updated.customerRequest?.expectedBudget
+          ? Number(updated.customerRequest.expectedBudget)
+          : null,
+      },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
 
+    const amount = `${updated.currency} ${Number(updated.total).toFixed(2)}`;
     this.notifyCustomer(updated, {
-      title: "Quote ready for review",
-      body: `Quote ${updated.quoteNumber} for ${updated.project.name} is ready. Agreed deal amount: ${updated.currency} ${Number(updated.total).toFixed(2)}.`,
+      title: "Your project has been approved",
+      body: `Your project has been approved. We are ready to start your project. Final agreed deal amount: ${amount}. Please accept and start the project to continue with the advance payment.`,
     });
 
     return toQuoteDto(updated);
@@ -299,31 +321,125 @@ export class QuotesService {
       updatedById: actor.userId,
     });
 
-    if (updated.customerRequestId) {
-      await quotesRepository.syncRequestAgreedAmount(
-        updated.customerRequestId,
-        Number(updated.total),
-      );
-    }
+    await this.syncFinalDealAmount(updated);
+
+    await quotesRepository.createInvoicesForSchedule({
+      quote: updated,
+      scheduleItemIds: (updated.paymentSchedule ?? []).map((item) => item.id),
+      actorId: actor.userId,
+    });
+    await quotesRepository.issueDraftInvoicesForQuote(id, actor.userId);
+    const withInvoices = (await quotesRepository.findById(id, { all: true }))!;
 
     await logQuoteAuditEvent({
       userId: actor.userId,
       action: QUOTE_AUDIT_ACTIONS.APPROVE,
       resourceId: id,
       metadata: {
-        quoteNumber: updated.quoteNumber,
-        total: Number(updated.total),
-        requestedBudget: updated.customerRequest?.expectedBudget
-          ? Number(updated.customerRequest.expectedBudget)
+        quoteNumber: withInvoices.quoteNumber,
+        total: Number(withInvoices.total),
+        requestedBudget: withInvoices.customerRequest?.expectedBudget
+          ? Number(withInvoices.customerRequest.expectedBudget)
           : null,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
+    await logQuoteAuditEvent({
+      userId: actor.userId,
+      action: QUOTE_AUDIT_ACTIONS.INVOICE_CREATE,
+      resourceId: id,
+      metadata: { autoIssued: true },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
 
-    this.notifyAdmins(updated, {
-      title: "Quote approved",
-      body: `${actor.email} approved quote ${updated.quoteNumber} (${updated.currency} ${Number(updated.total).toFixed(2)}).`,
+    const amount = `${withInvoices.currency} ${Number(withInvoices.total).toFixed(2)}`;
+    this.notifyAdmins(withInvoices, {
+      title: "Customer accepted project",
+      body: `${actor.email} accepted and started the project. Final deal ${amount}. Advance payment is now due.`,
+    });
+    this.notifyCustomer(withInvoices, {
+      title: "Project accepted",
+      body: `Thank you. Your project is accepted. Final deal ${amount}. Please complete the required advance payment to start.`,
+    });
+
+    return toQuoteDto(withInvoices);
+  }
+
+  async selectPaymentModel(
+    id: string,
+    input: SelectQuotePaymentModelInput,
+    actor: QuoteActor,
+  ): Promise<QuoteDto> {
+    this.assertIsClient(actor);
+    const scope = await this.resolveScope(actor);
+    const existing = await quotesRepository.findById(id, scope);
+    if (!existing) {
+      throw new QuotesError("Quote not found", 404, QUOTES_ERROR_CODES.NOT_FOUND);
+    }
+    this.assertTransition(existing.status, "SENT", ["SENT"]);
+
+    const allowed = normalizeAllowedPaymentModels(
+      existing.paymentModel,
+      existing.allowedPaymentModels,
+    );
+    if (!allowed.includes(input.paymentModel)) {
+      throw new QuotesError(
+        "That payment option is not configured for this deal",
+        400,
+        QUOTES_ERROR_CODES.SCHEDULE_INVALID,
+        [{ field: "paymentModel", message: "Payment model is not allowed" }],
+      );
+    }
+    if (
+      (input.paymentModel === "CUSTOM" || input.paymentModel === "MILESTONE") &&
+      input.paymentModel !== existing.paymentModel
+    ) {
+      throw new QuotesError(
+        "Custom payment schedules can only be configured by EliteFlow",
+        400,
+        QUOTES_ERROR_CODES.SCHEDULE_INVALID,
+      );
+    }
+    if ((existing.paymentSchedule ?? []).some((item) => item.invoice && item.invoice.deletedAt == null)) {
+      throw new QuotesError(
+        "Payment terms cannot be changed after invoices exist",
+        409,
+        QUOTES_ERROR_CODES.INVALID_TRANSITION,
+      );
+    }
+
+    let schedule;
+    try {
+      schedule = calculatePaymentSchedule({
+        dealAmount: Number(existing.total),
+        paymentModel: input.paymentModel as PaymentModelValue,
+      });
+    } catch (error) {
+      throw new QuotesError(
+        error instanceof Error ? error.message : "Invalid payment schedule",
+        400,
+        QUOTES_ERROR_CODES.SCHEDULE_INVALID,
+      );
+    }
+
+    const updated = await quotesRepository.replaceSchedule(id, {
+      paymentModel: input.paymentModel,
+      schedule,
+      updatedById: actor.userId,
+    });
+
+    await logQuoteAuditEvent({
+      userId: actor.userId,
+      action: QUOTE_AUDIT_ACTIONS.SCHEDULE_UPDATE,
+      resourceId: id,
+      metadata: {
+        paymentModel: input.paymentModel,
+        total: Number(updated.total),
+      },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
     });
 
     return toQuoteDto(updated);
@@ -420,25 +536,41 @@ export class QuotesService {
       }
     }
 
-    const updated = await quotesRepository.createInvoicesForSchedule({
+    await quotesRepository.createInvoicesForSchedule({
       quote: existing,
       scheduleItemIds: requested,
       actorId: actor.userId,
     });
+    await quotesRepository.issueDraftInvoicesForQuote(id, actor.userId);
+    const issued = (await quotesRepository.findById(id, { all: true }))!;
 
     await logQuoteAuditEvent({
       userId: actor.userId,
       action: QUOTE_AUDIT_ACTIONS.INVOICE_CREATE,
       resourceId: id,
       metadata: {
-        quoteNumber: updated.quoteNumber,
+        quoteNumber: issued.quoteNumber,
         scheduleItemIds: requested,
       },
       ipAddress: actor.ipAddress,
       userAgent: actor.userAgent,
     });
 
-    return toQuoteDto(updated);
+    return toQuoteDto(issued);
+  }
+
+  private async syncFinalDealAmount(quote: QuoteWithRelations): Promise<void> {
+    const dealAmount = Number(quote.total);
+    if (quote.customerRequestId) {
+      await quotesRepository.syncRequestAgreedAmount(
+        quote.customerRequestId,
+        dealAmount,
+      );
+    }
+    await prisma.project.update({
+      where: { id: quote.projectId },
+      data: { budget: dealAmount },
+    });
   }
 
   private async resolveCommercialSource(input: CreateQuoteInput): Promise<{

@@ -20,6 +20,7 @@ import {
   listQuotesQuerySchema,
   quoteIdParamsSchema,
   rejectQuoteSchema,
+  selectQuotePaymentModelSchema,
   updateQuoteSchema,
 } from "./quotes.validation.js";
 
@@ -106,6 +107,21 @@ quotesRouter.post(
   }),
   validate(quoteIdParamsSchema, "params"),
   asyncHandler((req, res) => quotesController.approve(req, res)),
+);
+
+quotesRouter.post(
+  "/:id/payment-model",
+  authorizePermissions(PERMISSIONS.QUOTES_APPROVE),
+  authorizeRoles(UserRole.CLIENT),
+  rateLimit({
+    name: "quotes.selectPaymentModel",
+    max: 20,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(quoteIdParamsSchema, "params"),
+  validate(selectQuotePaymentModelSchema),
+  asyncHandler((req, res) => quotesController.selectPaymentModel(req, res)),
 );
 
 quotesRouter.post(

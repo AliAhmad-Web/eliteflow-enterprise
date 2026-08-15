@@ -38,6 +38,8 @@ const detailInclude = {
           invoiceNumber: true,
           status: true,
           paymentStatus: true,
+          paidAmount: true,
+          total: true,
           deletedAt: true,
         },
       },
@@ -131,6 +133,7 @@ export class QuotesRepository {
     description: string | null;
     notes: string | null;
     paymentModel: PaymentModel;
+    allowedPaymentModels?: PaymentModel[];
     currency: string;
     taxRate: number;
     discountAmount: number;
@@ -162,6 +165,7 @@ export class QuotesRepository {
         customerRequestId: input.customerRequestId,
         status: "DRAFT",
         paymentModel: input.paymentModel,
+        allowedPaymentModels: input.allowedPaymentModels ?? [input.paymentModel],
         currency: input.currency,
         taxRate: input.taxRate,
         discountAmount: input.discountAmount,
@@ -205,6 +209,7 @@ export class QuotesRepository {
       description?: string | null;
       notes?: string | null;
       paymentModel?: PaymentModel;
+      allowedPaymentModels?: PaymentModel[];
       currency?: string;
       taxRate?: number;
       discountAmount?: number;
@@ -232,6 +237,7 @@ export class QuotesRepository {
           description: input.description,
           notes: input.notes,
           paymentModel: input.paymentModel,
+          allowedPaymentModels: input.allowedPaymentModels,
           currency: input.currency,
           taxRate: input.taxRate,
           discountAmount: input.discountAmount,
@@ -275,6 +281,73 @@ export class QuotesRepository {
     });
 
     return (await this.findById(id, { all: true }))!;
+  }
+
+  async replaceSchedule(
+    id: string,
+    input: {
+      paymentModel: PaymentModel;
+      schedule: CalculatedScheduleItem[];
+      updatedById: string;
+    },
+  ): Promise<QuoteWithRelations> {
+    await prisma.$transaction(async (tx) => {
+      await tx.quote.update({
+        where: { id },
+        data: {
+          paymentModel: input.paymentModel,
+          updatedById: input.updatedById,
+        },
+      });
+      await tx.paymentScheduleItem.deleteMany({ where: { quoteId: id } });
+      await tx.paymentScheduleItem.createMany({
+        data: input.schedule.map((item) => ({
+          quoteId: id,
+          kind: item.kind,
+          label: item.label,
+          percent: item.percent,
+          amount: item.amount,
+          dueDate: item.dueDate ? new Date(item.dueDate) : null,
+          sortOrder: item.sortOrder,
+        })),
+      });
+    });
+    return (await this.findById(id, { all: true }))!;
+  }
+
+  async issueDraftInvoicesForQuote(
+    quoteId: string,
+    actorId: string,
+  ): Promise<void> {
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        quoteId,
+        deletedAt: null,
+        status: "DRAFT",
+      },
+      select: { id: true },
+    });
+    for (const invoice of invoices) {
+      await prisma.$transaction(async (tx) => {
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: "SENT",
+            issuedAt: new Date(),
+            updatedById: actorId,
+          },
+        });
+        await tx.invoicePaymentHistory.create({
+          data: {
+            invoiceId: invoice.id,
+            status: "SENT",
+            amount: null,
+            note: "Issued after customer accepted the project",
+            actorId,
+          },
+        });
+      }, { maxWait: 10_000, timeout: 20_000 });
+    }
   }
 
   async updateStatus(
@@ -388,7 +461,7 @@ export class QuotesRepository {
         });
         invoiceNumber = incrementDocumentNumber(invoiceNumber);
       }
-    });
+    }, { maxWait: 10_000, timeout: 30_000 });
 
     return (await this.findById(input.quote.id, { all: true }))!;
   }

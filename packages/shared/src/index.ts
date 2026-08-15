@@ -1794,6 +1794,7 @@ export {
   quoteSchema,
   quoteStatusSchema,
   rejectQuoteSchema,
+  selectQuotePaymentModelSchema,
   updateQuoteSchema,
 } from "./schemas/quotes.schema.js";
 
@@ -1810,13 +1811,17 @@ export type {
   QuoteItemDto,
   QuoteStatusValue,
   RejectQuoteInput,
+  SelectQuotePaymentModelInput,
   UpdateQuoteInput,
 } from "./schemas/quotes.schema.js";
 
 export {
+  CUSTOMER_SELECTABLE_PAYMENT_MODELS,
   PAYMENT_MODEL_LABELS,
   PAYMENT_SCHEDULE_KIND_LABELS,
   calculatePaymentSchedule,
+  normalizeAllowedPaymentModels,
+  quoteCommercialSummary,
 } from "./utils/payment-schedule.js";
 
 export type { CalculatedScheduleItem } from "./utils/payment-schedule.js";

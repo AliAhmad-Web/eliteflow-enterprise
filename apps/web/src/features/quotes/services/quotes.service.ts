@@ -6,6 +6,7 @@ import {
   type QuoteDto,
   type QuoteListResponse,
   type RejectQuoteInput,
+  type SelectQuotePaymentModelInput,
   type UpdateQuoteInput,
 } from "@enterprise/shared";
 
@@ -65,6 +66,14 @@ export const quotesService = {
     return apiRequest<QuoteDto>(`${QUOTES_API_PREFIX}/${id}/approve`, {
       method: "POST",
       body: {},
+      auth: true,
+    });
+  },
+
+  selectPaymentModel(id: string, input: SelectQuotePaymentModelInput) {
+    return apiRequest<QuoteDto>(`${QUOTES_API_PREFIX}/${id}/payment-model`, {
+      method: "POST",
+      body: input,
       auth: true,
     });
   },
