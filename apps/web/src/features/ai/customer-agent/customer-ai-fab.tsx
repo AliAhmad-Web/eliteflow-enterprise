@@ -29,14 +29,14 @@ export function CustomerAiFab({ onClick, open }: CustomerAiFabProps) {
             "ai-agent-fab group fixed z-40 size-14 rounded-full p-0",
             "bottom-20 right-4 sm:bottom-24 sm:right-6",
             "border border-primary/35 bg-primary text-primary-foreground",
-            "shadow-[0_10px_28px_color-mix(in_srgb,var(--primary)_28%,transparent)]",
+            "shadow-[0_8px_22px_color-mix(in_srgb,var(--primary)_22%,transparent)]",
             "hover:bg-primary/92 hover:border-primary/50",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             open && "ai-agent-fab-open ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
           )}
         >
           <span
-            className="ai-agent-fab-ring pointer-events-none absolute inset-[-5px] rounded-full"
+            className="ai-agent-fab-glow pointer-events-none absolute inset-[-10px] rounded-full"
             aria-hidden="true"
           />
           <span className="relative flex size-full items-center justify-center">

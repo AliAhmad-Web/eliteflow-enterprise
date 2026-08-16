@@ -20,6 +20,7 @@ import {
   OAUTH_MFA_METHOD_STORAGE_KEY,
   OAUTH_OTP_SESSION_STORAGE_KEY,
   OAUTH_PROVIDER_STORAGE_KEY,
+  OAUTH_ACCOUNT_REQUIRED_STORAGE_KEY,
   OAUTH_SIGNUP_ERROR_STORAGE_KEY,
   type OAuthFlowIntent,
 } from "../constants/oauth";
@@ -355,6 +356,24 @@ export function OAuthCallbackHandler() {
           window.location.assign(
             `${ROUTES.LOGIN}?oauthExisting=1&provider=${providerHint}`,
           );
+          return;
+        }
+
+        if (
+          err instanceof ApiClientError &&
+          err.code === AUTH_ERROR_CODES.OAUTH_ACCOUNT_NOT_FOUND
+        ) {
+          sessionStorage.setItem(
+            OAUTH_ACCOUNT_REQUIRED_STORAGE_KEY,
+            err.message,
+          );
+          if (providerHint) {
+            sessionStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, providerHint);
+            localStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, providerHint);
+          }
+          sessionStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+          localStorage.removeItem(OAUTH_INTENT_STORAGE_KEY);
+          window.location.assign(`${ROUTES.SIGNUP}?oauthRequired=1`);
           return;
         }
 

@@ -117,8 +117,8 @@ export function SocialLoginButtons({ mode = "login" }: SocialLoginButtonsProps) 
 
       <p className="text-center text-xs text-muted-foreground">
         {mode === "signup"
-          ? "Social sign-up creates a client account with a verified email."
-          : "Use a linked Google or GitHub account to sign in securely."}
+          ? "Create your EliteFlow account first. After that, you can continue with Google or GitHub on sign in."
+          : "Use a linked Google or GitHub account to sign in. New users must create an EliteFlow account first."}
       </p>
     </div>
   );

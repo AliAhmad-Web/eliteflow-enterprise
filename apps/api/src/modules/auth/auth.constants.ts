@@ -71,6 +71,8 @@ export const AUTH_MESSAGES = {
     "Cannot unlink the only sign-in method. Set a password or link another provider first.",
   OAUTH_SIGNUP_EMAIL_EXISTS:
     "An account with this email already exists. Please sign in instead.",
+  OAUTH_ACCOUNT_NOT_FOUND:
+    "Account not found. Please create an EliteFlow account first, then continue with Google or GitHub.",
   SESSION_NOT_FOUND: "Session not found",
   SESSION_CURRENT_REVOKE_DENIED:
     "Cannot revoke the current session from this action. Use logout instead.",

@@ -3,8 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signupSchema, type SignupInput } from "@enterprise/shared";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { executeRecaptcha } from "@/features/security/lib/recaptcha";
 import { getApiErrorMessage } from "@/services/api/api-error";
 import { RECAPTCHA } from "@enterprise/shared";
 
+import { OAUTH_ACCOUNT_REQUIRED_STORAGE_KEY } from "../constants/oauth";
 import { useSignup } from "../hooks/use-signup";
 import { getFieldErrorMessage } from "../utils/form-errors";
 import { AuthAlert } from "./auth-alert";
@@ -22,10 +23,29 @@ import { FormFieldError } from "./form-field-error";
 import { PasswordInput } from "./password-input";
 import { SocialLoginButtons } from "./social-login-buttons";
 
+const OAUTH_ACCOUNT_REQUIRED_FALLBACK =
+  "Account not found. Please create an EliteFlow account first, then continue with Google or GitHub.";
+
 export function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const signupMutation = useSignup();
   const [apiError, setApiError] = useState<string | null>(null);
+  const [oauthRequiredMessage, setOauthRequiredMessage] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (searchParams.get("oauthRequired") !== "1") {
+      return;
+    }
+
+    const stored =
+      sessionStorage.getItem(OAUTH_ACCOUNT_REQUIRED_STORAGE_KEY) ??
+      OAUTH_ACCOUNT_REQUIRED_FALLBACK;
+    setOauthRequiredMessage(stored);
+    sessionStorage.removeItem(OAUTH_ACCOUNT_REQUIRED_STORAGE_KEY);
+  }, [searchParams]);
 
   const {
     register,
@@ -80,6 +100,14 @@ export function SignupForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {oauthRequiredMessage ? (
+        <AuthAlert
+          variant="error"
+          title="Create an EliteFlow account first"
+          description={oauthRequiredMessage}
+        />
+      ) : null}
+
       {apiError ? (
         <AuthAlert variant="error" title="Sign up failed" description={apiError} />
       ) : null}

@@ -600,34 +600,75 @@
     }
   }
 
+  /* Soft continuous breathe: scale + glow. Pauses while drawer is open. */
   @keyframes ai-agent-fab-breathe {
     0%,
-    100% {
-      opacity: 0.28;
+    18% {
       transform: scale(1);
     }
     50% {
-      opacity: 0.7;
-      transform: scale(1.08);
+      transform: scale(1.06);
+    }
+    82%,
+    100% {
+      transform: scale(1);
     }
   }
 
-  .ai-agent-fab-ring {
-    border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
-    box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 28%, transparent);
-    animation: ai-agent-fab-breathe 3.6s ease-in-out infinite;
+  @keyframes ai-agent-fab-glow {
+    0%,
+    18% {
+      opacity: 0.45;
+      transform: scale(1);
+      filter: blur(10px);
+    }
+    50% {
+      opacity: 0.72;
+      transform: scale(1.12);
+      filter: blur(14px);
+    }
+    82%,
+    100% {
+      opacity: 0.45;
+      transform: scale(1);
+      filter: blur(10px);
+    }
   }
 
-  .ai-agent-fab-open .ai-agent-fab-ring {
+  .ai-agent-fab {
+    animation: ai-agent-fab-breathe 3.4s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .ai-agent-fab-glow {
+    background: color-mix(in srgb, var(--primary) 42%, transparent);
+    box-shadow: 0 0 28px color-mix(in srgb, var(--primary) 35%, transparent);
+    animation: ai-agent-fab-glow 3.4s ease-in-out infinite;
+    will-change: transform, opacity, filter;
+  }
+
+  .ai-agent-fab-open {
     animation: none;
-    opacity: 0.35;
+    transform: scale(1);
+  }
+
+  .ai-agent-fab-open .ai-agent-fab-glow {
+    animation: none;
+    opacity: 0.38;
+    transform: scale(1);
+    filter: blur(10px);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ai-agent-fab-ring {
-      animation: none;
+    .ai-agent-fab,
+    .ai-agent-fab-glow {
+      animation: none !important;
+      transform: none !important;
+    }
+
+    .ai-agent-fab-glow {
       opacity: 0.4;
-      transform: none;
+      filter: blur(10px);
     }
   }
 

@@ -1495,84 +1495,12 @@ export class AuthService {
       );
     }
 
-    const clientRole = await authRepository.getDefaultClientRole();
-    if (!clientRole) {
-      throw new AuthError(
-        "Default client role is not configured",
-        500,
-        AUTH_ERROR_CODES.INTERNAL_ERROR,
-      );
-    }
-
-    try {
-      const created = await authRepository.createUser({
-        email,
-        passwordHash: null,
-        firstName: identity.firstName,
-        lastName: identity.lastName,
-        roleId: clientRole.id,
-        status: UserStatus.ACTIVE,
-        emailVerified: true,
-        avatarUrl: identity.avatarUrl,
-      });
-
-      await authRepository.upsertOAuthAccountForUser({
-        userId: created.id,
-        provider,
-        providerAccountId: identity.providerAccountId,
-        accessToken: identity.accessToken,
-        refreshToken: identity.refreshToken,
-        expiresAt: identity.expiresAt,
-      });
-
-      try {
-        await ensurePortalCompanyLink(created.id, {
-          userId: created.id,
-          ipAddress: context.ipAddress,
-          userAgent: context.userAgent,
-        });
-      } catch (error) {
-        console.error(
-          "[auth] OAuth signup succeeded but portal company link failed:",
-          error,
-        );
-      }
-
-      // Fire-and-forget: integrity audit must not block new-email OAuth signup.
-      scheduleAuthAuditEvent({
-        userId: created.id,
-        action: AUTH_AUDIT_ACTIONS.OAUTH_SIGNUP,
-        resourceId: created.id,
-        metadata: { provider: identity.provider, email },
-        context,
-      });
-
-      const linked = await authRepository.findUserById(created.id);
-      return linked ?? created;
-    } catch (error) {
-      // Concurrent signup/OAuth race: email unique constraint.
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        error.code === "P2002"
-      ) {
-        if (intent === "signup") {
-          this.assertOAuthSignupEmailAvailable();
-        }
-
-        const racedUser = await authRepository.findUserByEmail(email);
-        if (racedUser) {
-          return this.linkOAuthIdentityToExistingUser(
-            racedUser,
-            { ...identity, email },
-            context,
-          );
-        }
-      }
-
-      throw error;
-    }
+    // Existing-account-only: never auto-provision EliteFlow users via Google/GitHub.
+    throw new AuthError(
+      AUTH_MESSAGES.OAUTH_ACCOUNT_NOT_FOUND,
+      404,
+      AUTH_ERROR_CODES.OAUTH_ACCOUNT_NOT_FOUND,
+    );
   }
 
   private async linkOAuthIdentityToExistingUser(
