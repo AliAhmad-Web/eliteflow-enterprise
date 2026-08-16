@@ -22,6 +22,7 @@ export {
   isAiUiShortcutsEnabled,
   isAiUiSkeletonsEnabled,
   isAiUiStreamControlsEnabled,
+  isAiCustomerChatEnabled,
 } from "./ai-ui-feature-flags";
 export {
   getAiDocsFeatureFlags,

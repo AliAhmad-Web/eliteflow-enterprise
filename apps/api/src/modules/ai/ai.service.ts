@@ -50,6 +50,13 @@ import {
   type AiGenerateParams,
 } from "./providers/index.js";
 import { apiKeyProviderService } from "../integrations/api-keys/api-key-provider.service.js";
+import {
+  CUSTOMER_AGENT_ID,
+  customerChatSurface,
+  isCustomerAiRole,
+  resolveCustomerPageEntityRefs,
+} from "./foundation/customer/index.js";
+import type { AiContextHints } from "./foundation/context/resolve-active-context.js";
 
 export interface AiActor {
   userId: string;
@@ -59,6 +66,27 @@ export interface AiActor {
   sessionId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+}
+
+function buildChatContextHints(
+  input: AiChatRequestInput,
+  actor: AiActor,
+): AiContextHints {
+  const customer = isCustomerAiRole(actor.role);
+  return {
+    surface: customer ? customerChatSurface() : "ASSISTANT",
+    module: customer ? "portal" : "ai",
+    conversationId: input.conversationId ?? null,
+    mode: input.mode,
+    role: actor.role,
+    email: actor.email,
+    entityRefs: customer
+      ? [...resolveCustomerPageEntityRefs(input.pageContext)]
+      : [],
+    permissions: actor.permissions ? [...actor.permissions] : undefined,
+    sessionId: actor.sessionId ?? null,
+    agentId: customer ? CUSTOMER_AGENT_ID : null,
+  };
 }
 
 async function recordAiProviderUsage(
@@ -444,17 +472,7 @@ export class AiService {
           conversationHistory,
           prompt: input.message,
           mode: input.mode,
-          contextHints: {
-            surface: "ASSISTANT",
-            module: "ai",
-            conversationId: input.conversationId ?? null,
-            mode: input.mode,
-            role: actor.role,
-            email: actor.email,
-            entityRefs: [],
-            permissions: actor.permissions ? [...actor.permissions] : undefined,
-            sessionId: actor.sessionId ?? null,
-          },
+          contextHints: buildChatContextHints(input, actor),
         },
       );
     } catch (error) {
@@ -501,17 +519,7 @@ export class AiService {
           prompt: input.message,
           mode: input.mode,
           streaming: true,
-          contextHints: {
-            surface: "ASSISTANT",
-            module: "ai",
-            conversationId: input.conversationId ?? null,
-            mode: input.mode,
-            role: actor.role,
-            email: actor.email,
-            entityRefs: [],
-            permissions: actor.permissions ? [...actor.permissions] : undefined,
-            sessionId: actor.sessionId ?? null,
-          },
+          contextHints: buildChatContextHints(input, actor),
         },
       );
     } catch (error) {

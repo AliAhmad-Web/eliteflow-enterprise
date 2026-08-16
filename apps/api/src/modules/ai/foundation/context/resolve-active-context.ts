@@ -65,6 +65,12 @@ const ENTITY_READ_PERMISSION: Record<string, string> = {
   document: PERMISSIONS.AI_USE,
   ai_document: PERMISSIONS.AI_USE,
   conversation: PERMISSIONS.AI_USE,
+  request: PERMISSIONS.CUSTOMER_REQUESTS_READ,
+  customer_request: PERMISSIONS.CUSTOMER_REQUESTS_READ,
+  quote: PERMISSIONS.QUOTES_READ,
+  quotes: PERMISSIONS.QUOTES_READ,
+  payment: PERMISSIONS.PAYMENTS_READ,
+  payments: PERMISSIONS.PAYMENTS_READ,
 };
 
 function normalizeEntityType(type: string): string {
@@ -88,6 +94,8 @@ function resolveModule(hints: AiContextHints | null | undefined): string | null 
       return "whiteboards";
     case "REPORTS":
       return "reports";
+    case "CUSTOMER":
+      return "portal";
     default:
       return null;
   }

@@ -10,12 +10,21 @@ import { DashboardRouteWarmup } from "@/components/layout/dashboard-route-warmup
 import { KeepAliveOutlet } from "@/components/layout/keep-alive-outlet";
 import { NavigationProgress } from "@/components/layout/navigation-progress";
 import { RightPanel } from "@/components/layout/right-panel";
+import { useRole } from "@/features/rbac/hooks/use-permissions";
 import { useUiStore } from "@/stores/ui.store";
 
 const MustChangePasswordGate = dynamic(
   () =>
     import("@/features/auth/components/must-change-password-gate").then(
       (m) => m.MustChangePasswordGate,
+    ),
+  { ssr: false, loading: () => null },
+);
+
+const CustomerAiAgentHost = dynamic(
+  () =>
+    import("@/features/ai/customer-agent/customer-ai-agent").then(
+      (m) => m.CustomerAiAgentHost,
     ),
   { ssr: false, loading: () => null },
 );
@@ -27,6 +36,7 @@ interface DashboardShellProps {
 function DashboardShellComponent({ children }: DashboardShellProps) {
   const rightPanelOpen = useUiStore((state) => state.rightPanelOpen);
   const toggleRightPanel = useUiStore((state) => state.toggleRightPanel);
+  const { isClient } = useRole();
 
   return (
     <div className="flex min-h-svh bg-background">
@@ -56,6 +66,7 @@ function DashboardShellComponent({ children }: DashboardShellProps) {
           <RightPanel open={rightPanelOpen} onToggle={toggleRightPanel} />
         </div>
       </div>
+      {isClient ? <CustomerAiAgentHost /> : null}
     </div>
   );
 }

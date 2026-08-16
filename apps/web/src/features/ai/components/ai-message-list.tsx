@@ -18,6 +18,8 @@ export interface AiMessageListProps {
   bottomRef: RefObject<HTMLDivElement | null>;
   useSkeletons?: boolean;
   streamStatusText?: string | null;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
 export function AiMessageList({
@@ -29,6 +31,8 @@ export function AiMessageList({
   bottomRef,
   useSkeletons = false,
   streamStatusText = null,
+  emptyTitle = "Ask EliteFlow AI",
+  emptyDescription = "Choose a mode, type a prompt, and get structured help for emails, proposals, summaries, and more.",
 }: AiMessageListProps) {
   return (
     <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 scrollbar-thin">
@@ -45,8 +49,8 @@ export function AiMessageList({
 
       {!selectedId && messages.length === 0 ? (
         <EmptyState
-          title="Ask EliteFlow AI"
-          description="Choose a mode, type a prompt, and get structured help for emails, proposals, summaries, and more."
+          title={emptyTitle}
+          description={emptyDescription}
           className="border-0 bg-transparent"
         />
       ) : null}

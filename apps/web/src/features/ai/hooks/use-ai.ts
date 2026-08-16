@@ -11,19 +11,23 @@ import { getPerformanceListStaleTimeMs } from "@/features/performance";
 import { aiService } from "../services/ai.service";
 import { AI_QUERY_KEYS } from "../types/ai.types";
 
-export function useAiConversations(query: ListAiConversationsQueryInput) {
+export function useAiConversations(
+  query: ListAiConversationsQueryInput,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: AI_QUERY_KEYS.conversationList(query),
     queryFn: () => aiService.listConversations(query),
     staleTime: getPerformanceListStaleTimeMs(),
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useAiConversation(id: string | null) {
+export function useAiConversation(id: string | null, enabled = true) {
   return useQuery({
     queryKey: AI_QUERY_KEYS.conversation(id ?? "none"),
     queryFn: () => aiService.getConversation(id!),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && enabled,
     staleTime: getPerformanceListStaleTimeMs(),
     // Do not keep previous conversation while switching to "new chat" (id=null).
     placeholderData: undefined,

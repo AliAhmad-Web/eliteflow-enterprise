@@ -33,6 +33,7 @@ export {
   isAiUiShortcutsEnabled,
   isAiUiSkeletonsEnabled,
   isAiUiStreamControlsEnabled,
+  isAiCustomerChatEnabled,
   parseEnvFlag,
 } from "./feature-flags";
 export type {

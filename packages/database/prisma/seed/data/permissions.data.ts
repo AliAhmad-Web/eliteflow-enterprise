@@ -288,6 +288,12 @@ export const PERMISSIONS: PermissionSeedDefinition[] = [
     description: "Use AI assistant and document generation features",
   },
   {
+    key: "ai:customer",
+    resource: "ai",
+    action: "customer",
+    description: "Use the customer portal AI chat (no staff tools or documents)",
+  },
+  {
     key: "notifications:read",
     resource: "notifications",
     action: "read",

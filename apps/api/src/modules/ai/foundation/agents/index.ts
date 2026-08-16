@@ -15,6 +15,7 @@ export {
   ANALYSIS_AGENT,
   DOCUMENT_AGENT,
   WORKFLOW_AGENT,
+  CUSTOMER_AGENT,
 } from "./builtin-agents.js";
 export type {
   AiAgentContext,

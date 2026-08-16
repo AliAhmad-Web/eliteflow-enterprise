@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { MAIN_NAVIGATION } from "@/config/navigation.config";
 import { ROUTES } from "@/constants/routes";
 import { filterNavigationByCommunicationFlags } from "@/features/communication/utils/filter-communication-nav";
+import { PERMISSIONS } from "@enterprise/shared";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
 import { filterNavigationByAccess } from "@/features/rbac/utils/filter-navigation";
 import { useClientWorkspaceAccess } from "@/features/quotes/hooks/use-client-workspace-access";
@@ -18,8 +19,9 @@ import { useUiStore } from "@/stores/ui.store";
 export function MobileNav() {
   const mobileSidebarOpen = useUiStore((state) => state.mobileSidebarOpen);
   const setMobileSidebarOpen = useUiStore((state) => state.setMobileSidebarOpen);
-  const { subject } = usePermissions();
+  const { subject, hasPermission } = usePermissions();
   const { unlocked } = useClientWorkspaceAccess();
+  const canUseStaffAi = hasPermission(PERMISSIONS.AI_USE);
 
   const sections = useMemo(
     () =>
@@ -59,6 +61,7 @@ export function MobileNav() {
             onNavigate={() => setMobileSidebarOpen(false)}
           />
           <div className="mt-auto space-y-2 border-t border-sidebar-border pt-4">
+            {canUseStaffAi ? (
             <Button
               asChild
               variant="secondary"
@@ -72,6 +75,7 @@ export function MobileNav() {
                 AI Assistant
               </PrefetchLink>
             </Button>
+            ) : null}
             <Button
               asChild
               className="w-full justify-start touch-target-auto"

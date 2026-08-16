@@ -33,6 +33,28 @@ export type AiAssistModeValue = z.infer<typeof aiAssistModeSchema>;
 export type AiDocumentTypeValue = z.infer<typeof aiDocumentTypeSchema>;
 export type AiMessageRoleValue = z.infer<typeof aiMessageRoleSchema>;
 
+export const AI_PAGE_CONTEXT_ENTITY_TYPES = [
+  "request",
+  "quote",
+  "payment",
+  "invoice",
+  "project",
+  "task",
+] as const;
+
+export const aiPageContextEntityTypeSchema = z.enum(
+  AI_PAGE_CONTEXT_ENTITY_TYPES,
+);
+
+/** Route hint only — never trust names, amounts, or ownership from the client. */
+export const aiPageContextSchema = z.object({
+  path: z.string().trim().max(300).optional(),
+  entityType: aiPageContextEntityTypeSchema.optional(),
+  entityId: uuidSchema.optional(),
+});
+
+export type AiPageContextInput = z.infer<typeof aiPageContextSchema>;
+
 export const aiChatRequestSchema = z.object({
   conversationId: uuidSchema.optional(),
   message: z
@@ -41,6 +63,7 @@ export const aiChatRequestSchema = z.object({
     .min(1, "Message is required")
     .max(8000, "Message must not exceed 8000 characters"),
   mode: aiAssistModeSchema.optional().default("ASK"),
+  pageContext: aiPageContextSchema.optional(),
 });
 
 export type AiChatRequestInput = z.infer<typeof aiChatRequestSchema>;

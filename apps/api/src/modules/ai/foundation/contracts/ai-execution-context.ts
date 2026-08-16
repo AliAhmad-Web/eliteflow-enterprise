@@ -10,6 +10,7 @@ export type AiFoundationSurface =
   | "COMMUNICATION"
   | "WHITEBOARD"
   | "REPORTS"
+  | "CUSTOMER"
   | "UNKNOWN";
 
 export interface AiExecutionContext {

@@ -116,4 +116,10 @@ export const AI_TOOL_CATALOG: readonly AiToolDefinition[] = [
     modules: ["team", "ai"],
     surfaces: ["ASSISTANT"],
   },
+  {
+    id: "customer_portal_status",
+    requiredPermissions: [PERMISSIONS.AI_CUSTOMER],
+    modules: ["portal", "ai"],
+    surfaces: ["CUSTOMER"],
+  },
 ] as const;

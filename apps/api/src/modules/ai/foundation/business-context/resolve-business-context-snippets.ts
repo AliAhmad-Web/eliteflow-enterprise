@@ -20,6 +20,10 @@ import {
   tasksRepository,
   type TaskAccessScope,
 } from "../../../tasks/tasks.repository.js";
+import { customerRequestsService } from "../../../customer-requests/customer-requests.service.js";
+import { invoicesService } from "../../../invoices/invoices.service.js";
+import { paymentsService } from "../../../payments/payments.service.js";
+import { quotesService } from "../../../quotes/quotes.service.js";
 
 const MAX_ENTITIES = 3;
 const MAX_SUMMARY_CHARS = 220;
@@ -59,6 +63,18 @@ function requiredPermission(type: string): string | null {
     case "document":
     case "ai_document":
       return PERMISSIONS.AI_USE;
+    case "request":
+    case "customer_request":
+      return PERMISSIONS.CUSTOMER_REQUESTS_READ;
+    case "quote":
+    case "quotes":
+      return PERMISSIONS.QUOTES_READ;
+    case "payment":
+    case "payments":
+      return PERMISSIONS.PAYMENTS_READ;
+    case "invoice":
+    case "invoices":
+      return PERMISSIONS.INVOICES_READ;
     default:
       return null;
   }
@@ -191,6 +207,119 @@ async function summarizeTask(
   };
 }
 
+async function summarizeRequest(
+  ref: AiContextEntityRef,
+  actor: {
+    userId: string;
+    role: string;
+    email: string;
+  },
+): Promise<AiContextSnippet | null> {
+  const request = await customerRequestsService.getById(ref.id, actor);
+  const text = truncate(
+    [
+      `Request: ${request.title}`,
+      `Status: ${request.status}`,
+      `Type: ${request.type}`,
+      request.agreedAmount != null
+        ? `Agreed: ${request.agreedAmount} ${request.currency}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  );
+  return {
+    type: "request",
+    title: request.title,
+    text,
+    sourcePermission: PERMISSIONS.CUSTOMER_REQUESTS_READ,
+  };
+}
+
+async function summarizeQuote(
+  ref: AiContextEntityRef,
+  actor: {
+    userId: string;
+    role: string;
+    email: string;
+  },
+): Promise<AiContextSnippet | null> {
+  const quote = await quotesService.getById(ref.id, actor);
+  const text = truncate(
+    [
+      `Quote: ${quote.quoteNumber}`,
+      `Status: ${quote.status}`,
+      `Deal: ${quote.dealAmount} ${quote.currency}`,
+      `Advance: ${quote.advanceRequired}`,
+      `Paid: ${quote.paidAmount}`,
+      `Remaining: ${quote.remainingAmount}`,
+      `Workspace: ${quote.workspaceUnlocked ? "unlocked" : "locked"}`,
+    ].join(" | "),
+  );
+  return {
+    type: "quote",
+    title: quote.quoteNumber,
+    text,
+    sourcePermission: PERMISSIONS.QUOTES_READ,
+  };
+}
+
+async function summarizePayment(
+  ref: AiContextEntityRef,
+  actor: {
+    userId: string;
+    role: string;
+    email: string;
+  },
+): Promise<AiContextSnippet | null> {
+  const payment = await paymentsService.getById(ref.id, actor);
+  const text = truncate(
+    [
+      `Payment: ${payment.paymentNumber}`,
+      `Status: ${payment.status}`,
+      `Amount: ${payment.amount} ${payment.currency}`,
+      `Method: ${payment.method}`,
+      payment.customerReference
+        ? `Reference: ${payment.customerReference}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  );
+  return {
+    type: "payment",
+    title: payment.paymentNumber,
+    text,
+    sourcePermission: PERMISSIONS.PAYMENTS_READ,
+  };
+}
+
+async function summarizeInvoice(
+  ref: AiContextEntityRef,
+  actor: {
+    userId: string;
+    role: string;
+    email: string;
+  },
+): Promise<AiContextSnippet | null> {
+  const invoice = await invoicesService.getById(ref.id, actor);
+  const text = truncate(
+    [
+      `Invoice: ${invoice.invoiceNumber}`,
+      `Status: ${invoice.status}`,
+      `Payment: ${invoice.paymentStatus}`,
+      `Total: ${invoice.total} ${invoice.currency}`,
+      `Paid: ${invoice.paidAmount}`,
+    ].join(" | "),
+  );
+  return {
+    type: "invoice",
+    title: invoice.invoiceNumber,
+    text,
+    sourcePermission: PERMISSIONS.INVOICES_READ,
+  };
+}
+
 async function summarizeAiDocument(
   ref: AiContextEntityRef,
   userId: string,
@@ -254,6 +383,11 @@ export async function resolveBusinessContextSnippets(
 
   const projectScope = await resolveProjectScope(userId, role);
   const taskScope = await resolveTaskScope(userId, role);
+  const commercialActor = {
+    userId,
+    role,
+    email: input.activeContext.user?.email?.trim() || "unknown@eliteflow.local",
+  };
   const snippets: AiContextSnippet[] = [];
 
   for (const ref of refs) {
@@ -273,6 +407,14 @@ export async function resolveBusinessContextSnippets(
         snippet = await summarizeTask(ref, taskScope);
       } else if (type === "document" || type === "ai_document") {
         snippet = await summarizeAiDocument(ref, userId);
+      } else if (type === "request" || type === "customer_request") {
+        snippet = await summarizeRequest(ref, commercialActor);
+      } else if (type === "quote" || type === "quotes") {
+        snippet = await summarizeQuote(ref, commercialActor);
+      } else if (type === "payment" || type === "payments") {
+        snippet = await summarizePayment(ref, commercialActor);
+      } else if (type === "invoice" || type === "invoices") {
+        snippet = await summarizeInvoice(ref, commercialActor);
       } else if (type === "report" || type === "reports") {
         // No single report-record summary API yet — skip rather than over-fetch analytics.
         continue;

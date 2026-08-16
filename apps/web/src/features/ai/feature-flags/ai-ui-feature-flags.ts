@@ -18,6 +18,10 @@ export function isAiUiEnterpriseShellEnabled(): boolean {
   return parseEnvFlag(process.env.NEXT_PUBLIC_AI_UI_ENTERPRISE_SHELL, false);
 }
 
+export function isAiCustomerChatEnabled(): boolean {
+  return parseEnvFlag(process.env.NEXT_PUBLIC_AI_CUSTOMER_CHAT, true);
+}
+
 export function isAiUiStreamControlsEnabled(): boolean {
   return parseEnvFlag(process.env.NEXT_PUBLIC_AI_UI_STREAM_CONTROLS, false);
 }

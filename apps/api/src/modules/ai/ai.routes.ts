@@ -4,6 +4,7 @@ import { PERMISSIONS, RATE_LIMIT } from "@enterprise/shared";
 
 import {
   authenticate,
+  authorizeAnyPermission,
   authorizePermissions,
 } from "../../shared/authorization.js";
 import {
@@ -27,10 +28,15 @@ import {
 const aiRouter = Router();
 
 aiRouter.use(authenticate);
-aiRouter.use(authorizePermissions(PERMISSIONS.AI_USE));
+
+const authorizeAiChat = authorizeAnyPermission(
+  PERMISSIONS.AI_USE,
+  PERMISSIONS.AI_CUSTOMER,
+);
 
 aiRouter.get(
   "/conversations",
+  authorizeAiChat,
   rateLimit({
     name: "ai.conversations.list",
     ...RATE_LIMIT.GLOBAL_API,
@@ -42,6 +48,7 @@ aiRouter.get(
 
 aiRouter.get(
   "/conversations/:id",
+  authorizeAiChat,
   rateLimit({
     name: "ai.conversations.get",
     ...RATE_LIMIT.GLOBAL_API,
@@ -53,6 +60,7 @@ aiRouter.get(
 
 aiRouter.delete(
   "/conversations/:id",
+  authorizeAiChat,
   rateLimit({
     name: "ai.conversations.delete",
     max: 30,
@@ -65,6 +73,7 @@ aiRouter.delete(
 
 aiRouter.post(
   "/chat",
+  authorizeAiChat,
   rateLimit({
     name: "ai.chat",
     max: 40,
@@ -77,6 +86,7 @@ aiRouter.post(
 
 aiRouter.post(
   "/chat/stream",
+  authorizeAiChat,
   rateLimit({
     name: "ai.chat.stream",
     max: 40,
@@ -89,6 +99,7 @@ aiRouter.post(
 
 aiRouter.post(
   "/tool-confirmations/:id/approve",
+  authorizeAiChat,
   rateLimit({
     name: "ai.confirmation.approve",
     max: 40,
@@ -101,6 +112,7 @@ aiRouter.post(
 
 aiRouter.post(
   "/tool-confirmations/:id/reject",
+  authorizeAiChat,
   rateLimit({
     name: "ai.confirmation.reject",
     max: 40,
@@ -113,6 +125,7 @@ aiRouter.post(
 
 aiRouter.get(
   "/documents",
+  authorizePermissions(PERMISSIONS.AI_USE),
   rateLimit({
     name: "ai.documents.list",
     ...RATE_LIMIT.GLOBAL_API,
@@ -124,6 +137,7 @@ aiRouter.get(
 
 aiRouter.get(
   "/documents/:id",
+  authorizePermissions(PERMISSIONS.AI_USE),
   rateLimit({
     name: "ai.documents.get",
     ...RATE_LIMIT.GLOBAL_API,
@@ -135,6 +149,7 @@ aiRouter.get(
 
 aiRouter.post(
   "/documents",
+  authorizePermissions(PERMISSIONS.AI_USE),
   rateLimit({
     name: "ai.documents.create",
     max: 30,
@@ -147,6 +162,7 @@ aiRouter.post(
 
 aiRouter.patch(
   "/documents/:id",
+  authorizePermissions(PERMISSIONS.AI_USE),
   rateLimit({
     name: "ai.documents.update",
     max: 60,
@@ -160,6 +176,7 @@ aiRouter.patch(
 
 aiRouter.delete(
   "/documents/:id",
+  authorizePermissions(PERMISSIONS.AI_USE),
   rateLimit({
     name: "ai.documents.delete",
     max: 30,

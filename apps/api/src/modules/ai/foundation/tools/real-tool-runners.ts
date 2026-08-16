@@ -22,6 +22,7 @@ import {
   type TeamActor,
 } from "../../../team/team.service.js";
 import type { AiToolId } from "../contracts/ai-tool-execution.js";
+import { runCustomerPortalStatus } from "./customer-tool-runners.js";
 import { AI_TOOL_CATALOG } from "./tool-catalog.js";
 import {
   assertToolExecutionAllowed,
@@ -726,6 +727,7 @@ const REAL_RUNNERS: Readonly<Record<string, RealRunner>> = {
   generate_employee_id_card: runGenerateEmployeeIdCard,
   list_employees_on_leave: runListEmployeesOnLeave,
   list_missing_attendance: runListMissingAttendance,
+  customer_portal_status: runCustomerPortalStatus,
 };
 
 /**

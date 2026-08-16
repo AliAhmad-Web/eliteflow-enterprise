@@ -183,6 +183,7 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.AI_DOCUMENTS,
         icon: FileText,
         permission: PERMISSIONS.AI_USE,
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
         requiresClientWorkspace: true,
       },
       {
@@ -190,6 +191,7 @@ export const MAIN_NAVIGATION: NavigationSection[] = [
         href: ROUTES.AI_ASSISTANT,
         icon: Bot,
         permission: PERMISSIONS.AI_USE,
+        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.EMPLOYEE],
         requiresClientWorkspace: true,
       },
     ],

@@ -54,6 +54,8 @@ export const PERMISSIONS = {
   FILES_DELETE: "files:delete",
 
   AI_USE: "ai:use",
+  /** Client portal chat only — does not grant staff AI, documents, or tools. */
+  AI_CUSTOMER: "ai:customer",
   NOTIFICATIONS_READ: "notifications:read",
   CHAT_READ: "chat:read",
   CHAT_WRITE: "chat:write",

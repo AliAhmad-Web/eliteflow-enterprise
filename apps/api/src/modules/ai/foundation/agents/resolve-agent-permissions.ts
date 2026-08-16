@@ -163,6 +163,10 @@ function applyContextConstraints(
     securityLevel = elevateSecurity(securityLevel);
   }
 
+  if (activeContext.surface === "CUSTOMER") {
+    securityLevel = "restricted";
+  }
+
   return Object.freeze({
     ...boundary,
     allowedEntityTypes: Object.freeze(uniqueLabels(allowedEntityTypes)),

@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ROUTES } from "@/constants/routes";
+import { PERMISSIONS } from "@enterprise/shared";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
 
 const QUICK_ACTIONS = [
@@ -58,6 +59,7 @@ const QUICK_ACTIONS = [
 
 export function HeaderQuickActions() {
   const { hasPermission } = usePermissions();
+  const canUseStaffAi = hasPermission(PERMISSIONS.AI_USE);
 
   const actions = QUICK_ACTIONS.filter((action) =>
     hasPermission(action.permission),
@@ -65,6 +67,7 @@ export function HeaderQuickActions() {
 
   return (
     <div className="flex items-center gap-1">
+      {canUseStaffAi ? (
       <Button
         asChild
         variant="ghost"
@@ -76,6 +79,7 @@ export function HeaderQuickActions() {
           <Bot strokeWidth={1.75} aria-hidden="true" />
         </Link>
       </Button>
+      ) : null}
 
       {actions.length > 0 ? (
         <DropdownMenu>

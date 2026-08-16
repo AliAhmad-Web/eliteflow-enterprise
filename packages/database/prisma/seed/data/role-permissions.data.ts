@@ -105,5 +105,6 @@ export const ROLE_PERMISSION_MAP: Record<string, readonly string[]> = {
     "calendar:read",
     "customer-requests:create",
     "customer-requests:read",
+    "ai:customer",
   ],
 };

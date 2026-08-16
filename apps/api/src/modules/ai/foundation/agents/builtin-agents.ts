@@ -120,9 +120,43 @@ export const WORKFLOW_AGENT: AiAgentDefinition = Object.freeze({
   enabled: true,
 });
 
+export const CUSTOMER_AGENT: AiAgentDefinition = Object.freeze({
+  id: "agent.customer",
+  type: "chat",
+  name: "Customer Agent",
+  description: "Client portal assistant for the authenticated customer's own work.",
+  systemInstructions: [
+    "You are the EliteFlow Customer Assistant for the signed-in client portal user.",
+    "Answer only about this customer's own requests, quotes, payments, invoices, projects, tasks, and next steps.",
+    "Never reveal staff notes, employee or HR data, other customers, admin tools, secrets, roles, or internal systems.",
+    "Never mark payments paid, verify or reject payments, approve quotes, unlock projects, change invoices, or grant permissions.",
+    "If asked for another customer's data or privileged actions, refuse. Point the user to existing portal pages instead.",
+    "Prefer short, practical answers and tell the customer which page to open when a workflow already exists.",
+  ].join(" "),
+  runtimeInstructions:
+    "Agent: customer. Use customer_portal_status when eligible. Do not request staff tools.",
+  preferredTools: Object.freeze(["customer_portal_status"]),
+  preferredProvider: null,
+  preferredModel: null,
+  memoryPreferences: Object.freeze({
+    historyEnabled: true,
+    maxHistoryMessages: null,
+  }),
+  executionHints: Object.freeze({
+    streamingPreferred: true,
+    maxTools: 2,
+    priority: 100,
+  }),
+  modes: Object.freeze(["ASK", "CHAT", "GENERAL"]),
+  modules: Object.freeze(["portal", "ai"]),
+  surfaces: Object.freeze(["CUSTOMER"]),
+  enabled: true,
+});
+
 export const BUILTIN_AGENTS: readonly AiAgentDefinition[] = Object.freeze([
   CHAT_AGENT,
   ANALYSIS_AGENT,
   DOCUMENT_AGENT,
   WORKFLOW_AGENT,
+  CUSTOMER_AGENT,
 ]);

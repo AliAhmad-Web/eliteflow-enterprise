@@ -49,14 +49,15 @@ SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
   side?: "left" | "right";
+  overlayClassName?: string;
 }
 
 const SheetContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   SheetContentProps
->(({ side = "left", className, children, onCloseAutoFocus, onAnimationEnd, ...props }, ref) => (
+>(({ side = "left", className, overlayClassName, children, onCloseAutoFocus, onAnimationEnd, ...props }, ref) => (
   <SheetPortal>
-    <SheetOverlay />
+    <SheetOverlay className={overlayClassName} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

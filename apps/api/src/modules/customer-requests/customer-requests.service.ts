@@ -144,6 +144,15 @@ function isClient(actor: CustomerRequestActor): boolean {
   return String(actor.role ?? "").toUpperCase() === UserRole.CLIENT;
 }
 
+function presentRequest(
+  request: CustomerRequestWithRelations,
+  actor: CustomerRequestActor,
+): CustomerRequestDto {
+  const dto = toCustomerRequestDto(request);
+  if (!isClient(actor)) return dto;
+  return { ...dto, staffNotes: null };
+}
+
 function combineConvertDescription(
   request: CustomerRequestWithRelations,
 ): string {
@@ -194,7 +203,7 @@ export class CustomerRequestsService {
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
 
     return {
-      items: items.map(toCustomerRequestDto),
+      items: items.map((item) => presentRequest(item, actor)),
       pagination: {
         page: query.page,
         limit: query.limit,
@@ -220,7 +229,7 @@ export class CustomerRequestsService {
       );
     }
 
-    return toCustomerRequestDto(request);
+    return presentRequest(request, actor);
   }
 
   async create(
@@ -325,7 +334,7 @@ export class CustomerRequestsService {
       this.notifyStaffOnSubmit(created, actor);
     }
 
-    return toCustomerRequestDto(created);
+    return presentRequest(created, actor);
   }
 
   async update(
@@ -399,7 +408,7 @@ export class CustomerRequestsService {
       userAgent: actor.userAgent,
     });
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async submit(
@@ -439,7 +448,7 @@ export class CustomerRequestsService {
 
     this.notifyStaffOnSubmit(updated, actor);
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async withdraw(
@@ -468,7 +477,7 @@ export class CustomerRequestsService {
       userAgent: actor.userAgent,
     });
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async addAttachment(
@@ -518,7 +527,7 @@ export class CustomerRequestsService {
       userAgent: actor.userAgent,
     });
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async startReview(
@@ -550,7 +559,7 @@ export class CustomerRequestsService {
       userAgent: actor.userAgent,
     });
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async requestClarification(
@@ -597,7 +606,7 @@ export class CustomerRequestsService {
       body: `Staff requested clarification on "${updated.title}": ${input.message.substring(0, 180)}`,
     });
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async approve(
@@ -761,7 +770,7 @@ export class CustomerRequestsService {
       body: `Your work request "${updated.title}" was rejected: ${input.reason.substring(0, 180)}`,
     });
 
-    return toCustomerRequestDto(updated);
+    return presentRequest(updated, actor);
   }
 
   async convert(
@@ -942,7 +951,7 @@ export class CustomerRequestsService {
         });
       }
 
-      const dto = toCustomerRequestDto(converted);
+      const dto = presentRequest(converted, actor);
       if (
         (dto.type === "NEW_PROJECT" || dto.type === "GENERAL_SERVICE") &&
         dto.convertedProjectId &&
@@ -1060,7 +1069,7 @@ export class CustomerRequestsService {
         });
       }
 
-      return toCustomerRequestDto(converted);
+      return presentRequest(converted, actor);
     } catch (error) {
       await customerRequestsRepository.revertConversionClaim(id);
       throw error;
