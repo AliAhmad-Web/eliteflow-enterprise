@@ -90,6 +90,15 @@ export function QuoteDetailsPageContent() {
       />
       <QuoteStatusBadge status={quote.status} />
 
+      {isClient &&
+      (quote.status === "SENT" || quote.status === "APPROVED") ? (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="pt-6">
+            <CustomerAdvancePaymentPanel quote={quote} />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-6">
           <Card>
@@ -159,6 +168,7 @@ export function QuoteDetailsPageContent() {
               <PaymentScheduleTable
                 items={quote.paymentSchedule}
                 currency={quote.currency}
+                invoiceMode={isClient ? "customer" : "staff"}
               />
             </CardContent>
           </Card>
@@ -182,9 +192,9 @@ export function QuoteDetailsPageContent() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">
-                Admin confirms the final deal, the customer accepts and starts
-                the project, then pays the configured advance. The original
-                requested budget never overwrites the agreed deal.
+                {isClient
+                  ? "Use Pay Advance above to submit Bank Transfer, JazzCash QR, or EasyPaisa QR proof. EliteFlow verifies the payment before the workspace unlocks."
+                  : "Admin confirms the final deal amount. The customer then pays the required advance on this page. Do not generate invoices just to let the customer pay."}
               </p>
               {message ? (
                 <p className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-emerald-700 dark:text-emerald-400">
@@ -208,11 +218,6 @@ export function QuoteDetailsPageContent() {
                 >
                   Send quote
                 </Button>
-              ) : null}
-
-              {isClient &&
-              (quote.status === "SENT" || quote.status === "APPROVED") ? (
-                <CustomerAdvancePaymentPanel quote={quote} />
               ) : null}
 
               {canApprove && quote.status === "SENT" ? (

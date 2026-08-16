@@ -312,6 +312,9 @@ export class QuotesService {
     if (!existing) {
       throw new QuotesError("Quote not found", 404, QUOTES_ERROR_CODES.NOT_FOUND);
     }
+    if (existing.status === "APPROVED") {
+      return toQuoteDto(await this.issueScheduleInvoices(id, actor.userId));
+    }
     this.assertTransition(existing.status, "APPROVED", ["SENT"]);
 
     const updated = await quotesRepository.updateStatus(id, {
@@ -322,14 +325,7 @@ export class QuotesService {
     });
 
     await this.syncFinalDealAmount(updated);
-
-    await quotesRepository.createInvoicesForSchedule({
-      quote: updated,
-      scheduleItemIds: (updated.paymentSchedule ?? []).map((item) => item.id),
-      actorId: actor.userId,
-    });
-    await quotesRepository.issueDraftInvoicesForQuote(id, actor.userId);
-    const withInvoices = (await quotesRepository.findById(id, { all: true }))!;
+    const withInvoices = await this.issueScheduleInvoices(id, actor.userId);
 
     await logQuoteAuditEvent({
       userId: actor.userId,
@@ -365,6 +361,20 @@ export class QuotesService {
     });
 
     return toQuoteDto(withInvoices);
+  }
+
+  private async issueScheduleInvoices(
+    id: string,
+    actorId: string,
+  ) {
+    const quote = (await quotesRepository.findById(id, { all: true }))!;
+    await quotesRepository.createInvoicesForSchedule({
+      quote,
+      scheduleItemIds: (quote.paymentSchedule ?? []).map((item) => item.id),
+      actorId,
+    });
+    await quotesRepository.issueDraftInvoicesForQuote(id, actorId);
+    return (await quotesRepository.findById(id, { all: true }))!;
   }
 
   async selectPaymentModel(

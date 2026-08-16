@@ -16,9 +16,11 @@ function formatMoney(amount: number, currency: string) {
 export function PaymentScheduleTable({
   items,
   currency,
+  invoiceMode = "staff",
 }: {
   items: PaymentScheduleItemDto[];
   currency: string;
+  invoiceMode?: "staff" | "customer";
 }) {
   if (items.length === 0) {
     return (
@@ -59,6 +61,12 @@ export function PaymentScheduleTable({
                   >
                     {item.invoiceNumber}
                   </Link>
+                ) : invoiceMode === "customer" ? (
+                  <span className="text-muted-foreground">
+                    {item.kind === "ADVANCE"
+                      ? "Use Pay Advance above"
+                      : "After advance is verified"}
+                  </span>
                 ) : (
                   <span className="text-muted-foreground">Not generated</span>
                 )}

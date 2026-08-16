@@ -153,7 +153,14 @@ export function InvoicePayPanel({
     setProofOpen(false);
   }
 
-  if (!canPay) return null;
+  if (!canPay) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Payment methods are available after you choose Pay Advance. If they do
+        not appear, your account needs payment access.
+      </p>
+    );
+  }
 
   const jazzTillId = selected?.merchantPublicId || JAZZCASH_QR_TILL_ID;
   const jazzQrSrc = selected?.qrImageUrl || JAZZCASH_QR_IMAGE_PATH;

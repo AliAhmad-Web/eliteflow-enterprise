@@ -33,10 +33,7 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
     quote.paymentSchedule.some((item) => item.invoiceId) || !issuedQuote
       ? quote
       : issuedQuote;
-  const [payOpen, setPayOpen] = useState(
-    current.status === "APPROVED" ||
-      Boolean(current.paymentSchedule[0]?.invoiceId),
-  );
+  const [payOpen, setPayOpen] = useState(false);
 
   const advanceInvoiceId =
     current.paymentSchedule.find((item) => item.kind === "ADVANCE")?.invoiceId ??
@@ -55,10 +52,10 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
   });
 
   useEffect(() => {
-    if (advanceInvoiceId && current.status === "APPROVED") {
+    if (advanceInvoiceId && !verified) {
       setPayOpen(true);
     }
-  }, [advanceInvoiceId, current.status]);
+  }, [advanceInvoiceId, verified]);
 
   const selectableModels = useMemo(
     () =>
@@ -81,7 +78,10 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
     !current.paymentSchedule.some((item) => item.invoiceId);
 
   async function startPayAdvance() {
-    if (current.status === "SENT") {
+    const needsInvoices =
+      current.status === "SENT" ||
+      (current.status === "APPROVED" && !advanceInvoiceId);
+    if (needsInvoices) {
       const approved = await approveMutation.mutateAsync(current.id);
       setIssuedQuote(approved);
     }
@@ -180,13 +180,13 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
         </div>
       ) : null}
 
-      {!verified && !payOpen ? (
+      {!verified && !invoiceQuery.data ? (
         <Button disabled={busy} onClick={() => void startPayAdvance()}>
           Pay Advance
         </Button>
       ) : null}
 
-      {!verified && payOpen && invoiceQuery.isLoading ? (
+      {!verified && payOpen && !invoiceQuery.data && (busy || invoiceQuery.isLoading) ? (
         <p className="text-muted-foreground">Loading payment methods…</p>
       ) : null}
 
