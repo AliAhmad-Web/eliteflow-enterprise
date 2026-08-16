@@ -30,6 +30,7 @@ import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { filesService } from "@/features/files/services/files.service";
 import { ApiClientError } from "@/services/api/api-error";
 
+import { REQUIRE_PAYMENT_PROOF_UPLOAD } from "../constants/payment-proof-upload";
 import {
   useSubmitBankTransfer,
   useSubmitWalletNotice,
@@ -141,10 +142,13 @@ export function InvoicePayPanel({
       setFormError("Enter a transaction / reference ID of at least 3 characters.");
       return;
     }
-    if (!proofFileId) {
+    if (REQUIRE_PAYMENT_PROOF_UPLOAD && !proofFileId) {
       setFormError("Upload a payment screenshot before submitting.");
       return;
     }
+    const proofId = REQUIRE_PAYMENT_PROOF_UPLOAD
+      ? proofFileId ?? undefined
+      : undefined;
     setMessage(null);
     setFormError(null);
     try {
@@ -155,7 +159,7 @@ export function InvoicePayPanel({
           customerReference: trimmedReference,
           paidAt,
           notes: notes || undefined,
-          proofFileId,
+          proofFileId: proofId,
         });
         setMessage("Bank transfer submitted. EliteFlow will verify before the invoice is marked paid.");
         setProofOpen(false);
@@ -168,7 +172,7 @@ export function InvoicePayPanel({
         customerReference: trimmedReference,
         paidAt,
         notes: notes || undefined,
-        proofFileId,
+        proofFileId: proofId,
       });
       setMessage(
         method === "JAZZCASH"
@@ -353,12 +357,15 @@ export function InvoicePayPanel({
                     setProofOpen(true);
                   }}
                 >
-                  Enter Transaction ID & Screenshot
+                  {REQUIRE_PAYMENT_PROOF_UPLOAD
+                    ? "Enter Transaction ID & Screenshot"
+                    : "Enter Transaction ID"}
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   Pay using the instructions above, then submit your transaction
-                  ID and screenshot. Upload only starts verification — it does
-                  not mark the invoice paid.
+                  / reference ID
+                  {REQUIRE_PAYMENT_PROOF_UPLOAD ? " and screenshot" : ""}. This
+                  starts verification — it does not mark the invoice paid.
                 </p>
               </div>
             ) : null}
@@ -381,8 +388,9 @@ export function InvoicePayPanel({
           <DialogHeader>
             <DialogTitle>Submit Payment</DialogTitle>
             <DialogDescription>
-              Enter the transaction details and upload a screenshot. EliteFlow
-              verifies the payment before the invoice is marked paid.
+              {REQUIRE_PAYMENT_PROOF_UPLOAD
+                ? "Enter the transaction details and upload a screenshot. EliteFlow verifies the payment before the invoice is marked paid."
+                : "Enter the amount paid and transaction / reference ID. EliteFlow verifies the payment before the invoice is marked paid."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 text-sm">
@@ -418,21 +426,23 @@ export function InvoicePayPanel({
                 placeholder="Required"
               />
             </label>
-            <label className="grid gap-1">
-              <span>Upload Payment Screenshot</span>
-              <Input
-                type="file"
-                accept="image/*,.pdf"
-                onChange={(event) =>
-                  void onProofChange(event.target.files?.[0] ?? null)
-                }
-              />
-              {proofFileName ? (
-                <span className="text-xs text-muted-foreground">{proofFileName}</span>
-              ) : uploading ? (
-                <span className="text-xs text-muted-foreground">Uploading screenshot…</span>
-              ) : null}
-            </label>
+            {REQUIRE_PAYMENT_PROOF_UPLOAD ? (
+              <label className="grid gap-1">
+                <span>Upload Payment Screenshot</span>
+                <Input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={(event) =>
+                    void onProofChange(event.target.files?.[0] ?? null)
+                  }
+                />
+                {proofFileName ? (
+                  <span className="text-xs text-muted-foreground">{proofFileName}</span>
+                ) : uploading ? (
+                  <span className="text-xs text-muted-foreground">Uploading screenshot…</span>
+                ) : null}
+              </label>
+            ) : null}
             {formError ? (
               <p className="text-destructive" role="alert">
                 {formError}
@@ -445,7 +455,11 @@ export function InvoicePayPanel({
             </Button>
             <Button
               type="button"
-              disabled={pending || !reference.trim() || !proofFileId}
+              disabled={
+                pending ||
+                !reference.trim() ||
+                (REQUIRE_PAYMENT_PROOF_UPLOAD && !proofFileId)
+              }
               onClick={() => void submitManual()}
             >
               Submit Payment
