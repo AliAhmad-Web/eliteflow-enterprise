@@ -48,6 +48,7 @@ import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { useTaskStats, useTasks } from "@/features/tasks/hooks/use-tasks";
 import { staggerContainer } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format-money";
 
 function mapProjectStatus(status: string): ProjectStatus {
   switch (status) {
@@ -72,14 +73,6 @@ function mapInvoiceStatus(status: string): InvoiceStatus {
     default:
       return "pending";
   }
-}
-
-function formatMoney(amount: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
 }
 
 function formatTaskDeadline(dueDate: string | null): string {

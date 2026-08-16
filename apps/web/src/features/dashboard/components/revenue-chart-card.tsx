@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMoney } from "@/lib/format-money";
 import { slideUp } from "@/lib/motion";
 
 import type { RevenueDataPoint } from "@/features/dashboard/types/dashboard.types";
@@ -110,7 +111,7 @@ export function RevenueChartCard({
                   onBlur={() => setHoveredIndex(null)}
                   tabIndex={0}
                   role="button"
-                  aria-label={`${p.label}: $${p.value.toLocaleString()}`}
+                  aria-label={`${p.label}: ${formatMoney(p.value)}`}
                 />
               ))}
 
@@ -140,14 +141,14 @@ export function RevenueChartCard({
                   {activePoint.label}, 2026
                 </p>
                 <p className="text-primary">
-                  ${activePoint.value.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  {formatMoney(activePoint.value)}
                 </p>
               </div>
             ) : null}
           </div>
           <p className="sr-only">
-            Revenue ranges from ${Math.min(...data.map((d) => d.value)).toLocaleString()} to $
-            {maxValue.toLocaleString()}.
+            Revenue ranges from {formatMoney(Math.min(...data.map((d) => d.value)))} to{" "}
+            {formatMoney(maxValue)}.
           </p>
         </CardContent>
       </Card>

@@ -21,17 +21,11 @@ import { Input } from "@/components/ui/input";
 import { ROUTES, quoteDetailPath } from "@/constants/routes";
 import { useHasPermission, useRole } from "@/features/rbac/hooks/use-permissions";
 import { FORM_SELECT_CLASS } from "@/lib/form-styles";
+import { formatMoney } from "@/lib/format-money";
 
 import { useQuotes } from "../hooks/use-quotes";
 import { QUOTE_STATUS_LABELS } from "../types/quotes.types";
 import { QuoteStatusBadge } from "./quote-status-badge";
-
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
-}
 
 export function QuotesPageContent() {
   const router = useRouter();

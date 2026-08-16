@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format-money";
 
 import { InvoiceStatusBadge } from "./invoice-status-badge";
 
@@ -57,13 +58,6 @@ function SortIcon({
   ) : (
     <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
   );
-}
-
-function formatMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
 }
 
 function InvoiceRowActions({

@@ -1,8 +1,13 @@
 "use client";
 
-import { Bot } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface CustomerAiFabProps {
@@ -12,20 +17,44 @@ interface CustomerAiFabProps {
 
 export function CustomerAiFab({ onClick, open }: CustomerAiFabProps) {
   return (
-    <Button
-      type="button"
-      onClick={onClick}
-      aria-label={open ? "Close AI Assistant" : "Open AI Assistant"}
-      aria-expanded={open}
-      aria-controls="customer-ai-drawer"
-      className={cn(
-        "fixed z-40 flex size-14 items-center justify-center rounded-full border border-primary/40 bg-primary text-primary-foreground shadow-[var(--shadow-lg)]",
-        "bottom-20 right-4 sm:bottom-24 sm:right-6",
-        "hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-      )}
-    >
-      <Bot className="size-6" strokeWidth={1.75} aria-hidden="true" />
-      <span className="sr-only">AI Assistant</span>
-    </Button>
+    <Tooltip delayDuration={120}>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          onClick={onClick}
+          aria-label="AI Agent"
+          aria-expanded={open}
+          aria-controls="customer-ai-drawer"
+          className={cn(
+            "ai-agent-fab group fixed z-40 size-14 rounded-full p-0",
+            "bottom-20 right-4 sm:bottom-24 sm:right-6",
+            "border border-primary/35 bg-primary text-primary-foreground",
+            "shadow-[0_10px_28px_color-mix(in_srgb,var(--primary)_28%,transparent)]",
+            "hover:bg-primary/92 hover:border-primary/50",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            open && "ai-agent-fab-open ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
+          )}
+        >
+          <span
+            className="ai-agent-fab-ring pointer-events-none absolute inset-[-5px] rounded-full"
+            aria-hidden="true"
+          />
+          <span className="relative flex size-full items-center justify-center">
+            <Sparkles
+              className="size-[1.35rem] drop-shadow-[0_0_10px_color-mix(in_srgb,white_35%,transparent)]"
+              strokeWidth={1.6}
+              aria-hidden="true"
+            />
+          </span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="left"
+        sideOffset={12}
+        className="border-primary/20 bg-popover px-3 py-1.5 text-[13px] tracking-wide shadow-[0_8px_24px_color-mix(in_srgb,var(--primary)_18%,transparent)]"
+      >
+        AI Agent
+      </TooltipContent>
+    </Tooltip>
   );
 }

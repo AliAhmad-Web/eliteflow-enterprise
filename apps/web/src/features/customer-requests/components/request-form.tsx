@@ -26,6 +26,7 @@ import { FormFieldError } from "@/features/auth/components/form-field-error";
 import { filesService } from "@/features/files/services/files.service";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { FORM_SELECT_CLASS_MD } from "@/lib/form-styles";
+import { DISPLAY_CURRENCY } from "@/lib/format-money";
 import { cn } from "@/lib/utils";
 import { getApiBaseUrl, getApiErrorMessage } from "@/services/api/api-error";
 
@@ -89,7 +90,7 @@ function toFormValues(
     preferredDeadline: toDateInputValue(request?.preferredDeadline),
     expectedBudget:
       request?.expectedBudget != null ? String(request.expectedBudget) : "",
-    currency: request?.currency ?? "USD",
+    currency: request?.currency ?? DISPLAY_CURRENCY,
     priority: request?.priority ?? "MEDIUM",
     additionalNotes: request?.additionalNotes ?? "",
     targetProjectId:
@@ -394,7 +395,7 @@ export function RequestForm({
           <Input
             id="request-currency"
             maxLength={3}
-            placeholder="USD"
+            placeholder="PKR"
             {...register("currency")}
           />
           <FormFieldError message={errors.currency?.message} />

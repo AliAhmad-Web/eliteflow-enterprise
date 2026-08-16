@@ -600,6 +600,37 @@
     }
   }
 
+  @keyframes ai-agent-fab-breathe {
+    0%,
+    100% {
+      opacity: 0.28;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.08);
+    }
+  }
+
+  .ai-agent-fab-ring {
+    border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 28%, transparent);
+    animation: ai-agent-fab-breathe 3.6s ease-in-out infinite;
+  }
+
+  .ai-agent-fab-open .ai-agent-fab-ring {
+    animation: none;
+    opacity: 0.35;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-agent-fab-ring {
+      animation: none;
+      opacity: 0.4;
+      transform: none;
+    }
+  }
+
   /* Icon system (8px grid) */
   .icon-box {
     display: inline-flex;

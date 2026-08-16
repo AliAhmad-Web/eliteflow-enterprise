@@ -9,16 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/format-money";
 
 import type { RecentInvoice } from "@/features/dashboard/types/dashboard.types";
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-  }).format(amount);
-}
 
 interface RecentInvoicesCardProps {
   invoices: RecentInvoice[];
@@ -81,7 +74,7 @@ export function RecentInvoicesCard({
                     </td>
                     <td className="text-muted-foreground">{invoice.client}</td>
                     <td className="text-right font-semibold tabular-nums text-foreground">
-                      {formatCurrency(invoice.amount)}
+                      {formatMoney(invoice.amount)}
                     </td>
                     <td className="text-right">
                       <InvoiceStatusBadge status={invoice.status} />

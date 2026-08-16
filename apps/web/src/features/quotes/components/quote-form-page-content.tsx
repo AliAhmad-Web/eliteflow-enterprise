@@ -22,6 +22,7 @@ import { ROUTES, quoteDetailPath } from "@/constants/routes";
 import { useCustomerRequest } from "@/features/customer-requests/hooks/use-customer-requests";
 import { useProject } from "@/features/projects/hooks/use-projects";
 import { FORM_SELECT_CLASS } from "@/lib/form-styles";
+import { DISPLAY_CURRENCY, formatMoney } from "@/lib/format-money";
 import { ApiClientError } from "@/services/api/api-error";
 
 import { useCreateQuote } from "../hooks/use-quote-mutations";
@@ -35,14 +36,6 @@ function plusDays(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-function formatMoney(value: number | null | undefined, currency = "USD") {
-  if (value == null) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
 }
 
 export function QuoteFormPageContent() {
@@ -124,7 +117,7 @@ export function QuoteFormPageContent() {
       notes: notes.trim() || undefined,
       issueDate,
       expiryDate,
-      currency: request?.currency ?? "USD",
+      currency: request?.currency ?? DISPLAY_CURRENCY,
       taxRate: 0,
       discountAmount: "",
       dealAmount,
@@ -163,7 +156,7 @@ export function QuoteFormPageContent() {
     );
   }
 
-  const currency = request?.currency ?? "USD";
+  const currency = request?.currency ?? DISPLAY_CURRENCY;
 
   return (
     <div className="space-y-6">

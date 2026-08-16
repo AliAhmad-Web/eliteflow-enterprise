@@ -4,14 +4,8 @@ import type { PaymentScheduleItemDto } from "@enterprise/shared";
 import { PAYMENT_SCHEDULE_KIND_LABELS } from "@enterprise/shared";
 
 import { invoiceDetailPath } from "@/constants/routes";
+import { formatMoney } from "@/lib/format-money";
 import Link from "next/link";
-
-function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(amount);
-}
 
 export function PaymentScheduleTable({
   items,

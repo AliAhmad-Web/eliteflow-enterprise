@@ -5,6 +5,8 @@ import type {
   ReportDateRangeValue,
 } from "@enterprise/shared";
 
+import { formatMoney } from "@/lib/format-money";
+
 export const REPORTS_QUERY_KEYS = {
   all: ["reports"] as const,
   analytics: () => [...REPORTS_QUERY_KEYS.all, "analytics"] as const,
@@ -81,12 +83,8 @@ export function formatCurrency(
   value: number,
   options?: Intl.NumberFormatOptions,
 ): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-    ...options,
-  }).format(value);
+  void options;
+  return formatMoney(value);
 }
 
 export function formatPercent(value: number): string {

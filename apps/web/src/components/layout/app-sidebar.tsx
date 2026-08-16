@@ -17,6 +17,10 @@ import { siteConfig } from "@/config/site.config";
 import { ROUTES } from "@/constants/routes";
 import { filterNavigationByCommunicationFlags } from "@/features/communication/utils/filter-communication-nav";
 import { usePermissions } from "@/features/rbac/hooks/use-permissions";
+import {
+  formatNavBadgeCount,
+  useStaffRequestAttentionCounts,
+} from "@/features/customer-requests/hooks/use-staff-request-attention-counts";
 import { filterNavigationByAccess } from "@/features/rbac/utils/filter-navigation";
 import { useClientWorkspaceAccess } from "@/features/quotes/hooks/use-client-workspace-access";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
@@ -46,16 +50,40 @@ function AppSidebarComponent({ className }: AppSidebarProps) {
   const { isLgUp } = useBreakpoint();
   const { subject, role } = usePermissions();
   const { unlocked } = useClientWorkspaceAccess();
+  const requestAttention = useStaffRequestAttentionCounts();
 
-  const sections = useMemo(
-    () =>
-      filterNavigationByCommunicationFlags(
-        filterNavigationByAccess(MAIN_NAVIGATION, subject, {
-          clientWorkspaceUnlocked: unlocked,
-        }),
-      ),
-    [subject, unlocked],
-  );
+  const sections = useMemo(() => {
+    const filtered = filterNavigationByCommunicationFlags(
+      filterNavigationByAccess(MAIN_NAVIGATION, subject, {
+        clientWorkspaceUnlocked: unlocked,
+      }),
+    );
+    const intakeBadge = formatNavBadgeCount(requestAttention.intake);
+    const continuationBadge = formatNavBadgeCount(
+      requestAttention.continuation,
+    );
+    if (!intakeBadge && !continuationBadge) {
+      return filtered;
+    }
+
+    return filtered.map((section) => ({
+      ...section,
+      items: section.items.map((item) => {
+        if (item.href === ROUTES.CUSTOMER_REQUESTS) {
+          return { ...item, badge: intakeBadge };
+        }
+        if (item.href === `${ROUTES.CUSTOMER_REQUESTS}?kind=continuation`) {
+          return { ...item, badge: continuationBadge };
+        }
+        return item;
+      }),
+    }));
+  }, [
+    subject,
+    unlocked,
+    requestAttention.intake,
+    requestAttention.continuation,
+  ]);
 
   const homeHref =
     (role && ROLE_DASHBOARD_ROUTES[role as UserRole]) || ROUTES.DASHBOARD;

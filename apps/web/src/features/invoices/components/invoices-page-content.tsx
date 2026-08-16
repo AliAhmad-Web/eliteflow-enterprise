@@ -28,6 +28,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { invoiceDetailPath } from "@/constants/routes";
 import { OpenedFromNotificationBanner } from "@/features/notifications/components/opened-from-notification-banner";
+import { formatMoney } from "@/lib/format-money";
 import { useEntityDeepLink } from "@/features/notifications/hooks/use-entity-deep-link";
 import {
   useHasPermission,
@@ -44,14 +45,6 @@ import { InvoiceFormDialog } from "./invoice-form-dialog";
 import { InvoicesTable } from "./invoices-table";
 
 const selectClassName = FORM_SELECT_CLASS;
-
-function formatMoney(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 export function InvoicesPageContent() {
   const router = useRouter();

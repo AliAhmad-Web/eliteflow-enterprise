@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FormFieldError } from "@/features/auth/components/form-field-error";
 import { FORM_SELECT_CLASS_MD } from "@/lib/form-styles";
+import { DISPLAY_CURRENCY, formatMoney } from "@/lib/format-money";
 import { cn } from "@/lib/utils";
 
 import { INVOICE_STATUS_LABELS } from "../types/invoices.types";
@@ -53,7 +54,7 @@ function toFormValues(invoice?: Invoice | null): CreateInvoiceInput {
     dueDate:
       invoice?.dueDate ??
       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    currency: invoice?.currency ?? "USD",
+    currency: invoice?.currency ?? DISPLAY_CURRENCY,
     taxRate: invoice?.taxRate ?? 0,
     discountAmount:
       invoice?.discountAmount != null ? String(invoice.discountAmount) : "0",
@@ -73,13 +74,6 @@ function toFormValues(invoice?: Invoice | null): CreateInvoiceInput {
         },
       ],
   };
-}
-
-function formatMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
 }
 
 export function InvoiceForm({
@@ -330,12 +324,12 @@ export function InvoiceForm({
       <div className="rounded-lg border border-border/50 bg-muted/20 p-4 text-sm">
         <div className="flex justify-between gap-4">
           <span className="text-muted-foreground">Subtotal</span>
-          <span>{formatMoney(totals.subtotal, watched.currency || "USD")}</span>
+          <span>{formatMoney(totals.subtotal, watched.currency || DISPLAY_CURRENCY)}</span>
         </div>
         <div className="mt-1 flex justify-between gap-4">
           <span className="text-muted-foreground">Discount</span>
           <span>
-            {formatMoney(totals.discountAmount, watched.currency || "USD")}
+            {formatMoney(totals.discountAmount, watched.currency || DISPLAY_CURRENCY)}
           </span>
         </div>
         <div className="mt-1 flex justify-between gap-4">
@@ -343,12 +337,12 @@ export function InvoiceForm({
             Tax ({totals.taxRate}%)
           </span>
           <span>
-            {formatMoney(totals.taxAmount, watched.currency || "USD")}
+            {formatMoney(totals.taxAmount, watched.currency || DISPLAY_CURRENCY)}
           </span>
         </div>
         <div className="mt-2 flex justify-between gap-4 border-t border-border pt-2 font-semibold">
           <span>Grand total</span>
-          <span>{formatMoney(totals.total, watched.currency || "USD")}</span>
+          <span>{formatMoney(totals.total, watched.currency || DISPLAY_CURRENCY)}</span>
         </div>
       </div>
 

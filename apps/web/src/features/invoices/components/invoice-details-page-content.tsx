@@ -18,6 +18,7 @@ import {
   useRole,
 } from "@/features/rbac/hooks/use-permissions";
 import { InvoicePayPanel } from "@/features/payments/components/invoice-pay-panel";
+import { formatMoney } from "@/lib/format-money";
 import { ApiClientError } from "@/services/api/api-error";
 
 import { useDownloadInvoicePdf, useIssueInvoice } from "../hooks/use-invoice-mutations";
@@ -30,13 +31,6 @@ import {
 import { DeleteInvoiceDialog } from "./delete-invoice-dialog";
 import { InvoiceFormDialog } from "./invoice-form-dialog";
 import { InvoiceStatusBadge } from "./invoice-status-badge";
-
-function formatMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
-}
 
 function DetailItem({ label, value }: { label: string; value: string }) {
   return (

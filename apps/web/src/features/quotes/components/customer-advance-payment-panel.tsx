@@ -17,13 +17,7 @@ import {
   useApproveQuote,
   useSelectQuotePaymentModel,
 } from "../hooks/use-quote-mutations";
-
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
-}
+import { formatMoney } from "@/lib/format-money";
 
 export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
   const approveMutation = useApproveQuote();

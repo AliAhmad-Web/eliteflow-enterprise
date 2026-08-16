@@ -25,6 +25,7 @@ import {
 } from "@/features/projects/hooks/use-projects";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { FORM_SELECT_CLASS_MD } from "@/lib/form-styles";
+import { formatMoney } from "@/lib/format-money";
 import { getApiErrorMessage } from "@/services/api/api-error";
 
 import {
@@ -64,15 +65,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       </p>
     </div>
   );
-}
-
-function formatMoney(amount: number | null, currency: string) {
-  if (amount == null) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: currency || "USD",
-    maximumFractionDigits: 2,
-  }).format(amount);
 }
 
 export function StaffRequestDetailsPageContent() {

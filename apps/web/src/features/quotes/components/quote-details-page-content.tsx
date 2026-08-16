@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { invoiceDetailPath, ROUTES } from "@/constants/routes";
 import { useHasPermission, useRole } from "@/features/rbac/hooks/use-permissions";
 import { ApiClientError } from "@/services/api/api-error";
+import { formatMoney } from "@/lib/format-money";
 
 import {
   useCancelQuote,
@@ -26,14 +27,6 @@ import { useQuote } from "../hooks/use-quotes";
 import { CustomerAdvancePaymentPanel } from "./customer-advance-payment-panel";
 import { PaymentScheduleTable } from "./payment-schedule-table";
 import { QuoteStatusBadge } from "./quote-status-badge";
-
-function formatMoney(value: number | null | undefined, currency = "USD") {
-  if (value == null) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
-}
 
 export function QuoteDetailsPageContent() {
   const params = useParams<{ id: string }>();

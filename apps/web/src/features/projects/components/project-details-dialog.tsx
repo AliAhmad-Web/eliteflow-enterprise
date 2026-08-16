@@ -18,6 +18,7 @@ import {
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
 import { EntityCommentsPanel } from "@/features/communication/components/entity-comments-panel";
 import { ProjectChangeRequestsPanel } from "@/features/customer-requests/components/project-change-requests-panel";
+import { formatMoney } from "@/lib/format-money";
 
 import { useProject } from "../hooks/use-projects";
 import {
@@ -141,13 +142,7 @@ export function ProjectDetailsDialog({
               <DetailRow
                 label="Budget"
                 value={
-                  project.budget != null
-                    ? new Intl.NumberFormat(undefined, {
-                        style: "currency",
-                        currency: "USD",
-                        maximumFractionDigits: 0,
-                      }).format(project.budget)
-                    : null
+                  project.budget != null ? formatMoney(project.budget) : null
                 }
               />
               <DetailRow

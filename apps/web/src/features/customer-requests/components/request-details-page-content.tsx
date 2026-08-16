@@ -31,6 +31,7 @@ import { QuoteStatusBadge } from "@/features/quotes/components/quote-status-badg
 import { useQuotes } from "@/features/quotes/hooks/use-quotes";
 import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 import { getApiErrorMessage } from "@/services/api/api-error";
+import { formatMoney } from "@/lib/format-money";
 
 import {
   useSubmitCustomerRequest,
@@ -58,15 +59,6 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       </p>
     </div>
   );
-}
-
-function formatMoney(amount: number | null, currency: string) {
-  if (amount == null) return "—";
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: currency || "USD",
-    maximumFractionDigits: 2,
-  }).format(amount);
 }
 
 function canEditRequest(request: CustomerRequestDto) {

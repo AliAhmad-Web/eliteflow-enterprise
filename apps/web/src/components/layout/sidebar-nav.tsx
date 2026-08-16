@@ -73,8 +73,16 @@ const SidebarNavItem = memo(function SidebarNavItem({
       {!collapsed ? (
         <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
       ) : null}
-      {!collapsed && item.badge ? (
-        <span className="ml-auto shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-primary">
+      {item.badge ? (
+        <span
+          className={cn(
+            "shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-primary",
+            collapsed
+              ? "absolute right-1 top-1 min-w-4 px-1 text-[9px]"
+              : "ml-auto",
+          )}
+          aria-label={`${item.badge} pending`}
+        >
           {item.badge}
         </span>
       ) : null}

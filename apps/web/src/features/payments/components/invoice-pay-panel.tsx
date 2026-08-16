@@ -38,13 +38,7 @@ import {
 import { usePaymentMethods, usePayments } from "../hooks/use-payments";
 import { PAYMENT_METHOD_LABELS } from "../types/payments.types";
 import { PaymentStatusBadge } from "./payment-status-badge";
-
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(value);
-}
+import { formatMoney } from "@/lib/format-money";
 
 export function InvoicePayPanel({
   invoice,
