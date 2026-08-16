@@ -84,6 +84,7 @@ export function InvoicePayPanel({
   const [proofOpen, setProofOpen] = useState(false);
   const [proofFileName, setProofFileName] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const selected = methods.find((item) => item.method === method);
   const pending =
@@ -98,21 +99,36 @@ export function InvoicePayPanel({
   async function onProofChange(file: File | null) {
     if (!file) {
       setProofFileId(null);
+      setProofFileName(null);
       return;
     }
     setUploading(true);
+    setFormError(null);
     try {
+      // Company-scoped only: the project dashboard is still locked until
+      // admin verifies the advance, so do not send projectId here.
       const uploaded = await filesService.uploadFiles({
         files: [file],
         clientId: invoice.clientId,
-        projectId: invoice.projectId,
         tags: ["payment-proof"],
       });
       const id = uploaded[0]?.id;
-      if (id) {
-        setProofFileId(id);
-        setProofFileName(file.name);
+      if (!id) {
+        setProofFileId(null);
+        setProofFileName(null);
+        setFormError("Screenshot upload did not return a file. Please try again.");
+        return;
       }
+      setProofFileId(id);
+      setProofFileName(file.name);
+    } catch (cause) {
+      setProofFileId(null);
+      setProofFileName(null);
+      setFormError(
+        cause instanceof ApiClientError
+          ? cause.message
+          : "Screenshot upload failed. Please try again.",
+      );
     } finally {
       setUploading(false);
     }
@@ -120,37 +136,55 @@ export function InvoicePayPanel({
 
   async function submitManual() {
     if (!method) return;
-    setMessage(null);
-    if (method === "BANK_TRANSFER") {
-      await bankMutation.mutateAsync({
-        invoiceId: invoice.id,
-        amount: Number(amount),
-        customerReference: reference,
-        paidAt,
-        notes: notes || undefined,
-        proofFileId: proofFileId ?? undefined,
-      });
-      setMessage("Bank transfer submitted. EliteFlow will verify before the invoice is marked paid.");
-      setProofOpen(false);
+    const trimmedReference = reference.trim();
+    if (trimmedReference.length < 3) {
+      setFormError("Enter a transaction / reference ID of at least 3 characters.");
       return;
     }
-    await walletMutation.mutateAsync({
-      invoiceId: invoice.id,
-      method,
-      amount: Number(amount),
-      customerReference: reference,
-      paidAt,
-      notes: notes || undefined,
-      proofFileId: proofFileId ?? undefined,
-    });
-    setMessage(
-      method === "JAZZCASH"
-        ? "JazzCash QR payment submitted. Admin will verify the transaction ID before the invoice is marked paid."
-        : method === "EASYPAISA"
-          ? "EasyPaisa QR payment submitted. Admin will verify the Transaction ID before the invoice is marked paid."
-          : "Payment submitted for verification. A success screen is not enough — admin confirmation is required.",
-    );
-    setProofOpen(false);
+    if (!proofFileId) {
+      setFormError("Upload a payment screenshot before submitting.");
+      return;
+    }
+    setMessage(null);
+    setFormError(null);
+    try {
+      if (method === "BANK_TRANSFER") {
+        await bankMutation.mutateAsync({
+          invoiceId: invoice.id,
+          amount: Number(amount),
+          customerReference: trimmedReference,
+          paidAt,
+          notes: notes || undefined,
+          proofFileId,
+        });
+        setMessage("Bank transfer submitted. EliteFlow will verify before the invoice is marked paid.");
+        setProofOpen(false);
+        return;
+      }
+      await walletMutation.mutateAsync({
+        invoiceId: invoice.id,
+        method,
+        amount: Number(amount),
+        customerReference: trimmedReference,
+        paidAt,
+        notes: notes || undefined,
+        proofFileId,
+      });
+      setMessage(
+        method === "JAZZCASH"
+          ? "JazzCash QR payment submitted. Admin will verify the transaction ID before the invoice is marked paid."
+          : method === "EASYPAISA"
+            ? "EasyPaisa QR payment submitted. Admin will verify the Transaction ID before the invoice is marked paid."
+            : "Payment submitted for verification. A success screen is not enough — admin confirmation is required.",
+      );
+      setProofOpen(false);
+    } catch (cause) {
+      setFormError(
+        cause instanceof ApiClientError
+          ? cause.message
+          : "Payment could not be submitted. Please try again.",
+      );
+    }
   }
 
   if (!canPay) {
@@ -312,7 +346,13 @@ export function InvoicePayPanel({
 
             {selected ? (
               <div className="grid gap-3">
-                <Button type="button" onClick={() => setProofOpen(true)}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setFormError(null);
+                    setProofOpen(true);
+                  }}
+                >
                   Enter Transaction ID & Screenshot
                 </Button>
                 <p className="text-xs text-muted-foreground">
@@ -389,11 +429,18 @@ export function InvoicePayPanel({
               />
               {proofFileName ? (
                 <span className="text-xs text-muted-foreground">{proofFileName}</span>
+              ) : uploading ? (
+                <span className="text-xs text-muted-foreground">Uploading screenshot…</span>
               ) : null}
             </label>
+            {formError ? (
+              <p className="text-destructive" role="alert">
+                {formError}
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProofOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setProofOpen(false)}>
               Cancel
             </Button>
             <Button

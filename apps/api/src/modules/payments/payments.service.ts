@@ -75,11 +75,12 @@ export interface PaymentActor {
 }
 
 function isAdmin(actor: PaymentActor): boolean {
-  return actor.role === UserRole.ADMIN || actor.role === UserRole.SUPER_ADMIN;
+  const role = String(actor.role ?? "").toUpperCase();
+  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
 }
 
 function isClient(actor: PaymentActor): boolean {
-  return actor.role === UserRole.CLIENT;
+  return String(actor.role ?? "").toUpperCase() === UserRole.CLIENT;
 }
 
 function publicApiBase(): string {

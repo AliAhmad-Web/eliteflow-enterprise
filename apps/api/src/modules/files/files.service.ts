@@ -50,11 +50,12 @@ export interface FilesActor {
 }
 
 function isAdmin(actor: FilesActor): boolean {
-  return actor.role === UserRole.ADMIN || actor.role === UserRole.SUPER_ADMIN;
+  const role = String(actor.role ?? "").toUpperCase();
+  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
 }
 
 function isClient(actor: FilesActor): boolean {
-  return actor.role === UserRole.CLIENT;
+  return String(actor.role ?? "").toUpperCase() === UserRole.CLIENT;
 }
 
 function hasPermission(actor: FilesActor, key: string): boolean {
