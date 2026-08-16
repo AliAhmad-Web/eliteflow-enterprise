@@ -25,7 +25,7 @@ function usePermissionSubject(): PermissionSubject | null {
     }
 
     return {
-      role: user.role.code,
+      role: String(user.role.code ?? "").toUpperCase(),
       permissions: user.permissions,
     };
   }, [user]);
@@ -34,7 +34,9 @@ function usePermissionSubject(): PermissionSubject | null {
 export function usePermissions() {
   const subject = usePermissionSubject();
   const user = useAuthStore((state) => state.user);
-  const role = (user?.role.code as UserRole | undefined) ?? null;
+  const role = user?.role.code
+    ? (String(user.role.code).toUpperCase() as UserRole)
+    : null;
   const permissions = user?.permissions ?? [];
 
   const checkPermission = useCallback(

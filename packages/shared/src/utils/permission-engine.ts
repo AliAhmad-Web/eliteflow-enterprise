@@ -21,7 +21,7 @@ export function hasRole(
     return false;
   }
 
-  return roles.includes(subject.role as UserRole);
+  return roles.includes(String(subject.role).toUpperCase() as UserRole);
 }
 
 export function hasAnyRole(

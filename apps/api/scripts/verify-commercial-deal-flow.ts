@@ -243,6 +243,40 @@ async function main() {
   assert.equal(quote.advanceRequired, 300);
   assert.equal(quote.commercialStage, "ADVANCE_REQUIRED");
   assert.equal(quote.workspaceUnlocked, false);
+  assert.equal(client.role, UserRole.CLIENT);
+
+  await prisma.quote.update({
+    where: { id: quote.id },
+    data: { status: "DRAFT", sentAt: null },
+  });
+  const repaired = await quotesService.getById(quote.id, client);
+  assert.equal(
+    repaired.status,
+    "SENT",
+    "finalized deal must release a leftover DRAFT quote to SENT",
+  );
+
+  const extraDraft = await quotesService.create(
+    {
+      customerRequestId: request.id,
+      title: `${approvedRequest.title} extra`,
+      issueDate: today(),
+      expiryDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
+      currency: "USD",
+      dealAmount: "1000",
+      taxRate: 0,
+      discountAmount: "0",
+      paymentModel: "SPLIT_30_70",
+    },
+    admin,
+  );
+  assert.equal(extraDraft.status, "DRAFT");
+  const extraVisible = await quotesService.getById(extraDraft.id, client);
+  assert.equal(
+    extraVisible.status,
+    "DRAFT",
+    "later staff drafts stay DRAFT when a payable quote already exists",
+  );
 
   const accepted = await quotesService.approve(quote.id, client);
   assert.equal(accepted.status, "APPROVED");

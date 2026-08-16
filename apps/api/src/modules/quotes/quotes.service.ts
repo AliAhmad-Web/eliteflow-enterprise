@@ -42,11 +42,12 @@ export interface QuoteActor {
 }
 
 function isAdmin(actor: QuoteActor): boolean {
-  return actor.role === UserRole.ADMIN || actor.role === UserRole.SUPER_ADMIN;
+  const role = String(actor.role ?? "").toUpperCase();
+  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
 }
 
 function isClient(actor: QuoteActor): boolean {
-  return actor.role === UserRole.CLIENT;
+  return String(actor.role ?? "").toUpperCase() === UserRole.CLIENT;
 }
 
 function emptyToNull(value: string | null | undefined): string | null {
@@ -63,10 +64,13 @@ export class QuotesService {
     const scope = await this.resolveScope(actor);
     await this.expireOverdue(scope);
     const { items, total } = await quotesRepository.findMany(query, scope);
+    const released = await Promise.all(
+      items.map((item) => this.releaseDraftIfDealFinalized(item, actor)),
+    );
     const totalPages = Math.max(1, Math.ceil(total / query.limit));
 
     return {
-      items: items.map(toQuoteDto),
+      items: released.map(toQuoteDto),
       pagination: {
         page: query.page,
         limit: query.limit,
@@ -84,7 +88,8 @@ export class QuotesService {
     if (!quote) {
       throw new QuotesError("Quote not found", 404, QUOTES_ERROR_CODES.NOT_FOUND);
     }
-    return toQuoteDto(quote);
+    const payable = await this.releaseDraftIfDealFinalized(quote, actor);
+    return toQuoteDto(payable);
   }
 
   async create(input: CreateQuoteInput, actor: QuoteActor): Promise<QuoteDto> {
@@ -270,39 +275,7 @@ export class QuotesService {
 
   async send(id: string, actor: QuoteActor): Promise<QuoteDto> {
     this.assertIsAdmin(actor);
-    const existing = await this.requireQuote(id);
-    this.assertTransition(existing.status, "SENT", ["DRAFT"]);
-
-    const updated = await quotesRepository.updateStatus(id, {
-      status: "SENT",
-      sentAt: new Date(),
-      updatedById: actor.userId,
-    });
-
-    await this.syncFinalDealAmount(updated);
-
-    await logQuoteAuditEvent({
-      userId: actor.userId,
-      action: QUOTE_AUDIT_ACTIONS.SEND,
-      resourceId: id,
-      metadata: {
-        quoteNumber: updated.quoteNumber,
-        total: Number(updated.total),
-        requestedBudget: updated.customerRequest?.expectedBudget
-          ? Number(updated.customerRequest.expectedBudget)
-          : null,
-      },
-      ipAddress: actor.ipAddress,
-      userAgent: actor.userAgent,
-    });
-
-    const amount = `${updated.currency} ${Number(updated.total).toFixed(2)}`;
-    this.notifyCustomer(updated, {
-      title: "Project Approved — Advance Payment Required",
-      body: `Your project has been approved. Final agreed deal amount: ${amount}. Pay the required advance to start the project.`,
-    });
-
-    return toQuoteDto(updated);
+    return toQuoteDto(await this.markQuoteSent(id, actor));
   }
 
   async approve(id: string, actor: QuoteActor): Promise<QuoteDto> {
@@ -538,9 +511,12 @@ export class QuotesService {
 
     const existing = await prisma.quote.findFirst({
       where: {
-        customerRequestId: request.id,
         deletedAt: null,
         status: { in: ["DRAFT", "SENT", "APPROVED"] },
+        OR: [
+          { customerRequestId: request.id },
+          { projectId: request.convertedProjectId },
+        ],
       },
       orderBy: { createdAt: "asc" },
       select: { id: true, status: true },
@@ -575,6 +551,94 @@ export class QuotesService {
       actor,
     );
     return this.send(created.id, actor);
+  }
+
+  private async markQuoteSent(
+    id: string,
+    actor: QuoteActor,
+  ): Promise<QuoteWithRelations> {
+    const existing = await this.requireQuote(id);
+    if (existing.status === "SENT" || existing.status === "APPROVED") {
+      return existing;
+    }
+    this.assertTransition(existing.status, "SENT", ["DRAFT"]);
+
+    const updated = await quotesRepository.updateStatus(id, {
+      status: "SENT",
+      sentAt: new Date(),
+      updatedById: actor.userId,
+    });
+
+    await this.syncFinalDealAmount(updated);
+
+    await logQuoteAuditEvent({
+      userId: actor.userId,
+      action: QUOTE_AUDIT_ACTIONS.SEND,
+      resourceId: id,
+      metadata: {
+        quoteNumber: updated.quoteNumber,
+        total: Number(updated.total),
+        requestedBudget: updated.customerRequest?.expectedBudget
+          ? Number(updated.customerRequest.expectedBudget)
+          : null,
+      },
+      ipAddress: actor.ipAddress,
+      userAgent: actor.userAgent,
+    });
+
+    const amount = `${updated.currency} ${Number(updated.total).toFixed(2)}`;
+    this.notifyCustomer(updated, {
+      title: "Project Approved — Advance Payment Required",
+      body: `Your project has been approved. Final agreed deal amount: ${amount}. Pay the required advance to start the project.`,
+    });
+
+    return updated;
+  }
+
+  /**
+   * If the deal is already converted and this DRAFT is the only commercial
+   * quote, release it to SENT so the customer Pay Advance UI can render.
+   * Extra staff drafts (after a SENT quote already exists) stay DRAFT.
+   */
+  private async releaseDraftIfDealFinalized(
+    quote: QuoteWithRelations,
+    actor: QuoteActor,
+  ): Promise<QuoteWithRelations> {
+    if (quote.status !== "DRAFT") return quote;
+
+    const payableSibling = await prisma.quote.findFirst({
+      where: {
+        id: { not: quote.id },
+        deletedAt: null,
+        status: { in: ["SENT", "APPROVED"] },
+        OR: [
+          ...(quote.customerRequestId
+            ? [{ customerRequestId: quote.customerRequestId }]
+            : []),
+          { projectId: quote.projectId },
+        ],
+      },
+      select: { id: true },
+    });
+    if (payableSibling) return quote;
+
+    const request = await prisma.customerRequest.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [
+          ...(quote.customerRequestId ? [{ id: quote.customerRequestId }] : []),
+          { convertedProjectId: quote.projectId },
+        ],
+      },
+      select: { status: true, agreedAmount: true },
+    });
+    if (!request) return quote;
+    if (request.status !== "CONVERTED" && request.status !== "APPROVED") {
+      return quote;
+    }
+    if (request.agreedAmount == null) return quote;
+
+    return this.markQuoteSent(quote.id, actor);
   }
 
   async generateInvoices(

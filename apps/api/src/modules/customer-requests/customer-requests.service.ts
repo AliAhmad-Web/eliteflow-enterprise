@@ -136,13 +136,12 @@ const CLIENT_ATTACH_STATUSES = new Set<CustomerRequestStatusValue>([
 const REOPEN_STATUSES = new Set<string>(REOPEN_ELIGIBLE_PROJECT_STATUSES);
 
 function isAdmin(actor: CustomerRequestActor): boolean {
-  return (
-    actor.role === UserRole.ADMIN || actor.role === UserRole.SUPER_ADMIN
-  );
+  const role = String(actor.role ?? "").toUpperCase();
+  return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
 }
 
 function isClient(actor: CustomerRequestActor): boolean {
-  return actor.role === UserRole.CLIENT;
+  return String(actor.role ?? "").toUpperCase() === UserRole.CLIENT;
 }
 
 function combineConvertDescription(
@@ -696,27 +695,21 @@ export class CustomerRequestsService {
         skipNotify: true,
       });
       if (
-        converted.type === "NEW_PROJECT" &&
+        (converted.type === "NEW_PROJECT" ||
+          converted.type === "GENERAL_SERVICE") &&
         converted.convertedProjectId &&
         converted.agreedAmount != null
       ) {
-        try {
-          await quotesService.issueCustomerAdvanceTerms(
-            {
-              id: converted.id,
-              title: converted.title,
-              convertedProjectId: converted.convertedProjectId,
-              agreedAmount: converted.agreedAmount,
-              currency: converted.currency,
-            },
-            actor,
-          );
-        } catch (error) {
-          console.error(
-            "[customer-requests] failed to issue advance payment terms",
-            error,
-          );
-        }
+        await quotesService.issueCustomerAdvanceTerms(
+          {
+            id: converted.id,
+            title: converted.title,
+            convertedProjectId: converted.convertedProjectId,
+            agreedAmount: converted.agreedAmount,
+            currency: converted.currency,
+          },
+          actor,
+        );
       }
       this.notifyCreator(converted, {
         title: "Project Approved — Advance Payment Required",
@@ -949,7 +942,25 @@ export class CustomerRequestsService {
         });
       }
 
-      return toCustomerRequestDto(converted);
+      const dto = toCustomerRequestDto(converted);
+      if (
+        (dto.type === "NEW_PROJECT" || dto.type === "GENERAL_SERVICE") &&
+        dto.convertedProjectId &&
+        dto.agreedAmount != null
+      ) {
+        await quotesService.issueCustomerAdvanceTerms(
+          {
+            id: dto.id,
+            title: dto.title,
+            convertedProjectId: dto.convertedProjectId,
+            agreedAmount: dto.agreedAmount,
+            currency: dto.currency,
+          },
+          actor,
+        );
+      }
+
+      return dto;
     } catch (error) {
       await customerRequestsRepository.revertConversionClaim(id);
       throw error;
