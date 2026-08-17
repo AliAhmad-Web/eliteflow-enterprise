@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --prefix ../.. --include=optional",
+  "installCommand": "cd ../.. && npm install --include=optional",
   "buildCommand": "npm run build --prefix ../.. --workspace=@enterprise/database && npm run build --prefix ../.. --workspace=@enterprise/shared && npm run build --prefix ../.. --workspace=@enterprise/api",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "functions": {
