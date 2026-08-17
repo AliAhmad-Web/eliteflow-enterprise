@@ -3,9 +3,11 @@ import type { Transporter } from "nodemailer";
 import { Resend } from "resend";
 
 import {
+  classifyEmailFromDomain,
   emailConfig,
   fromAddressForTransport,
   getEmailTransportChain,
+  isLiveHostingPlatform,
   isResendConfigured,
   isSmtpConfigured,
   type EmailTransportLabel,
@@ -445,7 +447,15 @@ class EmailService {
       text: input.text,
     });
 
-    return { id: typeof info.messageId === "string" ? info.messageId : undefined };
+    const id = typeof info.messageId === "string" ? info.messageId : undefined;
+    if (isLiveHostingPlatform() && id && /ethereal\.email/i.test(id)) {
+      throw new EmailDeliveryError(
+        "Email could not be delivered. The configured SMTP server is a test sink and does not deliver to real inboxes.",
+        "SMTP message accepted by Ethereal (test inbox) — not a real mailbox",
+      );
+    }
+
+    return { id };
   }
 
   private async sendViaResendWithRetry(input: {
@@ -476,8 +486,15 @@ class EmailService {
       );
     }
 
+    const from = fromAddressForTransport("resend");
+    if (classifyEmailFromDomain(emailConfig.fromEmail) !== classifyEmailFromDomain(from)) {
+      console.warn(
+        `[email] Resend from rewritten (${classifyEmailFromDomain(emailConfig.fromEmail)} → ${classifyEmailFromDomain(from)}) because the configured from is not valid for Resend`,
+      );
+    }
+
     const { data, error } = await client.emails.send({
-      from: emailConfig.fromEmail,
+      from,
       to: input.to,
       subject: input.subject,
       html: input.html,
@@ -505,6 +522,7 @@ class EmailService {
     }
 
     const apiKey = this.resolveResendApiKey()!;
+    const from = fromAddressForTransport("resend");
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -512,7 +530,7 @@ class EmailService {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: emailConfig.fromEmail,
+        from,
         to: [input.to],
         subject: input.subject,
         html: input.html,

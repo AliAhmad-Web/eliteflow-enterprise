@@ -4,8 +4,13 @@
  */
 
 import {
+  classifyEmailFromDomain,
+  classifyFrontendHost,
+  classifySmtpHost,
   getEmailTransportLabel,
   isEmailConfigured,
+  isSmtpConfigured,
+  warnIfTestSmtpOnLiveHost,
 } from "../../config/email.config.js";
 import {
   getSupabaseServiceRoleStatus,
@@ -44,6 +49,7 @@ export function reportCoreConnectivity(): void {
   const github = getGitHubOAuthConfig();
   const av = getAntivirusConfig();
   const emailTransport = getEmailTransportLabel();
+  warnIfTestSmtpOnLiveHost();
 
   console.log("[connectivity] Core external integration status (no secrets):");
   console.log(
@@ -64,6 +70,8 @@ export function reportCoreConnectivity(): void {
   );
   console.log(
     `[connectivity] email=${isEmailConfigured() ? emailTransport : "none"} ` +
+      `smtpHost=${classifySmtpHost()} smtpUsable=${isSmtpConfigured() ? "yes" : "no"} ` +
+      `emailFrom=${classifyEmailFromDomain()} frontendHost=${classifyFrontendHost()} ` +
       `resend=${hasNonEmpty("RESEND_API_KEY") ? "ok" : "missing"} ` +
       `gmailRefresh=${hasNonEmpty("GMAIL_OAUTH_REFRESH_TOKEN") ? "ok" : "missing"}`,
   );

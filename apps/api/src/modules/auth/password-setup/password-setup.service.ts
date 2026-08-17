@@ -125,11 +125,21 @@ export class PasswordSetupService {
       targetUserId: input.userId,
     });
 
+    const setupUrl = buildSetupUrl(rawToken);
+    try {
+      const parsed = new URL(setupUrl);
+      console.info(
+        `[password-setup] purpose=${input.purpose} origin=${parsed.origin} path=${parsed.pathname} query=token(redacted)`,
+      );
+    } catch {
+      console.warn("[password-setup] setup URL could not be parsed");
+    }
+
     return {
       rawToken,
       tokenId: created.id,
       expiresAt,
-      setupUrl: buildSetupUrl(rawToken),
+      setupUrl,
       expiresInMinutes,
       purpose: input.purpose,
     };
