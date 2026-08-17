@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 import { ErrorState } from "@/components/common/feedback/error-state";
 
@@ -33,6 +34,14 @@ export class FeatureErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    Sentry.captureException(error, {
+      contexts: {
+        react: {
+          componentStack: info.componentStack,
+        },
+      },
+    });
+
     if (process.env.NODE_ENV !== "production") {
       console.error("[FeatureErrorBoundary]", error, info.componentStack);
     }

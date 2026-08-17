@@ -32,6 +32,13 @@ import type {
 
 import { csrfService, issueCsrfToken } from "../../shared/security/csrf/index.js";
 import { successResponse } from "../../shared/utils/api-response.js";
+import {
+  getApiSentryEnvironment,
+  getApiSentryRelease,
+  isApiSentryEnabled,
+  isApiSentryProbeEnabled,
+} from "../../config/sentry.config.js";
+import * as Sentry from "@sentry/node";
 import { SECURITY_ERROR_CODES, SecurityError } from "./security.errors.js";
 import { securityService } from "./security.service.js";
 import type { SecurityActor, SecurityRequestContext } from "./security.types.js";
@@ -742,6 +749,52 @@ export class SecurityController {
   async csrfToken(req: Request, res: Response) {
     const token = await issueCsrfToken(req, res);
     res.json(successResponse({ csrfToken: token }, "CSRF token issued"));
+  }
+
+  async sentryProbe(_req: Request, res: Response) {
+    if (!isApiSentryProbeEnabled()) {
+      throw new SecurityError(
+        "Not found",
+        404,
+        SECURITY_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    if (!isApiSentryEnabled()) {
+      res.status(503).json(
+        successResponse(
+          {
+            configured: false,
+            environment: getApiSentryEnvironment(),
+            release: getApiSentryRelease() ?? null,
+          },
+          "Sentry is not configured",
+        ),
+      );
+      return;
+    }
+
+    const error = new Error("EliteFlow Sentry production probe");
+    error.name = "SentryProductionProbeError";
+    const eventId = Sentry.captureException(error, {
+      tags: {
+        eliteflow_probe: "sentry",
+        source: "api",
+      },
+    });
+    await Sentry.flush(2000);
+
+    res.json(
+      successResponse(
+        {
+          configured: true,
+          eventId,
+          environment: getApiSentryEnvironment(),
+          release: getApiSentryRelease() ?? null,
+        },
+        "Sentry probe captured",
+      ),
+    );
   }
 }
 

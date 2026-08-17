@@ -459,6 +459,13 @@ securityRouter.post(
   asyncHandler((req, res) => securityController.runPenetrationTest(req, res)),
 );
 
+securityRouter.post(
+  "/sentry-probe",
+  authorizeRoles(UserRole.SUPER_ADMIN),
+  writeLimit,
+  asyncHandler((req, res) => securityController.sentryProbe(req, res)),
+);
+
 securityRouter.get(
   "/pentest/history",
   authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN),

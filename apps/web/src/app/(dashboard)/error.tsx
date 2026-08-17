@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 import { ErrorState } from "@/components/common/feedback/error-state";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ export default function DashboardSegmentError({
   useEffect(() => {
     if (recoverFromChunkLoadError(error)) return;
     clearChunkReloadGuard();
+    Sentry.captureException(error);
   }, [error]);
 
   const isChunkError = /Loading chunk [\w-]+ failed/i.test(error.message);

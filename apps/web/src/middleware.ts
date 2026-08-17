@@ -93,6 +93,6 @@ export const config = {
      * Run on app pages so OAuth `?code=` on Site URL (`/`) is forwarded to
      * `/auth/callback`. Skip static assets and Next internals.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sentry-tunnel|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|json)$).*)",
   ],
 };

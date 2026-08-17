@@ -1,14 +1,23 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { withSentryConfig } from "@sentry/nextjs";
 
 import { buildAllSecurityResponseHeaders } from "./src/features/security/hardening/build-security-headers";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.join(configDir, "../..");
 
+const sentryRelease =
+  process.env.SENTRY_RELEASE?.trim() ||
+  process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+  undefined;
+
 const nextConfig: NextConfig = {
   transpilePackages: ["@enterprise/shared"],
+  env: {
+    NEXT_PUBLIC_SENTRY_RELEASE: sentryRelease ?? "",
+  },
   turbopack: {
     root: monorepoRoot,
   },
@@ -62,4 +71,19 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  release: sentryRelease ? { name: sentryRelease } : undefined,
+  silent: !process.env.CI,
+  tunnelRoute: "/sentry-tunnel",
+  webpack: {
+    autoInstrumentServerFunctions: true,
+    autoInstrumentMiddleware: true,
+    autoInstrumentAppDirectory: true,
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+});

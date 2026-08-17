@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/node";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import cors from "cors";
@@ -6,6 +7,7 @@ import express from "express";
 import { API_PREFIX } from "@enterprise/shared";
 
 import { getCorsOrigins } from "./config/auth.config.js";
+import { isApiSentryEnabled } from "./config/sentry.config.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { requestTiming } from "./middleware/request-timing.middleware.js";
 import { apiRouter } from "./routes/index.js";
@@ -72,6 +74,10 @@ export function createApp() {
 
   // Version 2 — experimental; same controllers via compatibility (no duplication).
   app.use("/api/v2", apiRouter);
+
+  if (isApiSentryEnabled()) {
+    Sentry.setupExpressErrorHandler(app);
+  }
 
   app.use(errorHandler);
 

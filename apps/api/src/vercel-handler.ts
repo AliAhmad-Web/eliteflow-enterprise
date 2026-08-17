@@ -2,6 +2,7 @@
  * Vercel serverless / Express entry — no app.listen, no in-process cron.
  * Long-running jobs remain a follow-up (pg_cron / Edge) per migration audit.
  */
+import "./instrument.js";
 import "./dns-bootstrap.js";
 import { installConsoleRedaction } from "./shared/security/install-console-redaction.js";
 

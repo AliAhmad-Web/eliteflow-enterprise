@@ -1,3 +1,4 @@
+import "./instrument.js";
 import "./dns-bootstrap.js";
 import { installConsoleRedaction } from "./shared/security/install-console-redaction.js";
 
