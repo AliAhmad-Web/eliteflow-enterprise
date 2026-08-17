@@ -257,15 +257,6 @@ export function getEmailTransportLabel():
       case "smtp":
         return isSmtpConfigured() ? "smtp" : null;
       case "resend":
-        // Resend onboarding/testing cannot deliver to arbitrary inboxes.
-        // If Gmail SMTP (or another mailer) is configured, do not lock to Resend.
-        if (
-          isSmtpConfigured() ||
-          isGmailApiConfigured() ||
-          isGithubEmailRelayConfigured()
-        ) {
-          return null;
-        }
         return isResendConfigured() ? "resend" : null;
       case "gmail":
       case "gmail_api":
@@ -312,18 +303,8 @@ export function listConfiguredEmailTransports(): EmailTransportLabel[] {
 export function getEmailTransportChain(): EmailTransportLabel[] {
   const available = listConfiguredEmailTransports();
   const preferred = getEmailTransportLabel();
-  const nonResend = available.filter((item) => item !== "resend");
-  if (nonResend.length > 0) {
-    const head =
-      preferred !== "none" &&
-      preferred !== "resend" &&
-      nonResend.includes(preferred)
-        ? [preferred, ...nonResend.filter((item) => item !== preferred)]
-        : nonResend;
-    return available.includes("resend") ? [...head, "resend"] : head;
-  }
-  if (preferred === "resend" || available.includes("resend")) {
-    return ["resend"];
+  if (preferred !== "none" && available.includes(preferred)) {
+    return [preferred, ...available.filter((item) => item !== preferred)];
   }
   return available;
 }
