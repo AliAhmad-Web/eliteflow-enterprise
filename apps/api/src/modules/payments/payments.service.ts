@@ -269,7 +269,9 @@ export class PaymentsService {
     this.notifyAdmins(
       invoice.invoiceKind === "ADVANCE"
         ? "Advance payment requires verification"
-        : "Bank transfer submitted",
+        : invoice.invoiceKind === "FINAL"
+          ? "Final payment requires verification"
+          : "Bank transfer submitted",
       `${actor.email} submitted ${paymentNumber} for ${invoice.invoiceNumber}. Review the payment proof and confirm the money was received before verifying.`,
       created.id,
       actor.userId,
@@ -456,6 +458,13 @@ export class PaymentsService {
     const isAdvance =
       invoice.invoiceKind === "ADVANCE" ||
       (await this.isFirstInstallment(invoice.id));
+    const quoteOutstanding = invoice.quoteId
+      ? await this.quoteOutstandingBalance(invoice.quoteId)
+      : remaining;
+    const isFinalSettlement =
+      !isAdvance &&
+      invoice.paymentStatus === "PAID" &&
+      quoteOutstanding <= 0.009;
     const customerId = payment.submittedById;
     if (customerId) {
       if (isAdvance && invoice.paymentStatus === "PAID") {
@@ -463,6 +472,14 @@ export class PaymentsService {
           customerId,
           "Advance Payment Received",
           "Your payment has been verified successfully. Your project is now ready to start.",
+          payment.id,
+          actor.userId,
+        );
+      } else if (isFinalSettlement) {
+        this.notifyCustomerUser(
+          customerId,
+          "Final payment verified",
+          "Final payment verified. Your project payment is now complete.",
           payment.id,
           actor.userId,
         );
@@ -479,7 +496,9 @@ export class PaymentsService {
     this.notifyAdmins(
       isAdvance && invoice.paymentStatus === "PAID"
         ? "Advance payment received"
-        : "Payment verified",
+        : isFinalSettlement
+          ? "Final payment verified"
+          : "Payment verified",
       `Payment ${payment.paymentNumber} verified. Remaining on invoice ${invoice.invoiceNumber}: ${remainingLabel}.`,
       payment.id,
       actor.userId,
@@ -1331,7 +1350,48 @@ export class PaymentsService {
         PAYMENTS_ERROR_CODES.INVOICE_NOT_PAYABLE,
       );
     }
+    await this.assertInstallmentPayable(invoice);
     return invoice;
+  }
+
+  /**
+   * First installment (advance / upfront) is payable after quote approve.
+   * Later installments (final / milestone) become payable only when project is COMPLETED.
+   */
+  private async assertInstallmentPayable(invoice: {
+    id: string;
+    invoiceKind: string;
+    projectId: string | null;
+    project: { status: string } | null;
+    paymentScheduleItem: { kind: string; sortOrder: number } | null;
+  }): Promise<void> {
+    const scheduleItem = invoice.paymentScheduleItem;
+    const isFirst =
+      scheduleItem?.sortOrder === 0 ||
+      scheduleItem?.kind === "ADVANCE" ||
+      invoice.invoiceKind === "ADVANCE";
+    if (isFirst) {
+      return;
+    }
+
+    const projectStatus =
+      invoice.project?.status ??
+      (invoice.projectId
+        ? (
+            await prisma.project.findFirst({
+              where: { id: invoice.projectId },
+              select: { status: true },
+            })
+          )?.status
+        : null);
+
+    if (projectStatus !== "COMPLETED") {
+      throw new PaymentsError(
+        "Final payment becomes available after the project is marked completed",
+        409,
+        PAYMENTS_ERROR_CODES.INVOICE_NOT_PAYABLE,
+      );
+    }
   }
 
   private async remainingAmount(invoiceId: string, total: number): Promise<number> {
@@ -1497,6 +1557,21 @@ export class PaymentsService {
       select: { sortOrder: true, kind: true },
     });
     return item?.sortOrder === 0 || item?.kind === "ADVANCE";
+  }
+
+  /** Sum of unpaid schedule invoice balances for a quote (canonical remaining). */
+  private async quoteOutstandingBalance(quoteId: string): Promise<number> {
+    const invoices = await prisma.invoice.findMany({
+      where: { quoteId, deletedAt: null, status: { not: "CANCELLED" } },
+      select: { total: true, paidAmount: true },
+    });
+    return roundMoney(
+      invoices.reduce(
+        (sum, row) =>
+          sum + Math.max(0, Number(row.total) - Number(row.paidAmount ?? 0)),
+        0,
+      ),
+    );
   }
 
   private async startProjectIfAdvanceSettled(invoice: {

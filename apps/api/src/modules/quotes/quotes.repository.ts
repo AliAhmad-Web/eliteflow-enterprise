@@ -399,6 +399,20 @@ export class QuotesRepository {
     return `${prefix}${String(sequence).padStart(4, "0")}`;
   }
 
+  async findApprovedByProjectId(
+    projectId: string,
+  ): Promise<QuoteWithRelations | null> {
+    return prisma.quote.findFirst({
+      where: {
+        deletedAt: null,
+        status: "APPROVED",
+        projectId,
+      },
+      include: detailInclude,
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
   async createInvoicesForSchedule(input: {
     quote: QuoteWithRelations;
     scheduleItemIds: string[];

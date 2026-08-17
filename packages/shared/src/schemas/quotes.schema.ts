@@ -306,6 +306,8 @@ export const quoteSchema = z.object({
       "PENDING_VERIFICATION",
       "PAYMENT_VERIFIED",
       "PROJECT_STARTED",
+      "FINAL_PAYMENT_DUE",
+      "FINAL_PAYMENT_COMPLETE",
     ])
     .nullable(),
   workspaceUnlocked: z.boolean(),

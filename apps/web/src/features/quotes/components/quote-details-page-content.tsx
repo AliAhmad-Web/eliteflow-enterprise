@@ -25,6 +25,7 @@ import {
 } from "../hooks/use-quote-mutations";
 import { useQuote } from "../hooks/use-quotes";
 import { CustomerAdvancePaymentPanel } from "./customer-advance-payment-panel";
+import { CustomerFinalPaymentPanel } from "./customer-final-payment-panel";
 import { PaymentScheduleTable } from "./payment-schedule-table";
 import { QuoteStatusBadge } from "./quote-status-badge";
 
@@ -87,7 +88,12 @@ export function QuoteDetailsPageContent() {
       (quote.status === "SENT" || quote.status === "APPROVED") ? (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="pt-6">
-            <CustomerAdvancePaymentPanel quote={quote} />
+            {quote.commercialStage === "FINAL_PAYMENT_DUE" ||
+            quote.commercialStage === "FINAL_PAYMENT_COMPLETE" ? (
+              <CustomerFinalPaymentPanel quote={quote} />
+            ) : (
+              <CustomerAdvancePaymentPanel quote={quote} />
+            )}
           </CardContent>
         </Card>
       ) : null}

@@ -18,8 +18,11 @@ import {
 import { PermissionGuard } from "@/features/rbac/components/permission-guards";
 import { EntityCommentsPanel } from "@/features/communication/components/entity-comments-panel";
 import { ProjectChangeRequestsPanel } from "@/features/customer-requests/components/project-change-requests-panel";
+import { useRole } from "@/features/rbac/hooks/use-permissions";
 import { formatMoney } from "@/lib/format-money";
+import { ApiClientError } from "@/services/api/api-error";
 
+import { useCompleteProject } from "../hooks/use-project-mutations";
 import { useProject } from "../hooks/use-projects";
 import {
   MILESTONE_STATUS_LABELS,
@@ -60,6 +63,19 @@ export function ProjectDetailsDialog({
   const { data: project, isLoading, isError, error, refetch } = useProject(
     open ? projectId : null,
   );
+  const { isAdmin, isEmployee } = useRole();
+  const completeMutation = useCompleteProject();
+  const canMarkComplete =
+    Boolean(project) &&
+    project!.status !== "COMPLETED" &&
+    project!.status !== "CANCELLED" &&
+    (isAdmin || isEmployee);
+  const completeError =
+    completeMutation.error instanceof ApiClientError
+      ? completeMutation.error.message
+      : completeMutation.isError
+        ? "Could not mark project completed."
+        : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -258,6 +274,12 @@ export function ProjectDetailsDialog({
               />
             </section>
 
+            {completeError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {completeError}
+              </p>
+            ) : null}
+
             <DialogFooter className="gap-2 sm:justify-between">
               <Button
                 type="button"
@@ -267,6 +289,17 @@ export function ProjectDetailsDialog({
                 Close
               </Button>
               <div className="flex flex-wrap gap-2">
+                {canMarkComplete ? (
+                  <Button
+                    type="button"
+                    disabled={completeMutation.isPending}
+                    onClick={() => void completeMutation.mutateAsync(project.id)}
+                  >
+                    {completeMutation.isPending
+                      ? "Completing…"
+                      : "Mark Completed"}
+                  </Button>
+                ) : null}
                 <PermissionGuard permission={PERMISSIONS.PROJECTS_WRITE}>
                   <Button
                     type="button"

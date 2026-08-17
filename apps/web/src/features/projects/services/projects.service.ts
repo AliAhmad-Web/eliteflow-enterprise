@@ -77,6 +77,13 @@ export const projectsService = {
     });
   },
 
+  complete(id: string) {
+    return apiRequest<Project>(`${PROJECTS_API_PREFIX}/${id}/complete`, {
+      method: "POST",
+      auth: true,
+    });
+  },
+
   remove(id: string) {
     return apiRequest<{ id: string; message: string }>(
       `${PROJECTS_API_PREFIX}/${id}`,

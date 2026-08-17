@@ -9,16 +9,29 @@ import { useHasPermission } from "@/features/rbac/hooks/use-permissions";
 
 import { useQuotes } from "../hooks/use-quotes";
 import { CustomerAdvancePaymentPanel } from "./customer-advance-payment-panel";
+import { CustomerFinalPaymentPanel } from "./customer-final-payment-panel";
 import { QuoteStatusBadge } from "./quote-status-badge";
 
 function pickActiveQuote(items: QuoteDto[] | undefined): QuoteDto | null {
   if (!items?.length) return null;
   return (
+    items.find((item) => item.commercialStage === "FINAL_PAYMENT_DUE") ??
+    items.find((item) => item.commercialStage === "FINAL_PAYMENT_COMPLETE") ??
     items.find((item) => item.status === "SENT") ??
     items.find((item) => item.status === "APPROVED") ??
     items[0] ??
     null
   );
+}
+
+function CommercialBody({ quote }: { quote: QuoteDto }) {
+  if (
+    quote.commercialStage === "FINAL_PAYMENT_DUE" ||
+    quote.commercialStage === "FINAL_PAYMENT_COMPLETE"
+  ) {
+    return <CustomerFinalPaymentPanel quote={quote} />;
+  }
+  return <CustomerAdvancePaymentPanel quote={quote} />;
 }
 
 export function CustomerCommercialCard({
@@ -64,7 +77,7 @@ export function CustomerCommercialCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <CustomerAdvancePaymentPanel quote={quote} />
+        <CommercialBody quote={quote} />
         <div>
           <Link
             href={quoteDetailPath(quote.id)}

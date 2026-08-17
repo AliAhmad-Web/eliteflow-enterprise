@@ -224,6 +224,8 @@ export const COMMERCIAL_STAGES = [
   "PENDING_VERIFICATION",
   "PAYMENT_VERIFIED",
   "PROJECT_STARTED",
+  "FINAL_PAYMENT_DUE",
+  "FINAL_PAYMENT_COMPLETE",
 ] as const;
 
 export type CommercialStageValue = (typeof COMMERCIAL_STAGES)[number];
@@ -246,9 +248,29 @@ export function quoteCommercialStage(input: {
   const firstPending =
     first?.paymentStatus === "PENDING" ||
     first?.paymentStatus === "PARTIALLY_PAID";
+  // For multi-item schedules, ADVANCE is "first". For UPFRONT_100 the sole FINAL is first.
+  const hasLaterInstallments = input.paymentSchedule.some(
+    (item) => item !== first,
+  );
+  const laterUnpaid = input.paymentSchedule.some(
+    (item) => item !== first && item.paymentStatus !== "PAID",
+  );
 
   if (input.status === "SENT" || input.status === "APPROVED") {
     if (firstPaid) {
+      const projectCompleted = input.projectStatus === "COMPLETED";
+      if (projectCompleted) {
+        if (hasLaterInstallments && laterUnpaid) {
+          return {
+            commercialStage: "FINAL_PAYMENT_DUE",
+            workspaceUnlocked: true,
+          };
+        }
+        return {
+          commercialStage: "FINAL_PAYMENT_COMPLETE",
+          workspaceUnlocked: true,
+        };
+      }
       const started =
         input.projectStatus === "IN_PROGRESS" ||
         input.projectStatus === "COMPLETED";

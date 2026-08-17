@@ -18,6 +18,7 @@ import {
   type ProjectAccessScope,
 } from "./projects.repository.js";
 import { findClientUnlockedProjectIds } from "../quotes/commercial-access.js";
+import { quotesService } from "../quotes/quotes.service.js";
 import { attachmentSecurityService } from "../files/attachment-security.service.js";
 import { toProjectDto } from "./projects.types.js";
 
@@ -146,6 +147,9 @@ export class ProjectsService {
           }
         : input;
 
+    const becameCompleted =
+      input.status === "COMPLETED" && existing.status !== "COMPLETED";
+
     const updated = await projectsRepository.update(
       id,
       securedInput,
@@ -161,7 +165,83 @@ export class ProjectsService {
       userAgent: actor.userAgent,
     });
 
+    if (becameCompleted) {
+      await quotesService.ensureRemainingPaymentForCompletedProject(
+        id,
+        actor.userId,
+        { notify: true },
+      );
+    }
+
     return toProjectDto(updated);
+  }
+
+  /**
+   * Marks a project COMPLETED and triggers remaining (final) payment obligation.
+   * Admins may complete any project; employees may complete only assigned projects.
+   * Idempotent: repeated COMPLETED does not duplicate invoices.
+   */
+  async complete(id: string, actor: ProjectActor): Promise<ProjectDto> {
+    const isAdmin =
+      actor.role === UserRole.ADMIN || actor.role === UserRole.SUPER_ADMIN;
+    const isEmployee = actor.role === UserRole.EMPLOYEE;
+
+    if (!isAdmin && !isEmployee) {
+      throw new ProjectsError(
+        "You do not have permission to complete this project",
+        403,
+        PROJECTS_ERROR_CODES.FORBIDDEN,
+      );
+    }
+
+    const scope: ProjectAccessScope = isAdmin
+      ? { all: true }
+      : { all: false, memberUserId: actor.userId };
+
+    const existing = await projectsRepository.findById(id, scope);
+    if (!existing) {
+      throw new ProjectsError(
+        "Project not found",
+        404,
+        PROJECTS_ERROR_CODES.NOT_FOUND,
+      );
+    }
+
+    if (existing.status === "CANCELLED") {
+      throw new ProjectsError(
+        "Cancelled projects cannot be marked completed",
+        409,
+        PROJECTS_ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const alreadyCompleted = existing.status === "COMPLETED";
+    let project = existing;
+
+    if (!alreadyCompleted) {
+      project = await projectsRepository.update(
+        id,
+        { status: "COMPLETED", progress: 100 },
+        actor.userId,
+      );
+
+      await logProjectAuditEvent({
+        userId: actor.userId,
+        action: PROJECT_AUDIT_ACTIONS.COMPLETE,
+        resourceId: id,
+        metadata: { name: project.name, previousStatus: existing.status },
+        ipAddress: actor.ipAddress,
+        userAgent: actor.userAgent,
+      });
+    }
+
+    await quotesService.ensureRemainingPaymentForCompletedProject(
+      id,
+      actor.userId,
+      { notify: !alreadyCompleted },
+    );
+
+    return toProjectDto(project);
   }
 
   async remove(id: string, actor: ProjectActor): Promise<{ id: string }> {

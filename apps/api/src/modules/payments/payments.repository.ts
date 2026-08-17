@@ -165,8 +165,11 @@ export class PaymentsRepository {
       where: { id: invoiceId, deletedAt: null },
       include: {
         client: { select: { id: true, companyName: true } },
-        project: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, status: true } },
         quote: { select: { id: true, quoteNumber: true } },
+        paymentScheduleItem: {
+          select: { id: true, kind: true, sortOrder: true },
+        },
       },
     });
   }

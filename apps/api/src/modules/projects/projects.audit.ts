@@ -31,4 +31,5 @@ export const PROJECT_AUDIT_ACTIONS = {
   UPDATE: "project.update",
   DELETE: "project.delete",
   REOPEN: "project.reopen",
+  COMPLETE: "project.complete",
 } as const;

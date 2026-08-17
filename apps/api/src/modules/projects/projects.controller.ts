@@ -84,6 +84,12 @@ export class ProjectsController {
       ),
     );
   }
+
+  async complete(req: Request, res: Response): Promise<void> {
+    const params = req.params as unknown as ProjectIdParamsInput;
+    const result = await projectsService.complete(params.id, getActor(req));
+    res.json(successResponse(result, "Project marked as completed"));
+  }
 }
 
 export const projectsController = new ProjectsController();

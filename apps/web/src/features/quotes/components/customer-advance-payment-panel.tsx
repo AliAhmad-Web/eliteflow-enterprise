@@ -39,7 +39,9 @@ export function CustomerAdvancePaymentPanel({ quote }: { quote: QuoteDto }) {
     current.commercialStage === "PAYMENT_PROOF_SUBMITTED";
   const verified =
     current.commercialStage === "PAYMENT_VERIFIED" ||
-    current.commercialStage === "PROJECT_STARTED";
+    current.commercialStage === "PROJECT_STARTED" ||
+    current.commercialStage === "FINAL_PAYMENT_DUE" ||
+    current.commercialStage === "FINAL_PAYMENT_COMPLETE";
 
   const invoiceQuery = useInvoice(payOpen && !verified ? advanceInvoiceId : null, {
     refetchInterval: 8_000,

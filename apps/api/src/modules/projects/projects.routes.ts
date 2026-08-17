@@ -101,6 +101,20 @@ projectsRouter.patch(
   asyncHandler((req, res) => projectsController.update(req, res)),
 );
 
+projectsRouter.post(
+  "/:id/complete",
+  authorizePermissions(PERMISSIONS.PROJECTS_READ),
+  authorizeRoles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.EMPLOYEE),
+  rateLimit({
+    name: "projects.complete",
+    max: 60,
+    windowMs: 15 * 60 * 1000,
+    keyGenerator: rateLimitByUser,
+  }),
+  validate(projectIdParamsSchema, "params"),
+  asyncHandler((req, res) => projectsController.complete(req, res)),
+);
+
 projectsRouter.delete(
   "/:id",
   authorizePermissions(PERMISSIONS.PROJECTS_DELETE),

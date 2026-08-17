@@ -336,18 +336,92 @@ export class QuotesService {
     return toQuoteDto(withInvoices);
   }
 
+  /**
+   * Issues the first installment invoice only (advance / upfront).
+   * Remaining schedule invoices are created when the project is marked COMPLETED.
+   */
   private async issueScheduleInvoices(
     id: string,
     actorId: string,
   ) {
     const quote = (await quotesRepository.findById(id, { all: true }))!;
+    const schedule = quote.paymentSchedule ?? [];
+    const first =
+      schedule.find((item) => item.kind === "ADVANCE") ?? schedule[0];
+    if (!first) {
+      return quote;
+    }
     await quotesRepository.createInvoicesForSchedule({
       quote,
-      scheduleItemIds: (quote.paymentSchedule ?? []).map((item) => item.id),
+      scheduleItemIds: [first.id],
       actorId,
     });
     await quotesRepository.issueDraftInvoicesForQuote(id, actorId);
     return (await quotesRepository.findById(id, { all: true }))!;
+  }
+
+  /**
+   * Idempotent: when a project is COMPLETED, ensure remaining schedule invoices
+   * (final / milestone / custom) exist and are issued. Safe to call repeatedly.
+   */
+  async ensureRemainingPaymentForCompletedProject(
+    projectId: string,
+    actorId: string,
+    options?: { notify?: boolean },
+  ): Promise<{ quoteId: string | null; invoiceIds: string[] }> {
+    const quote = await quotesRepository.findApprovedByProjectId(projectId);
+    if (!quote) {
+      return { quoteId: null, invoiceIds: [] };
+    }
+
+    const schedule = quote.paymentSchedule ?? [];
+    const first =
+      schedule.find((item) => item.kind === "ADVANCE") ?? schedule[0];
+    const remainingItems = schedule.filter((item) => item.id !== first?.id);
+
+    if (remainingItems.length > 0) {
+      await quotesRepository.createInvoicesForSchedule({
+        quote,
+        scheduleItemIds: remainingItems.map((item) => item.id),
+        actorId,
+      });
+      await quotesRepository.issueDraftInvoicesForQuote(quote.id, actorId);
+    }
+
+    const refreshed =
+      (await quotesRepository.findById(quote.id, { all: true })) ?? quote;
+    const invoiceIds = (refreshed.paymentSchedule ?? [])
+      .filter((item) => item.id !== first?.id)
+      .map((item) => item.invoice)
+      .filter(
+        (invoice): invoice is NonNullable<typeof invoice> =>
+          invoice != null && invoice.deletedAt == null,
+      )
+      .map((invoice) => invoice.id);
+
+    const laterUnpaid = (refreshed.paymentSchedule ?? []).some(
+      (item) =>
+        item.id !== first?.id &&
+        (!item.invoice ||
+          item.invoice.deletedAt != null ||
+          item.invoice.paymentStatus !== "PAID"),
+    );
+
+    if (options?.notify !== false) {
+      if (laterUnpaid && remainingItems.length > 0) {
+        this.notifyCustomer(refreshed, {
+          title: "Project completed — final payment due",
+          body: "Your project has been completed. Your remaining payment is now available.",
+        });
+      } else {
+        this.notifyCustomer(refreshed, {
+          title: "Project completed",
+          body: "Your project has been marked as completed. Your project payment is complete.",
+        });
+      }
+    }
+
+    return { quoteId: refreshed.id, invoiceIds };
   }
 
   async selectPaymentModel(
