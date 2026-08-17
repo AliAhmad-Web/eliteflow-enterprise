@@ -4,9 +4,11 @@ import { Resend } from "resend";
 
 import {
   emailConfig,
-  getEmailTransportLabel,
+  fromAddressForTransport,
+  getEmailTransportChain,
   isResendConfigured,
   isSmtpConfigured,
+  type EmailTransportLabel,
 } from "../../config/email.config.js";
 import { sendViaGithubEmailRelay } from "./github-email-relay.js";
 import { sendViaGmailApi } from "./gmail-api.sender.js";
@@ -56,6 +58,24 @@ export class EmailDeliveryError extends Error {
   }
 }
 
+function isSmtpConnectivityError(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: string }).code ?? "").toLowerCase()
+      : "";
+  return (
+    code === "etimedout" ||
+    code === "econnreset" ||
+    code === "econnrefused" ||
+    code === "esocket" ||
+    code === "enetunreach" ||
+    message.includes("timeout") ||
+    message.includes("connection") ||
+    message.includes("socket")
+  );
+}
 function mapProviderError(error: {
   message?: string;
   name?: string;
@@ -160,19 +180,10 @@ class EmailService {
     ].join("|");
 
     if (!this.smtpTransporter || this.smtpFingerprint !== fingerprint) {
-      this.smtpTransporter = nodemailer.createTransport({
+      this.smtpTransporter = this.createSmtpTransporter({
         host: emailConfig.smtp.host,
         port: emailConfig.smtp.port,
         secure: emailConfig.smtp.secure,
-        auth: {
-          user: emailConfig.smtp.user,
-          pass: emailConfig.smtp.pass,
-        },
-        // Prevent hung SMTP from blocking notification/email HTTP requests past the
-        // web client's 45s AbortController budget.
-        connectionTimeout: 10_000,
-        greetingTimeout: 10_000,
-        socketTimeout: 15_000,
       });
       this.smtpFingerprint = fingerprint;
     }
@@ -271,8 +282,8 @@ class EmailService {
     logLabel: string;
     logUrl: string;
   }): Promise<void> {
-    const transport = getEmailTransportLabel();
-    if (transport === "none") {
+    const chain = getEmailTransportChain();
+    if (chain.length === 0) {
       console.error(
         `[email] ${input.logLabel} failed — no SMTP or Resend configured\n` +
           `  to: ${input.to}\n` +
@@ -284,36 +295,82 @@ class EmailService {
       );
     }
 
-    try {
-      const result =
-        transport === "gmail_api"
-          ? await sendViaGmailApi(input)
-          : transport === "github_relay"
-            ? await this.sendViaGithubRelayWithRetry(input)
-            : transport === "smtp"
-              ? await this.sendViaSmtp(input)
-              : await this.sendViaResendWithRetry(input);
-      console.info(
-        `[email] Sent ${input.logLabel} via ${transport} to ${input.to}` +
-          (result.id ? ` (id=${result.id})` : ""),
-      );
-    } catch (error) {
-      console.error(`[email] Failed to send ${input.logLabel}:`, error);
-      console.error(
-        `[email] ${input.logLabel} details\n` +
-          `  to: ${input.to}\n` +
-          `  link: ${input.logUrl}\n` +
-          `  transport: ${transport}`,
-      );
-
-      if (error instanceof EmailDeliveryError) {
-        throw error;
+    let lastError: unknown;
+    for (const transport of chain) {
+      try {
+        const result = await this.sendViaTransport(transport, input);
+        console.info(
+          `[email] Sent ${input.logLabel} via ${transport} to ${input.to}` +
+            (result.id ? ` (id=${result.id})` : ""),
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+        const remaining = chain.indexOf(transport) < chain.length - 1;
+        console.warn(
+          `[email] ${input.logLabel} failed via ${transport}` +
+            (remaining ? "; trying next mailer" : ""),
+          error instanceof Error ? error.message : error,
+        );
       }
-
-      throw mapProviderError({
-        message: error instanceof Error ? error.message : "Unknown email error",
-      });
     }
+
+    console.error(`[email] Failed to send ${input.logLabel}:`, lastError);
+    console.error(
+      `[email] ${input.logLabel} details\n` +
+        `  to: ${input.to}\n` +
+        `  link: ${input.logUrl}\n` +
+        `  transports: ${chain.join(",")}`,
+    );
+
+    if (lastError instanceof EmailDeliveryError) {
+      throw lastError;
+    }
+
+    throw mapProviderError({
+      message:
+        lastError instanceof Error ? lastError.message : "Unknown email error",
+    });
+  }
+
+  private async sendViaTransport(
+    transport: EmailTransportLabel,
+    input: {
+      to: string;
+      subject: string;
+      html: string;
+      text: string;
+    },
+  ): Promise<{ id?: string }> {
+    if (transport === "gmail_api") {
+      return sendViaGmailApi(input);
+    }
+    if (transport === "github_relay") {
+      return this.sendViaGithubRelayWithRetry(input);
+    }
+    if (transport === "smtp") {
+      return this.sendViaSmtp(input);
+    }
+    return this.sendViaResendWithRetry(input);
+  }
+
+  private createSmtpTransporter(input: {
+    host: string;
+    port: number;
+    secure: boolean;
+  }): Transporter {
+    return nodemailer.createTransport({
+      host: input.host,
+      port: input.port,
+      secure: input.secure,
+      auth: {
+        user: emailConfig.smtp.user,
+        pass: emailConfig.smtp.pass,
+      },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    });
   }
 
   private async sendViaGithubRelayWithRetry(input: {
@@ -347,8 +404,41 @@ class EmailService {
       );
     }
 
+    const from = fromAddressForTransport("smtp");
+    try {
+      return await this.dispatchSmtp(transporter, { ...input, from });
+    } catch (error) {
+      if (
+        !isSmtpConnectivityError(error) ||
+        emailConfig.smtp.port === 465
+      ) {
+        throw error;
+      }
+      console.warn(
+        "[email] SMTP primary port failed, retrying smtp.gmail.com:465:",
+        error instanceof Error ? error.message : error,
+      );
+      const fallback = this.createSmtpTransporter({
+        host: emailConfig.smtp.host,
+        port: 465,
+        secure: true,
+      });
+      return this.dispatchSmtp(fallback, { ...input, from });
+    }
+  }
+
+  private async dispatchSmtp(
+    transporter: Transporter,
+    input: {
+      from: string;
+      to: string;
+      subject: string;
+      html: string;
+      text: string;
+    },
+  ): Promise<{ id?: string }> {
     const info = await transporter.sendMail({
-      from: emailConfig.fromEmail,
+      from: input.from,
       to: input.to,
       subject: input.subject,
       html: input.html,

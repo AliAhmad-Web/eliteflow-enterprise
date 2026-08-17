@@ -63,7 +63,7 @@ export function isGmailApiConfigured(): boolean {
   return Boolean(
     emailConfig.gmail.clientId &&
       emailConfig.gmail.clientSecret &&
-      emailConfig.gmail.refreshToken,
+      emailConfig.gmail.refreshToken.length > 20,
   );
 }
 
@@ -109,6 +109,15 @@ export function getEmailTransportLabel():
       case "smtp":
         return isSmtpConfigured() ? "smtp" : null;
       case "resend":
+        // Resend onboarding/testing cannot deliver to arbitrary inboxes.
+        // If Gmail SMTP (or another mailer) is configured, do not lock to Resend.
+        if (
+          isSmtpConfigured() ||
+          isGmailApiConfigured() ||
+          isGithubEmailRelayConfigured()
+        ) {
+          return null;
+        }
         return isResendConfigured() ? "resend" : null;
       case "gmail":
       case "gmail_api":
@@ -124,18 +133,73 @@ export function getEmailTransportLabel():
   const forced = tryPreferred();
   if (forced) return forced;
 
-  // Auto priority: HTTPS-friendly first on hosts that block SMTP.
-  if (isGmailApiConfigured()) {
-    return "gmail_api";
+  const chain = listConfiguredEmailTransports();
+  return chain[0] ?? "none";
+}
+
+export type EmailTransportLabel =
+  | "gmail_api"
+  | "github_relay"
+  | "smtp"
+  | "resend";
+
+/**
+ * Transports that can actually send, HTTPS-first so Vercel/Railway SMTP blocks
+ * do not hide a working Gmail API / GitHub relay.
+ */
+export function listConfiguredEmailTransports(): EmailTransportLabel[] {
+  const transports: EmailTransportLabel[] = [];
+  if (isGmailApiConfigured()) transports.push("gmail_api");
+  if (isGithubEmailRelayConfigured()) transports.push("github_relay");
+  if (isSmtpConfigured()) transports.push("smtp");
+  if (isResendConfigured()) transports.push("resend");
+  return transports;
+}
+
+/**
+ * Preferred transport first, then remaining configured transports.
+ * Lets forgot-password succeed when Resend is in testing/domain mode
+ * but Gmail SMTP (or another HTTPS mailer) is available.
+ */
+export function getEmailTransportChain(): EmailTransportLabel[] {
+  const available = listConfiguredEmailTransports();
+  const preferred = getEmailTransportLabel();
+  const nonResend = available.filter((item) => item !== "resend");
+  if (nonResend.length > 0) {
+    const head =
+      preferred !== "none" &&
+      preferred !== "resend" &&
+      nonResend.includes(preferred)
+        ? [preferred, ...nonResend.filter((item) => item !== preferred)]
+        : nonResend;
+    return available.includes("resend") ? [...head, "resend"] : head;
   }
-  if (isGithubEmailRelayConfigured()) {
-    return "github_relay";
+  if (preferred === "resend" || available.includes("resend")) {
+    return ["resend"];
   }
-  if (isSmtpConfigured()) {
-    return "smtp";
+  return available;
+}
+
+export function fromAddressForTransport(
+  transport: EmailTransportLabel,
+): string {
+  if (
+    transport === "smtp" &&
+    emailConfig.smtp.user.includes("@")
+  ) {
+    return `EliteFlow <${emailConfig.smtp.user}>`;
   }
-  if (isResendConfigured()) {
-    return "resend";
+  if (
+    transport === "gmail_api" &&
+    emailConfig.gmail.user.includes("@")
+  ) {
+    return `EliteFlow <${emailConfig.gmail.user}>`;
   }
-  return "none";
+  if (
+    transport === "github_relay" &&
+    emailConfig.smtp.user.includes("@")
+  ) {
+    return `EliteFlow <${emailConfig.smtp.user}>`;
+  }
+  return emailConfig.fromEmail;
 }

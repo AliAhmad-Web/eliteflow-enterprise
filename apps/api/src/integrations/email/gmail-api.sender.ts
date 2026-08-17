@@ -105,9 +105,13 @@ export async function sendViaGmailApi(input: {
   }
 
   const accessToken = await getAccessToken();
+  const from =
+    emailConfig.gmail.user.includes("@")
+      ? `EliteFlow <${emailConfig.gmail.user}>`
+      : emailConfig.fromEmail;
   const raw = toBase64Url(
     buildRawMime({
-      from: emailConfig.fromEmail,
+      from,
       to: input.to,
       subject: input.subject,
       text: input.text,
